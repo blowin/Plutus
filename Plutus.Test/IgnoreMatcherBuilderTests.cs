@@ -1,5 +1,4 @@
 using FluentAssertions;
-using NSubstitute;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Test;

@@ -54,7 +54,8 @@ public class TreeRenderer(IIgnoreMatcher ignoreMatcher, IFileInfoDetailProvider 
                 if (child.IsDirectory)
                 {
                     var marker = DirectoryMarker(itemSubPath);
-                    lines.Add($"{prefix}{branch}{child.Name}{marker}");
+                    var postfix = string.IsNullOrEmpty(marker) ? "/" : marker;
+                    lines.Add($"{prefix}{branch}{child.Name}{postfix}");
 
                     if (marker.Length == 0)
                     {

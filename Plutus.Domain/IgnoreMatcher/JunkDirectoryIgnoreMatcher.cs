@@ -33,7 +33,11 @@ public class JunkDirectoryIgnoreMatcher : IIgnoreMatcher
 
     public bool IsIgnoredDirectory(string relativePath)
     {
-        var name = Path.GetDirectoryName(relativePath.TrimEnd('/'));
+        var cleanedPath = relativePath.TrimEnd('/', '\\');
+        var lastSlashIndex = cleanedPath.LastIndexOfAny(['/', '\\']);
+        var name = lastSlashIndex >= 0
+            ? cleanedPath[(lastSlashIndex + 1)..]
+            : Path.GetDirectoryName(cleanedPath);
         if (string.IsNullOrEmpty(name))
         {
             name = relativePath;
