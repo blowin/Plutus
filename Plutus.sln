@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plutus.CLI", "Plutus.CLI\Pl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plutus.Infrastructure", "Plutus.Infrastructure\Plutus.Infrastructure.csproj", "{C60E2ED6-3940-4F30-91BC-4F6E8014C422}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plutus.Test", "Plutus.Test\Plutus.Test.csproj", "{4BBC25B5-9C61-4018-8D1D-EEC7990CF8BF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{C60E2ED6-3940-4F30-91BC-4F6E8014C422}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C60E2ED6-3940-4F30-91BC-4F6E8014C422}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C60E2ED6-3940-4F30-91BC-4F6E8014C422}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4BBC25B5-9C61-4018-8D1D-EEC7990CF8BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BBC25B5-9C61-4018-8D1D-EEC7990CF8BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4BBC25B5-9C61-4018-8D1D-EEC7990CF8BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4BBC25B5-9C61-4018-8D1D-EEC7990CF8BF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

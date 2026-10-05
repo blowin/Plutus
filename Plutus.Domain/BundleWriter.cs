@@ -1,10 +1,11 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
+public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
 {
     private static readonly Dictionary<string, string> ExtensionToLanguage = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -83,69 +84,70 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
     };
 
     public async Task WriteAsync(
-        List<DirectoryInfo> roots,
+        List<(IFileProvider Provider, string RootName, string OriginalPath)> roots,
         FileInfo output,
         List<BundleEntry> entries,
         long maxFileSize)
     {
         output.Directory?.Create();
 
-        var totalSize = entries.Sum(x => x.Size);
+        var totalSize = entries.Sum(x => x.File.Length);
 
         await using var writer = new StreamWriter(output.FullName, append: false, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
-        await writer.WriteLineAsync("# Project Bundle").ConfigureAwait(false);
-        await writer.WriteLineAsync().ConfigureAwait(false);
+        writer.WriteLine("# Project Bundle");
+        writer.WriteLine();
         var rootStr = roots.Count > 1 ? "Roots" : "Root";
-        await writer.WriteLineAsync($"- {rootStr}:").ConfigureAwait(false);
-        foreach (DirectoryInfo root in roots)
+        writer.WriteLine($"- {rootStr}:");
+        foreach (var root in roots)
         {
-            await writer.WriteLineAsync($"\t `{root.FullName}`").ConfigureAwait(false);
+            writer.WriteLine($"\t `{root.OriginalPath}`");
         }
-        await writer.WriteLineAsync($"- Output: `{output.FullName}`").ConfigureAwait(false);
-        await writer.WriteLineAsync($"- Files included: `{entries.Count}`").ConfigureAwait(false);
-        await writer.WriteLineAsync($"- Total size: `{totalSize.HumanSize()}`").ConfigureAwait(false);
-        await writer.WriteLineAsync($"- Max file size: `{maxFileSize.HumanSize()}`").ConfigureAwait(false);
-        await writer.WriteLineAsync().ConfigureAwait(false);
+        writer.WriteLine($"- Output: `{output.FullName}`");
+        writer.WriteLine($"- Files included: `{entries.Count}`");
+        writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
+        writer.WriteLine($"- Max file size: `{maxFileSize.HumanSize()}`");
+        writer.WriteLine();
 
-        await writer.WriteLineAsync("## File List").ConfigureAwait(false);
-        await writer.WriteLineAsync().ConfigureAwait(false);
-        await writer.WriteLineAsync("```text").ConfigureAwait(false);
+        writer.WriteLine("## File List");
+        writer.WriteLine();
+        writer.WriteLine("```text");
         foreach (var entry in entries)
         {
-            await writer.WriteLineAsync($"{entry.RelativePath} [{entry.Size.HumanSize()}]").ConfigureAwait(false);
+            writer.WriteLine($"{entry.RelativePath} [{entry.File.Length.HumanSize()}]");
         }
-        await writer.WriteLineAsync("```").ConfigureAwait(false);
+        writer.WriteLine("```");
 
-        await writer.WriteLineAsync().ConfigureAwait(false);
-        await writer.WriteLineAsync("## Directory Tree").ConfigureAwait(false);
+        writer.WriteLine();
+        writer.WriteLine("## Directory Tree");
 
-        foreach (DirectoryInfo root in roots)
+        var treeRenderer = new TreeRenderer(ignoreMatcher, fileInfoDetailProvider);
+        foreach (var root in roots)
         {
-            await writer.WriteLineAsync().ConfigureAwait(false);
-            await writer.WriteLineAsync("```text").ConfigureAwait(false);
-            foreach (var line in new TreeRenderer(fileService, ignoreMatcher).RenderTree(root, output, maxFileSize))
+            writer.WriteLine();
+            writer.WriteLine("```text");
+            foreach (var line in treeRenderer.RenderTree(root.Provider, root.RootName, output.FullName, maxFileSize))
             {
-                await writer.WriteLineAsync(line).ConfigureAwait(false);
+                writer.WriteLine(line);
             }
-            await writer.WriteLineAsync("```").ConfigureAwait(false);
+            writer.WriteLine("```");
         }
 
         foreach (var entry in entries)
         {
-            await writer.WriteLineAsync().ConfigureAwait(false);
-            await writer.WriteLineAsync("---").ConfigureAwait(false);
-            await writer.WriteLineAsync().ConfigureAwait(false);
-            await writer.WriteLineAsync($"## FILE: `{entry.RelativePath}`").ConfigureAwait(false);
-            await writer.WriteLineAsync().ConfigureAwait(false);
+            writer.WriteLine();
+            writer.WriteLine("---");
+            writer.WriteLine();
+            writer.WriteLine($"## FILE: `{entry.RelativePath}`");
+            writer.WriteLine();
 
-            if (entry.Size > maxFileSize)
+            if (entry.File.Length > maxFileSize)
             {
-                await writer.WriteLineAsync("```text").ConfigureAwait(false);
-                await writer.WriteLineAsync(
-                    $"[skipped: file is larger than max-file-size ({entry.Size.HumanSize()} > {maxFileSize.HumanSize()})]")
-                    .ConfigureAwait(false);
-                await writer.WriteLineAsync("```").ConfigureAwait(false);
+                writer.WriteLine("```text");
+                writer.WriteLine(
+                    $"[skipped: file is larger than max-file-size ({entry.File.Length.HumanSize()} > {maxFileSize.HumanSize()})]")
+                    ;
+                writer.WriteLine("```");
                 continue;
             }
 
@@ -153,79 +155,90 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
 
             if (content is null)
             {
-                await writer.WriteLineAsync("```text").ConfigureAwait(false);
-                await writer.WriteLineAsync($"[skipped: {reason}]").ConfigureAwait(false);
-                await writer.WriteLineAsync("```").ConfigureAwait(false);
+                writer.WriteLine("```text");
+                writer.WriteLine($"[skipped: {reason}]");
+                writer.WriteLine("```");
                 continue;
             }
 
             var fence = ChooseFence(content);
-            var language = GetLanguage(entry.File);
+            var language = GetLanguage(entry.File.Name);
 
-            await writer.WriteLineAsync($"{fence}{language}").ConfigureAwait(false);
-            await writer.WriteAsync(content).ConfigureAwait(false);
+            writer.WriteLine($"{fence}{language}");
+            await writer.WriteAsync(content).ConfigureAwait(false); ;
 
             if (content.Length == 0 || content[^1] != '\n')
             {
-                await writer.WriteLineAsync().ConfigureAwait(false);
+                writer.WriteLine();
             }
 
-            await writer.WriteLineAsync(fence).ConfigureAwait(false);
+            writer.WriteLine(fence);
         }
     }
 
-    private static async Task<(string? Content, string? Reason)> ReadTextSafeAsync(FileInfo file)
+    private static async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)
     {
-        byte[] bytes;
-
         try
         {
-            bytes = await File.ReadAllBytesAsync(file.FullName).ConfigureAwait(false);
+            // Streaming check of the first 8 KB for \0 characters (Binary detection optimization)
+            await using (var fs = file.CreateReadStream())
+            {
+                var buffer = new byte[8192];
+                var bytesRead = await fs.ReadAsync(buffer).ConfigureAwait(false);
+                for (var i = 0; i < bytesRead; i++)
+                {
+                    if (buffer[i] == 0)
+                    {
+                        return (null, "binary file");
+                    }
+                }
+            }
+
+            // Safely extract the entire byte array only after verifying that it is text.
+
+            byte[] bytes;
+            await using (var ms = new MemoryStream())
+            {
+                await using (var fs = file.CreateReadStream())
+                {
+                    await fs.CopyToAsync(ms).ConfigureAwait(false);
+                }
+                bytes = ms.ToArray();
+            }
+
+            if (bytes.Length == 0)
+            {
+                return (string.Empty, null);
+            }
+
+            // try UTF-8
+            try
+            {
+                var strictUtf8 = new UTF8Encoding(false, throwOnInvalidBytes: true);
+                return (strictUtf8.GetString(bytes), null);
+            }
+            catch
+            {
+                // Ignore use fallback
+            }
+
+            // try Windows-1251
+            try
+            {
+                var windows1251 = Encoding.GetEncoding(1251);
+                return (windows1251.GetString(bytes), null);
+            }
+            catch
+            {
+                // Ignore use fallback
+            }
+
+            return (Encoding.UTF8.GetString(bytes), null);
         }
         catch (Exception ex)
         {
             return (null, $"unreadable: {ex.Message}");
         }
-
-        if (bytes.Length == 0)
-        {
-            return (string.Empty, null);
-        }
-
-        // Check for binary content
-        var probeLength = Math.Min(8192, bytes.Length);
-        for (var i = 0; i < probeLength; i++)
-        {
-            if (bytes[i] == 0)
-            {
-                return (null, "binary file");
-            }
-        }
-
-        // Try UTF-8
-        try
-        {
-            var strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-            return (strictUtf8.GetString(bytes), null);
-        }
-        catch
-        {
-            // fallback below
-        }
-
-        // Try Windows-1251
-        try
-        {
-            var windows1251 = Encoding.GetEncoding(1251);
-            return (windows1251.GetString(bytes), null);
-        }
-        catch
-        {
-            // fallback below
-        }
-
-        // Last resort: UTF-8 with replacement
-        return (Encoding.UTF8.GetString(bytes), null);
     }
 
     private static string ChooseFence(string content)
@@ -240,21 +253,22 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
         return new string('`', Math.Max(4, maxRun + 1));
     }
 
-    private static string GetLanguage(FileInfo file)
+    private static string GetLanguage(string fileName)
     {
-        if (ExtensionToLanguage.TryGetValue(file.Extension, out var language))
+        var extension = Path.GetExtension(fileName);
+        if (ExtensionToLanguage.TryGetValue(extension, out var language))
         {
             return language;
         }
 
-        var name = file.Name.ToLowerInvariant();
+        var name = fileName.ToLowerInvariant();
 
-        if (name == "dockerfile" || name.StartsWith("dockerfile.", StringComparison.OrdinalIgnoreCase))
+        if (name == "dockerfile" || name.StartsWith("dockerfile."))
         {
             return "dockerfile";
         }
 
-        if (name == "makefile" || name.StartsWith("makefile.", StringComparison.OrdinalIgnoreCase))
+        if (name == "makefile" || name.StartsWith("makefile."))
         {
             return "makefile";
         }

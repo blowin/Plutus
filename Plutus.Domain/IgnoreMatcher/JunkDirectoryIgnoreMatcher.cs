@@ -29,11 +29,20 @@ public class JunkDirectoryIgnoreMatcher : IIgnoreMatcher
         "packages",
     };
 
-    public bool IsIgnoredFile(FileInfo fileInfo) => DefaultExcludeExtensions.Contains(fileInfo.Extension);
+    public bool IsIgnoredFile(string relativePath) => DefaultExcludeExtensions.Contains(Path.GetExtension(relativePath));
 
-    public bool IsIgnoredDirectory(DirectoryInfo directoryInfo)
+    public bool IsIgnoredDirectory(string relativePath)
     {
-        var name = directoryInfo.Name;
+        var cleanedPath = relativePath.TrimEnd('/', '\\');
+        var lastSlashIndex = cleanedPath.LastIndexOfAny(['/', '\\']);
+        var name = lastSlashIndex >= 0
+            ? cleanedPath[(lastSlashIndex + 1)..]
+            : Path.GetDirectoryName(cleanedPath);
+        if (string.IsNullOrEmpty(name))
+        {
+            name = relativePath;
+        }
+
         return DefaultExcludeDirs.Contains(name) ||
                name.EndsWith(".egg-info", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith(".dsh", StringComparison.OrdinalIgnoreCase);

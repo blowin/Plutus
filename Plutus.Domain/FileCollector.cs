@@ -1,98 +1,63 @@
+using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class FileCollector(FileService fileService, IIgnoreMatcher ignoreMatcher)
+public class FileCollector(IIgnoreMatcher ignoreMatcher)
 {
-    public List<BundleEntry> CollectFiles(DirectoryInfo root, FileInfo output)
+    public List<BundleEntry> CollectFiles(IFileProvider fileProvider, string outputPhysicalPath)
     {
         var entries = new List<BundleEntry>();
-        var rootFull = root.FullName;
-        var outputFull = Path.GetFullPath(output.FullName);
 
-        var stack = new Stack<DirectoryInfo>();
-        stack.Push(root);
+        var stack = new Stack<(IDirectoryContents Contents, string RelativePath)>();
+
+        var rootContents = fileProvider.GetDirectoryContents("");
+        stack.Push((rootContents, ""));
 
         while (stack.Count > 0)
         {
-            var dir = stack.Pop();
+            var (contents, currentRelPath) = stack.Pop();
 
-            IEnumerable<DirectoryInfo> subDirs;
-            IEnumerable<FileInfo> files;
+            var sortedItems = contents.OrderBy(x => !x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase);
 
-            try
+            foreach (var item in sortedItems)
             {
-                subDirs = dir.EnumerateDirectories();
-                files = dir.EnumerateFiles();
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            foreach (var subDir in subDirs.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                if (fileService.IsReparsePoint(subDir.Attributes))
+                if (!string.IsNullOrEmpty(outputPhysicalPath) &&
+                    !string.IsNullOrEmpty(item.PhysicalPath) &&
+                    string.Equals(Path.GetFullPath(item.PhysicalPath), Path.GetFullPath(outputPhysicalPath), StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (fileService.SamePath(subDir.FullName, outputFull))
-                {
-                    continue;
-                }
+                var itemSubPath = string.IsNullOrEmpty(currentRelPath) ? item.Name : $"{currentRelPath}/{item.Name}";
 
-                var relative = fileService.ToRelative(rootFull, subDir.FullName);
-                if (ignoreMatcher.IsIgnoredDirectory(relative))
+                if (item.IsDirectory)
                 {
-                    continue;
+                    if (ignoreMatcher.IsIgnoredDirectory(itemSubPath))
+                    {
+                        continue;
+                    }
+
+                    var subContents = fileProvider.GetDirectoryContents(itemSubPath);
+                    if (subContents.Exists)
+                    {
+                        stack.Push((subContents, itemSubPath));
+                    }
                 }
-
-                stack.Push(subDir);
-            }
-
-            foreach (var file in files.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
-            {
-                if (fileService.IsReparsePoint(file.Attributes))
+                else
                 {
-                    continue;
-                }
+                    if (ignoreMatcher.IsIgnoredFile(itemSubPath))
+                    {
+                        continue;
+                    }
 
-                if (fileService.SamePath(file.FullName, outputFull))
-                {
-                    continue;
+                    entries.Add(new BundleEntry(itemSubPath, item));
                 }
-
-                var relative = fileService.ToRelative(rootFull, file.FullName);
-                if (ignoreMatcher.IsIgnoredFile(relative))
-                {
-                    continue;
-                }
-
-                long size;
-                try
-                {
-                    size = file.Length;
-                }
-                catch
-                {
-                    continue;
-                }
-
-                entries.Add(new BundleEntry(relative, file, size));
             }
         }
 
-        entries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
         return entries;
     }
 }
 
-public sealed record BundleEntry(
-    string RelativePath,
-    FileInfo File,
-    long Size);
+public sealed record BundleEntry(string RelativePath, IFileInfo File);

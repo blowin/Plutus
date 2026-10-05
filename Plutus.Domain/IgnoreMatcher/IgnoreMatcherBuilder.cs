@@ -4,13 +4,15 @@ public class IgnoreMatcherBuilder
 {
     private readonly CollectionIgnoreMatcher _ignoreMatcher = new();
 
-    public IgnoreMatcherBuilder IgnoreJunk() => Add(new JunkDirectoryIgnoreMatcher());
+    public IgnoreMatcherBuilder IgnoreJunk() => Add(new JunkDirectoryIgnoreMatcher(), false);
 
-    public IgnoreMatcherBuilder IgnoreDangerousFile() => Add(new DangerousFileIgnoreMatcher());
+    public IgnoreMatcherBuilder IgnoreDangerousFile() => Add(new DangerousFileIgnoreMatcher(), false);
 
-    public IgnoreMatcherBuilder Add(IIgnoreMatcher matcher)
+    public IgnoreMatcherBuilder Add(IIgnoreMatcher matcher) => Add(matcher, true);
+
+    private IgnoreMatcherBuilder Add(IIgnoreMatcher matcher, bool addIfExistsType)
     {
-        _ignoreMatcher.Add(matcher);
+        _ignoreMatcher.Add(matcher, addIfExistsType);
         return this;
     }
 
@@ -18,13 +20,25 @@ public class IgnoreMatcherBuilder
 
     private class CollectionIgnoreMatcher : IIgnoreMatcher
     {
-        private readonly Dictionary<Type, IIgnoreMatcher> _matchers = [];
+        private readonly List<IIgnoreMatcher> _matchers = [];
 
-        public void Add(IIgnoreMatcher matcher) => _matchers.TryAdd(matcher.GetType(), matcher);
+        public void Add(IIgnoreMatcher matcher, bool addIfExistsType)
+        {
+            if (!addIfExistsType)
+            {
+                var matcherType = matcher.GetType();
+                if (_matchers.Any(m => m.GetType() == matcherType))
+                {
+                    return;
+                }
+            }
 
-        public bool IsIgnoredFile(FileInfo fileInfo) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredFile(fileInfo));
+            _matchers.Add(matcher);
+        }
 
-        public bool IsIgnoredDirectory(DirectoryInfo directoryInfo) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredDirectory(directoryInfo));
+        public bool IsIgnoredFile(string relativePath) => _matchers.Count != 0 && _matchers.Any(e => e.IsIgnoredFile(relativePath));
+
+        public bool IsIgnoredDirectory(string relativePath) => _matchers.Count != 0 && _matchers.Any(e => e.IsIgnoredDirectory(relativePath));
     }
 
 }

@@ -15,9 +15,9 @@ public class DangerousFileIgnoreMatcher : IIgnoreMatcher
         ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".kdbx", ".pwd", ".secret",
     };
 
-    public bool IsIgnoredFile(FileInfo fileInfo)
+    public bool IsIgnoredFile(string relativePath)
     {
-        var name = fileInfo.Name;
+        var name = Path.GetFileName(relativePath);
 
         if (DangerousExactFileNames.Contains(name))
         {
@@ -33,8 +33,9 @@ public class DangerousFileIgnoreMatcher : IIgnoreMatcher
                 name.Equals(".env.dist", StringComparison.OrdinalIgnoreCase));
         }
 
-        return DangerousExtensions.Contains(fileInfo.Extension);
+        var extension = Path.GetExtension(relativePath);
+        return DangerousExtensions.Contains(extension);
     }
 
-    public bool IsIgnoredDirectory(DirectoryInfo directoryInfo) => false;
+    public bool IsIgnoredDirectory(string relativePath) => false;
 }
