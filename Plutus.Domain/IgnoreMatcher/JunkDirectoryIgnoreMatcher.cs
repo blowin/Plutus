@@ -33,9 +33,10 @@ public class JunkDirectoryIgnoreMatcher : IIgnoreMatcher
 
     public bool IsIgnoredDirectory(DirectoryInfo directoryInfo)
     {
-        var name = directoryInfo.FullName;
-        return DefaultExcludeDirs.Contains(name)
-               || name.EndsWith(".egg-info", StringComparison.OrdinalIgnoreCase);
+        var name = directoryInfo.Name;
+        return DefaultExcludeDirs.Contains(name) ||
+               name.EndsWith(".egg-info", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith(".dsh", StringComparison.OrdinalIgnoreCase);
     }
 }
 

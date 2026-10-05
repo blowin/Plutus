@@ -37,17 +37,4 @@ public class DangerousFileIgnoreMatcher : IIgnoreMatcher
     }
 
     public bool IsIgnoredDirectory(DirectoryInfo directoryInfo) => false;
-
-    private static bool SamePath(string left, string right)
-    {
-        var leftFull = Path.GetFullPath(left);
-        var rightFull = Path.GetFullPath(right);
-
-        return string.Equals(
-            leftFull,
-            rightFull,
-            OperatingSystem.IsWindows()
-                ? StringComparison.OrdinalIgnoreCase
-                : StringComparison.Ordinal);
-    }
 }

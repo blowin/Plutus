@@ -83,7 +83,7 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
     };
 
     public async Task WriteAsync(
-        DirectoryInfo root,
+        List<DirectoryInfo> roots,
         FileInfo output,
         List<BundleEntry> entries,
         long maxFileSize)
@@ -96,7 +96,12 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
 
         await writer.WriteLineAsync("# Project Bundle").ConfigureAwait(false);
         await writer.WriteLineAsync().ConfigureAwait(false);
-        await writer.WriteLineAsync($"- Root: `{root.FullName}`").ConfigureAwait(false);
+        var rootStr = roots.Count > 1 ? "Roots" : "Root";
+        await writer.WriteLineAsync($"- {rootStr}:").ConfigureAwait(false);
+        foreach (DirectoryInfo root in roots)
+        {
+            await writer.WriteLineAsync($"\t `{root.FullName}`").ConfigureAwait(false);
+        }
         await writer.WriteLineAsync($"- Output: `{output.FullName}`").ConfigureAwait(false);
         await writer.WriteLineAsync($"- Files included: `{entries.Count}`").ConfigureAwait(false);
         await writer.WriteLineAsync($"- Total size: `{totalSize.HumanSize()}`").ConfigureAwait(false);
@@ -114,13 +119,17 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
 
         await writer.WriteLineAsync().ConfigureAwait(false);
         await writer.WriteLineAsync("## Directory Tree").ConfigureAwait(false);
-        await writer.WriteLineAsync().ConfigureAwait(false);
-        await writer.WriteLineAsync("```text").ConfigureAwait(false);
-        foreach (var line in new TreeRenderer(fileService, ignoreMatcher).RenderTree(root, output, maxFileSize))
+
+        foreach (DirectoryInfo root in roots)
         {
-            await writer.WriteLineAsync(line).ConfigureAwait(false);
+            await writer.WriteLineAsync().ConfigureAwait(false);
+            await writer.WriteLineAsync("```text").ConfigureAwait(false);
+            foreach (var line in new TreeRenderer(fileService, ignoreMatcher).RenderTree(root, output, maxFileSize))
+            {
+                await writer.WriteLineAsync(line).ConfigureAwait(false);
+            }
+            await writer.WriteLineAsync("```").ConfigureAwait(false);
         }
-        await writer.WriteLineAsync("```").ConfigureAwait(false);
 
         foreach (var entry in entries)
         {
