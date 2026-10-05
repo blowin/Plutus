@@ -87,7 +87,6 @@ public class FileCollector(FileService fileService, IIgnoreMatcher ignoreMatcher
             }
         }
 
-        entries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
         return entries;
     }
 }

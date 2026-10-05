@@ -22,9 +22,9 @@ public class IgnoreMatcherBuilder
 
         public void Add(IIgnoreMatcher matcher) => _matchers.TryAdd(matcher.GetType(), matcher);
 
-        public bool IsIgnoredFile(FileInfo fileInfo) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredFile(fileInfo));
+        public bool IsIgnoredFile(string relativePath) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredFile(relativePath));
 
-        public bool IsIgnoredDirectory(DirectoryInfo directoryInfo) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredDirectory(directoryInfo));
+        public bool IsIgnoredDirectory(string relativePath) => _matchers.Count != 0 && _matchers.Any(e => e.Value.IsIgnoredDirectory(relativePath));
     }
 
 }

@@ -45,7 +45,7 @@ public static class Program
 
         var useDefaultExcludesOption = new Option<bool>("--use-default-excludes")
         {
-            Description = "Disable built-in junk exclusions.",
+            Description = "Use default built-in junk exclusions.",
             DefaultValueFactory = _ => true
         };
 
@@ -79,21 +79,19 @@ public static class Program
             {
                 long maxFileSize = ParseSize(maxSizeStr);
                 var app = new App();
-                var exitCode = app.RunBundleAsync(
+                return app.RunBundleAsync(
                     projectPath,
                     outputPath,
                     maxFileSize,
                     !noGitignore,
                     extraIgnores,
                     useDefaultExcludes,
-                    allowDangerous).GetAwaiter().GetResult();
-
-                return exitCode;
+                    allowDangerous);
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"Error: {ex.Message}");
-                return 1;
+                return Task.FromResult(1);
             }
         });
 

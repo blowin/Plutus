@@ -5,7 +5,7 @@ namespace Plutus.Infrastructure.IgnoreMatcher;
 
 public sealed class GitIgnoreMatcher(IgnoreList ignoreList) : IIgnoreMatcher
 {
-    public bool IsIgnoredFile(FileInfo fileInfo) => ignoreList.IsIgnored(fileInfo);
+    public bool IsIgnoredFile(string relativePath) => ignoreList.IsIgnored(relativePath, false);
 
-    public bool IsIgnoredDirectory(DirectoryInfo directoryInfo) => ignoreList.IsIgnored(directoryInfo);
+    public bool IsIgnoredDirectory(string relativePath) => ignoreList.IsIgnored(relativePath, true);
 }
