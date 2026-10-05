@@ -33,7 +33,12 @@ public class JunkDirectoryIgnoreMatcher : IIgnoreMatcher
 
     public bool IsIgnoredDirectory(string relativePath)
     {
-        var name = Path.GetFullPath(relativePath.TrimEnd('/'));
+        var name = Path.GetDirectoryName(relativePath.TrimEnd('/'));
+        if (string.IsNullOrEmpty(name))
+        {
+            name = relativePath;
+        }
+
         return DefaultExcludeDirs.Contains(name) ||
                name.EndsWith(".egg-info", StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith(".dsh", StringComparison.OrdinalIgnoreCase);

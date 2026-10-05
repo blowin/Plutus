@@ -163,7 +163,7 @@ public class BundleWriter(FileService fileService, IIgnoreMatcher ignoreMatcher)
             var language = GetLanguage(entry.File);
 
             writer.WriteLine($"{fence}{language}");
-            await writer.WriteAsync(content).ConfigureAwait(false);;
+            await writer.WriteAsync(content).ConfigureAwait(false); ;
 
             if (content.Length == 0 || content[^1] != '\n')
             {
