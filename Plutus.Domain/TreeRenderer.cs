@@ -1,128 +1,96 @@
+using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class TreeRenderer(FileService fileService, IIgnoreMatcher ignoreMatcher)
+public class TreeRenderer(IIgnoreMatcher ignoreMatcher, IFileInfoDetailProvider fileInfoDetailProvider)
 {
-    public List<string> RenderTree(DirectoryInfo root, FileInfo output, long maxFileSize)
+    public List<string> RenderTree(IFileProvider fileProvider, string rootName, string outputPhysicalPath, long maxFileSize)
     {
         var lines = new List<string>();
-        var rootFull = root.FullName;
-        var outputFull = Path.GetFullPath(output.FullName);
 
-        void Walk(DirectoryInfo directory, string prefix)
+        void Walk(string subPath, string prefix)
         {
-            var children = new List<FileSystemInfo>();
-
-            try
+            var contents = fileProvider.GetDirectoryContents(subPath);
+            if (!contents.Exists)
             {
-                children.AddRange(directory.EnumerateDirectories());
-                children.AddRange(directory.EnumerateFiles());
-            }
-            catch (UnauthorizedAccessException)
-            {
-                lines.Add($"{prefix}[unreadable directory: {directory.Name}]");
-                return;
-            }
-            catch (IOException ex)
-            {
-                lines.Add($"{prefix}[unreadable directory: {directory.Name}: {ex.Message}]");
                 return;
             }
 
-            children.Sort((a, b) =>
-            {
-                var aIsFile = a is FileInfo ? 1 : 0;
-                var bIsFile = b is FileInfo ? 1 : 0;
-                var byType = aIsFile.CompareTo(bIsFile);
-                if (byType != 0)
-                {
-                    return byType;
-                }
-
-                return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-            });
+            var children = contents.OrderBy(x => !x.IsDirectory)
+                .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             for (var i = 0; i < children.Count; i++)
             {
                 var child = children[i];
+                if (!string.IsNullOrEmpty(outputPhysicalPath) &&
+                    !string.IsNullOrEmpty(child.PhysicalPath) &&
+                    string.Equals(Path.GetFullPath(child.PhysicalPath), Path.GetFullPath(outputPhysicalPath), StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(child.PhysicalPath))
+                {
+                    try
+                    {
+                        if ((fileInfoDetailProvider.GetFileAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                }
+
                 var isLast = i == children.Count - 1;
                 var branch = isLast ? "└── " : "├── ";
                 var nextPrefix = prefix + (isLast ? "    " : "│   ");
 
-                if (child is DirectoryInfo dir)
+                var itemSubPath = string.IsNullOrEmpty(subPath) ? child.Name : $"{subPath}/{child.Name}";
+                if (child.IsDirectory)
                 {
-                    if (fileService.IsReparsePoint(dir.Attributes))
-                    {
-                        continue;
-                    }
-
-                    if (fileService.SamePath(dir.FullName, outputFull))
-                    {
-                        continue;
-                    }
-
-                    var relative = fileService.ToRelative(rootFull, dir.FullName);
-                    var marker = DirectoryMarker(relative);
-
-                    lines.Add($"{prefix}{branch}{dir.Name}/{marker}");
+                    var marker = DirectoryMarker(itemSubPath);
+                    lines.Add($"{prefix}{branch}{child.Name}{marker}");
 
                     if (marker.Length == 0)
                     {
-                        Walk(dir, nextPrefix);
+                        Walk(itemSubPath, nextPrefix);
                     }
                 }
-                else if (child is FileInfo file)
+                else
                 {
-                    if (fileService.IsReparsePoint(file.Attributes))
-                    {
-                        continue;
-                    }
+                    var marker = FileMarker(itemSubPath, child, ignoreMatcher, maxFileSize);
 
-                    if (fileService.SamePath(file.FullName, outputFull))
-                    {
-                        continue;
-                    }
-
-                    var relative = fileService.ToRelative(rootFull, file.FullName);
-                    var marker = FileMarker(relative, file, ignoreMatcher, maxFileSize);
-
-                    lines.Add($"{prefix}{branch}{file.Name}{marker}");
+                    lines.Add($"{prefix}{branch}{child.Name}{marker}");
                 }
             }
         }
 
-        lines.Add($"{root.Name}/");
-        Walk(root, "");
+        lines.Add($"{rootName}/");
+        Walk("", "");
 
         return lines;
     }
 
     private string DirectoryMarker(string relative) => ignoreMatcher.IsIgnoredDirectory(relative) ? " [IGNORED DIR]" : string.Empty;
 
-    private static string FileMarker(string relative, FileInfo file, IIgnoreMatcher ignoreMatcher, long maxFileSize)
+    private static string FileMarker(string relative, IFileInfo file, IIgnoreMatcher ignoreMatcher, long maxFileSize)
     {
         if (ignoreMatcher.IsIgnoredFile(relative))
         {
             return " [IGNORED FILE]";
         }
 
-        long size;
-        try
+        if (file.Length > maxFileSize)
         {
-            size = file.Length;
-        }
-        catch
-        {
-            return " [UNREADABLE]";
+            return $" [LARGE {file.Length.HumanSize()}]";
         }
 
-        if (size > maxFileSize)
-        {
-            return $" [LARGE {size.HumanSize()}]";
-        }
-
-        return $" [{size.HumanSize()}]";
+        return $" [{file.Length.HumanSize()}]";
     }
 }
 

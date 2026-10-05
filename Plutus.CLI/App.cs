@@ -1,5 +1,7 @@
 using System.Text;
 using MAB.DotIgnore;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.FileProviders.Physical;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure.IgnoreMatcher;
@@ -23,9 +25,11 @@ public class App
             return 1;
         }
 
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
         var roots = projectPaths.Select(ResolveDirectory).ToList();
         var primaryRoot = roots.First();
-        var output = ResolveOutput(primaryRoot, outputPath);
+        var output = ResolveOutput(primaryRoot.Directory, outputPath);
 
         if (Directory.Exists(output.FullName))
         {
@@ -33,26 +37,30 @@ public class App
             return 1;
         }
 
-        var fileService = new FileService();
         var allEntries = new List<BundleEntry>();
 
-        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots, useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
+        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Directory), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
         foreach (var root in roots)
         {
-            var collector = new FileCollector(fileService, ignoreMatcher);
-            var entries = collector.CollectFiles(root, output);
+            var collector = new FileCollector(ignoreMatcher);
+            var entries = collector.CollectFiles(root.Provider, output.FullName);
             allEntries.AddRange(entries);
         }
 
         allEntries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 
-        var bundleWriter = new BundleWriter(fileService, ignoreMatcher);
+        var bundleWriter = new BundleWriter(new PhysicianPlutusFileInfo(new PhysicalDirectoryInfo(primaryRoot.Directory)), ignoreMatcher);
 
-        await bundleWriter.WriteAsync(roots, output, allEntries, maxFileSize).ConfigureAwait(false);
+        await bundleWriter.WriteAsync(
+            roots.ConvertAll(e => (e.Provider, e.RootName, e.OriginalPath)),
+            output,
+            allEntries,
+            maxFileSize)
+            .ConfigureAwait(false);
 
         Console.WriteLine($"Bundle created: {output.FullName}");
         Console.WriteLine($"Files included: {allEntries.Count}");
-        Console.WriteLine($"Total size: {allEntries.Sum(e => e.Size).HumanSize()}");
+        Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
         return 0;
     }
 
@@ -111,7 +119,7 @@ public class App
         return lines;
     }
 
-    private static DirectoryInfo ResolveDirectory(string path)
+    private static (IFileProvider Provider, DirectoryInfo Directory, string RootName, string OriginalPath) ResolveDirectory(string path)
     {
         var full = ExpandPath(path);
         var dir = new DirectoryInfo(full);
@@ -121,7 +129,7 @@ public class App
             throw new DirectoryNotFoundException($"Project directory not found: {full}");
         }
 
-        return dir;
+        return (new PhysicalFileProvider(dir.FullName), dir, dir.Name, full);
     }
 
     private static FileInfo ResolveOutput(DirectoryInfo root, string? outputPath)
