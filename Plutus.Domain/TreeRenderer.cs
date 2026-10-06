@@ -24,14 +24,7 @@ public class TreeRenderer(IIgnoreMatcher ignoreMatcher, IFileInfoDetailProvider 
             for (var i = 0; i < children.Count; i++)
             {
                 var child = children[i];
-                if (!string.IsNullOrEmpty(outputPhysicalPath) &&
-                    !string.IsNullOrEmpty(child.PhysicalPath) &&
-                    string.Equals(Path.GetFullPath(child.PhysicalPath), Path.GetFullPath(outputPhysicalPath), StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (fileInfoDetailProvider.IsReparsePoint(child))
+                if (child.IsSamePath(outputPhysicalPath) || fileInfoDetailProvider.IsReparsePoint(child))
                 {
                     continue;
                 }

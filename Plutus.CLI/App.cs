@@ -8,7 +8,9 @@ using Plutus.Infrastructure.IgnoreMatcher;
 
 namespace Plutus.CLI;
 
-public class App(IRemoteRepositoryProvider[] remoteRepositoryProviders)
+public class App(
+    IRemoteRepositoryProvider[] remoteRepositoryProviders,
+    IFileInfoDetailProvider fileInfoDetailProvider)
 {
     public async Task<int> RunBundleAsync(
         List<string>? projectPaths,
@@ -47,7 +49,7 @@ public class App(IRemoteRepositoryProvider[] remoteRepositoryProviders)
         var allEntries = new List<BundleEntry>();
 
         IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Provider), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
-        var collector = new FileCollector(ignoreMatcher);
+        var collector = new FileCollector(fileInfoDetailProvider, ignoreMatcher);
         foreach (var root in roots)
         {
             var entries = collector.CollectFiles(root.Provider, output.FullName);
@@ -56,7 +58,7 @@ public class App(IRemoteRepositoryProvider[] remoteRepositoryProviders)
 
         allEntries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 
-        var bundleWriter = new BundleWriter(new PhysicianPlutusFileInfo(new PhysicalDirectoryInfo(primaryRoot.Directory)), ignoreMatcher);
+        var bundleWriter = new BundleWriter(fileInfoDetailProvider, ignoreMatcher);
 
         await bundleWriter.WriteAsync(
             roots.ConvertAll(e => (e.Provider, e.RootName, e.OriginalPath)),

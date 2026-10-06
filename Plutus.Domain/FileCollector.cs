@@ -3,7 +3,7 @@ using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class FileCollector(IIgnoreMatcher ignoreMatcher)
+public class FileCollector(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
 {
     public List<BundleEntry> CollectFiles(IFileProvider fileProvider, string outputPhysicalPath)
     {
@@ -22,9 +22,7 @@ public class FileCollector(IIgnoreMatcher ignoreMatcher)
 
             foreach (var item in sortedItems)
             {
-                if (!string.IsNullOrEmpty(outputPhysicalPath) &&
-                    !string.IsNullOrEmpty(item.PhysicalPath) &&
-                    string.Equals(Path.GetFullPath(item.PhysicalPath), Path.GetFullPath(outputPhysicalPath), StringComparison.OrdinalIgnoreCase))
+                if (item.IsSamePath(outputPhysicalPath) || fileInfoDetailProvider.IsReparsePoint(item))
                 {
                     continue;
                 }

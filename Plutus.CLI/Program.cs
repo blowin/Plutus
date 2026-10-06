@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using MAB.DotIgnore;
+using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure;
 using Plutus.Infrastructure.IgnoreMatcher;
@@ -83,7 +84,9 @@ public static class Program
             {
                 var maxFileSize = ParseSize(maxSizeStr);
                 using var remoteRepositoryProvider = new GitHubRemoteRepositoryProvider();
-                var app = new App([remoteRepositoryProvider]);
+                var app = new App(
+                    [remoteRepositoryProvider],
+                    new PhysicianPlutusFileInfo());
                 return await app.RunBundleAsync(
                     projectPath,
                     outputPath,

@@ -19,7 +19,7 @@ public sealed class PhysicianPlutusFileInfo : IFileInfoDetailProvider
         try
         {
             var fileAttributes = File.GetAttributes(fileInfo.PhysicalPath);
-            return (fileAttributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+            return (fileAttributes & FileAttributes.ReparsePoint) != 0;
         }
         catch
         {
