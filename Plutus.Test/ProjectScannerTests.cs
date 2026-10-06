@@ -19,14 +19,14 @@ public class ProjectScannerTests
         var rootContents = Substitute.For<IDirectoryContents>();
         var subDir = CreateMockFile("src", isDirectory: true);
         var fileReadme = CreateMockFile("README.md", isDirectory: false, length: 500);
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { subDir, fileReadme }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
 
         var srcContents = Substitute.For<IDirectoryContents>();
         var fileApp = CreateMockFile("App.cs", isDirectory: false, length: 1500);
-        
+
         srcContents.Exists.Returns(true);
         srcContents.GetEnumerator().Returns(new List<IFileInfo> { fileApp }.GetEnumerator());
         _mockProvider.GetDirectoryContents("src").Returns(srcContents);
@@ -58,7 +58,7 @@ public class ProjectScannerTests
         // Arrange
         var rootContents = Substitute.For<IDirectoryContents>();
         var largeFile = CreateMockFile("LargeVideo.mp4", isDirectory: false, length: 5000);
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { largeFile }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
@@ -80,7 +80,7 @@ public class ProjectScannerTests
         // Arrange
         var rootContents = Substitute.For<IDirectoryContents>();
         var binDir = CreateMockFile("bin", isDirectory: true);
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { binDir }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
@@ -97,7 +97,7 @@ public class ProjectScannerTests
         dirNode.Name.Should().Be("bin");
         dirNode.Status.Should().Be(NodeStatus.IgnoredDirectory);
         dirNode.Children.Should().BeEmpty();
-        
+
         // Проверяем, что сканер не запрашивал внутренности игнорируемой папки
         _mockProvider.DidNotReceive().GetDirectoryContents("bin");
     }
@@ -108,7 +108,7 @@ public class ProjectScannerTests
         // Arrange
         var rootContents = Substitute.For<IDirectoryContents>();
         var ignoredFile = CreateMockFile(".env", isDirectory: false, length: 100);
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { ignoredFile }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
@@ -132,7 +132,7 @@ public class ProjectScannerTests
         // Arrange
         var rootContents = Substitute.For<IDirectoryContents>();
         var symlinkNode = CreateMockFile("symlink_dir", isDirectory: true, physicalPath: @"C:\symlink");
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { symlinkNode }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
@@ -155,7 +155,7 @@ public class ProjectScannerTests
         var rootContents = Substitute.For<IDirectoryContents>();
         var outputPath = @"C:\Project\bundle.md";
         var outputFile = CreateMockFile("bundle.md", isDirectory: false, physicalPath: outputPath);
-        
+
         rootContents.Exists.Returns(true);
         rootContents.GetEnumerator().Returns(new List<IFileInfo> { outputFile }.GetEnumerator());
         _mockProvider.GetDirectoryContents("").Returns(rootContents);
