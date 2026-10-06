@@ -1,11 +1,10 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
-using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
+public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider)
 {
     private static readonly Dictionary<string, string> ExtensionToLanguage = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -85,17 +84,17 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnor
 
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
-        FileInfo output,
+        IFileInfo output,
         long maxFileSize)
     {
-        output.Directory?.Create();
+        fileInfoDetailProvider.CreateDirectoryForFile(output);
 
         var entries = roots.SelectMany(e => e.ProjectNode.ExtractBundleEntries()).ToList();
         entries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 
         var totalSize = entries.Sum(x => x.File.Length);
 
-        await using var writer = new StreamWriter(output.FullName, append: false, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        await using var writer = fileInfoDetailProvider.CreateWriterForFile(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         writer.WriteLine("# Project Bundle");
         writer.WriteLine();
@@ -105,7 +104,7 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnor
         {
             writer.WriteLine($"\t `{root.OriginalPath}`");
         }
-        writer.WriteLine($"- Output: `{output.FullName}`");
+        writer.WriteLine($"- Output: `{output.PhysicalPath!}`");
         writer.WriteLine($"- Files included: `{entries.Count}`");
         writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
         writer.WriteLine($"- Max file size: `{maxFileSize.HumanSize()}`");

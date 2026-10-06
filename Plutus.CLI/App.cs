@@ -40,9 +40,16 @@ public class App(
         var normalizeOutputPath = NormalizeOutputPath(projectPaths, outputPath);
         var output = ResolveOutput(primaryRoot.Directory, normalizeOutputPath);
 
-        if (Directory.Exists(output.FullName))
+        if (output.IsDirectory)
         {
-            Console.Error.WriteLine($"Error: Output path is a directory: {output.FullName}");
+            Console.Error.WriteLine($"Error: Output path is a directory: {output.PhysicalPath ?? output.Name}");
+            return 1;
+        }
+
+        var physicalPath = output.PhysicalPath;
+        if (string.IsNullOrWhiteSpace(physicalPath))
+        {
+            Console.Error.WriteLine("Error: Output path is empty.");
             return 1;
         }
 
@@ -51,15 +58,15 @@ public class App(
         var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
         {
-            var projectNode = projectScanner.Scan(root.Provider, root.RootName, output.FullName, maxFileSize);
+            var projectNode = projectScanner.Scan(root.Provider, root.RootName, physicalPath, maxFileSize);
             bundleWriterEntries.Add((root.Provider, root.RootName, root.OriginalPath, projectNode));
         }
 
-        var bundleWriter = new BundleWriter(fileInfoDetailProvider, ignoreMatcher);
+        var bundleWriter = new BundleWriter(fileInfoDetailProvider);
 
         var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
-        Console.WriteLine($"Bundle created: {output.FullName}");
+        Console.WriteLine($"Bundle created: {physicalPath}");
         Console.WriteLine($"Files included: {allEntries.Count}");
         Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
         return 0;
@@ -173,34 +180,34 @@ public class App(
         return lines;
     }
 
-    private static (IFileProvider Provider, DirectoryInfo Directory, string RootName, string OriginalPath) ResolveDirectory(string path)
+    private (IFileProvider Provider, IFileInfo Directory, string RootName, string OriginalPath) ResolveDirectory(string path)
     {
         var full = ExpandPath(path);
-        var dir = new DirectoryInfo(full);
+        var dir = fileInfoDetailProvider.CreateDirectory(full);
 
         if (!dir.Exists)
         {
             throw new DirectoryNotFoundException($"Project directory not found: {full}");
         }
 
-        return (new PhysicalFileProvider(dir.FullName), dir, dir.Name, full);
+        return (fileInfoDetailProvider.CreateFileProvider(dir), dir, dir.Name, full);
     }
 
-    private static FileInfo ResolveOutput(DirectoryInfo root, string? outputPath)
+    private IFileInfo ResolveOutput(IFileInfo root, string? outputPath)
     {
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
-            return new FileInfo(ExpandPath(outputPath));
+            return fileInfoDetailProvider.CreateFile(ExpandPath(outputPath));
         }
 
         var folderName = string.IsNullOrWhiteSpace(root.Name) ? "project" : root.Name;
         var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), $"{folderName}_bundle.md");
-        return new FileInfo(ExpandPath(defaultPath));
+        return fileInfoDetailProvider.CreateFile(ExpandPath(defaultPath));
     }
 
-    private static string ExpandPath(string path)
+    private static string ExpandPath(string pathForExpand)
     {
-        path = Environment.ExpandEnvironmentVariables(path);
+        var path = Environment.ExpandEnvironmentVariables(pathForExpand);
 
         if (path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
         {

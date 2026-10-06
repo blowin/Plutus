@@ -1,15 +1,15 @@
+using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
-using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Test;
 
 public class BundleWriterBinaryTests
 {
     [Fact]
-    public void ReadTextSafeAsync_ThroughPrivateReflectionOrCollector_ShouldDetectBinaryFile()
+    public async Task ReadTextSafeAsync_ThroughPrivateReflectionOrCollector_ShouldDetectBinaryFile()
     {
         // Arrange
         var mockFile = Substitute.For<IFileInfo>();
@@ -22,18 +22,19 @@ public class BundleWriterBinaryTests
         mockFile.CreateReadStream().Returns(memoryStream);
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
-        var mockMatcher = Substitute.For<IIgnoreMatcher>();
 
-        var writer = new BundleWriter(mockDetail, mockMatcher);
+        var writer = new BundleWriter(mockDetail);
 
-        // Так как метод ReadTextSafeAsync приватный, мы можем протестировать его косвенно
-        // через вызов WriteAsync с одним элементом и проверить результирующий markdown-файл.
-        var tempOutput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_bundle.md");
-        var fileInfoOutput = new FileInfo(tempOutput);
-
+        var fileInfoOutput = new TestFileInfo
+        {
+            PhysicalPath = "dir/my_bundle.md",
+            Name = "my_bundle.md"
+        };
+        mockDetail.CreateWriterForFile(fileInfoOutput, Arg.Any<Encoding?>())
+            .Returns(c => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
         var roots = new List<(IFileProvider, string, string, ProjectNode)>
         {
-            (new NullFileProvider(), string.Empty, tempOutput, new ProjectNode
+            (new NullFileProvider(), string.Empty, string.Empty, new ProjectNode
             {
                 Name = "image.png",
                 RelativePath = "",
@@ -47,13 +48,29 @@ public class BundleWriterBinaryTests
         var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: 1024);
 
         // Assert
-        action.Should().NotThrowAsync();
+        await action.Should().NotThrowAsync();
 
-        if (File.Exists(tempOutput))
+        await using var stream = fileInfoOutput.CreateReadStream();
+        using var reader = new StreamReader(stream);
+        var resultText = await reader.ReadToEndAsync();
+        resultText.Should().Contain("[skipped: binary file]");
+    }
+
+    private sealed class TestFileInfo : IFileInfo
+    {
+        public MemoryStream Stream { get; } = new();
+
+        public Stream CreateReadStream()
         {
-            var resultText = File.ReadAllText(tempOutput);
-            resultText.Should().Contain("[skipped: binary file]");
-            File.Delete(tempOutput);
+            Stream.Position = 0;
+            return Stream;
         }
+
+        public bool Exists => true;
+        public long Length => Stream.Length;
+        public required string? PhysicalPath { get; set; }
+        public required string Name { get; set; }
+        public DateTimeOffset LastModified => new DateTimeOffset(2026, 10, 6, 20, 14, 22, TimeSpan.Zero);
+        public bool IsDirectory => false;
     }
 }

@@ -10,3 +10,5 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+changes.txt
+changes.diff
