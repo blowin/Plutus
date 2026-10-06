@@ -2,6 +2,8 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using Plutus.Infrastructure;
+using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.CLI;
 
@@ -65,7 +67,7 @@ public static class Program
             allowDangerousFilesOption
         };
 
-        rootCommand.SetAction(parseResult =>
+        rootCommand.SetAction(async parseResult =>
         {
             var projectPath = parseResult.GetValue(projectPathsArgument)!;
             var outputPath = parseResult.GetValue(outputOption);
@@ -77,9 +79,14 @@ public static class Program
 
             try
             {
-                long maxFileSize = ParseSize(maxSizeStr);
-                var app = new App();
-                return app.RunBundleAsync(
+                var maxFileSize = ParseSize(maxSizeStr);
+                using var githubRemoteRepository = new GitHubRemoteRepository();
+                using var gitlabRemoteRepository = new GitLabRemoteRepository();
+                using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
+                var app = new App(
+                    [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository],
+                    new PhysicianPlutusFileInfo());
+                return await app.RunBundleAsync(
                     projectPath,
                     outputPath,
                     maxFileSize,
@@ -91,7 +98,7 @@ public static class Program
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"Error: {ex.Message}");
-                return Task.FromResult(1);
+                return 1;
             }
         });
 

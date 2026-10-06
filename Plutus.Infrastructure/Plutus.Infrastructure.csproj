@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <PackageReference Include="MAB.DotIgnore" Version="3.0.2" />
+      <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="10.0.12" />
     </ItemGroup>
 
 </Project>

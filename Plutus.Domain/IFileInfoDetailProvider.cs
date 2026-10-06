@@ -1,16 +1,15 @@
+using System.Text;
 using Microsoft.Extensions.FileProviders;
 
 namespace Plutus.Domain;
 
 public interface IFileInfoDetailProvider
 {
-    FileAttributes GetFileAttributes(IFileInfo fileInfo);
-}
+    IFileInfo CreateDirectory(string path);
+    IFileInfo CreateFile(string path);
+    void CreateDirectoryForFile(IFileInfo fileInfo);
+    StreamWriter CreateWriterForFile(IFileInfo fileInfo, Encoding? encoding = null);
+    IFileProvider CreateFileProvider(IFileInfo fileInfo);
 
-public sealed class PhysicianPlutusFileInfo(IFileInfo root) : IFileInfoDetailProvider
-{
-    public FileAttributes GetFileAttributes(IFileInfo fileInfo)
-    {
-        return fileInfo.PhysicalPath != null ? File.GetAttributes(fileInfo.PhysicalPath) : FileAttributes.None;
-    }
+    bool IsReparsePoint(IFileInfo fileInfo);
 }
