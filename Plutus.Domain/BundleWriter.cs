@@ -83,13 +83,15 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnor
         [".sln"] = "text",
     };
 
-    public async Task WriteAsync(
-        List<(IFileProvider Provider, string RootName, string OriginalPath)> roots,
+    public async ValueTask<List<BundleEntry>> WriteAsync(
+        List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         FileInfo output,
-        List<BundleEntry> entries,
         long maxFileSize)
     {
         output.Directory?.Create();
+
+        var entries = roots.SelectMany(e => e.ProjectNode.ExtractBundleEntries()).ToList();
+        entries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 
         var totalSize = entries.Sum(x => x.File.Length);
 
@@ -121,12 +123,12 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnor
         writer.WriteLine();
         writer.WriteLine("## Directory Tree");
 
-        var treeRenderer = new TreeRenderer(ignoreMatcher, fileInfoDetailProvider);
-        foreach (var root in roots)
+        var treeRenderer = new TreeRenderer();
+        foreach (var node in roots)
         {
             writer.WriteLine();
             writer.WriteLine("```text");
-            foreach (var line in treeRenderer.RenderTree(root.Provider, root.RootName, output.FullName, maxFileSize))
+            foreach (var line in treeRenderer.RenderTree(node.ProjectNode))
             {
                 writer.WriteLine(line);
             }
@@ -174,6 +176,8 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IIgnor
 
             writer.WriteLine(fence);
         }
+
+        return entries;
     }
 
     private static async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)

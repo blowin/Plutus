@@ -46,26 +46,18 @@ public class App(
             return 1;
         }
 
-        var allEntries = new List<BundleEntry>();
-
         IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Provider), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
-        var collector = new FileCollector(fileInfoDetailProvider, ignoreMatcher);
+        var projectScanner = new ProjectScanner(fileInfoDetailProvider, ignoreMatcher);
+        var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
         {
-            var entries = collector.CollectFiles(root.Provider, output.FullName);
-            allEntries.AddRange(entries);
+            var projectNode = projectScanner.Scan(root.Provider, root.RootName, output.FullName, maxFileSize);
+            bundleWriterEntries.Add((root.Provider, root.RootName, root.OriginalPath, projectNode));
         }
-
-        allEntries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
 
         var bundleWriter = new BundleWriter(fileInfoDetailProvider, ignoreMatcher);
 
-        await bundleWriter.WriteAsync(
-            roots.ConvertAll(e => (e.Provider, e.RootName, e.OriginalPath)),
-            output,
-            allEntries,
-            maxFileSize)
-            .ConfigureAwait(false);
+        var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
         Console.WriteLine($"Bundle created: {output.FullName}");
         Console.WriteLine($"Files included: {allEntries.Count}");

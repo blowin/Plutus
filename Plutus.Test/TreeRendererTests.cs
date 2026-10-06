@@ -34,11 +34,13 @@ public class TreeRendererTests
         srcContents.GetEnumerator().Returns(new List<IFileInfo> { fileProgram, fileOutput }.GetEnumerator());
         mockProvider.GetDirectoryContents("src").Returns(srcContents);
 
-        var renderer = new TreeRenderer(mockMatcher, mockDetailProvider);
+        var scanner = new ProjectScanner(mockDetailProvider, mockMatcher);
+        var scanResult = scanner.Scan(mockProvider, "RootNode", @"C:\Project\src\bundle.md", maxFileSize: 1024);
+        var renderer = new TreeRenderer();
 
         // Act
         // Передаем путь к бандлу @"C:\Project\src\bundle.md", чтобы проверить его исключение
-        var result = renderer.RenderTree(mockProvider, "RootNode", @"C:\Project\src\bundle.md", maxFileSize: 1024);
+        var result = renderer.RenderTree(scanResult);
 
         // Assert
         result.Should().ContainInOrder(

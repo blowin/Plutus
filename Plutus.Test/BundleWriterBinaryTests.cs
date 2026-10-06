@@ -26,16 +26,25 @@ public class BundleWriterBinaryTests
 
         var writer = new BundleWriter(mockDetail, mockMatcher);
 
-        // Так как метод ReadTextSafeAsync приватный, мы можем протестировать его косвенно 
+        // Так как метод ReadTextSafeAsync приватный, мы можем протестировать его косвенно
         // через вызов WriteAsync с одним элементом и проверить результирующий markdown-файл.
         var tempOutput = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_bundle.md");
         var fileInfoOutput = new FileInfo(tempOutput);
 
-        var roots = new List<(IFileProvider, string, string)>();
-        var entries = new List<BundleEntry> { new("image.png", mockFile) };
+        var roots = new List<(IFileProvider, string, string, ProjectNode)>
+        {
+            (new NullFileProvider(), string.Empty, tempOutput, new ProjectNode
+            {
+                Name = "image.png",
+                RelativePath = "",
+                IsDirectory = false,
+                Status = NodeStatus.Included,
+                FileInfo = mockFile
+            }),
+        };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, entries, maxFileSize: 1024);
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: 1024);
 
         // Assert
         action.Should().NotThrowAsync();
