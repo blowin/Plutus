@@ -22,7 +22,10 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
     private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, long maxFileSize)
     {
         var contents = fileProvider.GetDirectoryContents(subPath);
-        if (!contents.Exists) return;
+        if (!contents.Exists)
+        {
+            return;
+        }
 
         var children = contents.OrderBy(x => !x.IsDirectory)
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase);
