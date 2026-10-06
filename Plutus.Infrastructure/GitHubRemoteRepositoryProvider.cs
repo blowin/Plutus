@@ -1,16 +1,32 @@
 using System.IO.Compression;
+using Plutus.Domain;
 
 namespace Plutus.Infrastructure;
 
-public class RemoteRepositoryProvider : IDisposable
+public class GitHubRemoteRepositoryProvider : IRemoteRepositoryProvider, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
 
-    public bool IsGitHubUrl(string path) =>
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirectories)
+        {
+            try
+            {
+                Directory.Delete(dir, true);
+            }
+            catch
+            {
+                /* ignore */
+            }
+        }
+    }
+
+    public bool IsSupportedPath(string path) =>
         path.StartsWith("http://github.com", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("https://github.com", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<string> DownloadAndExtractAsync(string githubUrl)
+    public async ValueTask<string> DownloadAsync(string githubUrl)
     {
         // Convert https://github.com to https://github.com/zipball/main
         string zipUrl = githubUrl.TrimEnd('/') + "/zipball/main";
@@ -39,18 +55,9 @@ public class RemoteRepositoryProvider : IDisposable
         return subDirs.Length > 0 ? subDirs[0] : targetDir;
     }
 
-    public void Dispose()
+    public string NormalizeOutputPath(string path)
     {
-        foreach (var dir in _tempDirectories)
-        {
-            try
-            {
-                Directory.Delete(dir, true);
-            }
-            catch
-            {
-                /* ignore */
-            }
-        }
+        var repoName = path.Split('/').LastOrDefault(s => !string.IsNullOrEmpty(s)) ?? "remote_project_" + Guid.CreateVersion7().ToString("N");
+        return Path.Combine(Directory.GetCurrentDirectory(), $"{repoName}_bundle.md");
     }
 }

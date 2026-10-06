@@ -4,12 +4,11 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.FileProviders.Physical;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
-using Plutus.Infrastructure;
 using Plutus.Infrastructure.IgnoreMatcher;
 
 namespace Plutus.CLI;
 
-public class App
+public class App(IRemoteRepositoryProvider[] remoteRepositoryProviders)
 {
     public async Task<int> RunBundleAsync(
         List<string>? projectPaths,
@@ -28,18 +27,16 @@ public class App
 
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-        using var remoteProvider = new RemoteRepositoryProvider();
-        var processedPaths = await GetPathForProcessAsync(projectPaths, remoteProvider);
+        var processedPaths = await GetPathForProcessAsync(projectPaths);
         var roots = processedPaths?.Select(ResolveDirectory).ToList();
         if (roots is null)
         {
             return 1;
         }
 
-        outputPath = NormalizeOutputPath(projectPaths, outputPath, remoteProvider);
-
         var primaryRoot = roots.First();
-        var output = ResolveOutput(primaryRoot.Directory, outputPath);
+        var normalizeOutputPath = NormalizeOutputPath(projectPaths, outputPath);
+        var output = ResolveOutput(primaryRoot.Directory, normalizeOutputPath);
 
         if (Directory.Exists(output.FullName))
         {
@@ -49,7 +46,7 @@ public class App
 
         var allEntries = new List<BundleEntry>();
 
-        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Directory), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
+        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Provider), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
         var collector = new FileCollector(ignoreMatcher);
         foreach (var root in roots)
         {
@@ -74,29 +71,44 @@ public class App
         return 0;
     }
 
-    private static string? NormalizeOutputPath(List<string> projectPaths, string? outputPath, RemoteRepositoryProvider remoteProvider)
+    private string? NormalizeOutputPath(List<string> projectPaths, string? outputPath)
     {
-        if (string.IsNullOrWhiteSpace(outputPath) && remoteProvider.IsGitHubUrl(projectPaths.First()))
+        if (!string.IsNullOrWhiteSpace(outputPath))
         {
-            var repoName = projectPaths.First().Split('/').LastOrDefault(s => !string.IsNullOrEmpty(s)) ?? "remote_project_" + Guid.CreateVersion7().ToString("N");
-            return Path.Combine(Directory.GetCurrentDirectory(), $"{repoName}_bundle.md");
+            return outputPath;
         }
 
-        return outputPath;
+        var firstProjectPath = projectPaths.First();
+        return remoteRepositoryProviders
+            .Where(r => r.IsSupportedPath(firstProjectPath))
+            .Select(r => r.NormalizeOutputPath(firstProjectPath))
+            .FirstOrDefault();
     }
 
-    private static async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, RemoteRepositoryProvider remoteProvider)
+    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths)
     {
         var processedPaths = new List<string>();
         foreach (var path in projectPaths)
         {
-            if (remoteProvider.IsGitHubUrl(path))
+            var remotePath = await ExtractRemotePathAsync(path);
+            processedPaths.Add(remotePath ?? path);
+        }
+
+        return processedPaths;
+
+        async ValueTask<string?> ExtractRemotePathAsync(string path)
+        {
+            foreach (var remoteRepositoryProvider in remoteRepositoryProviders)
             {
+                if (!remoteRepositoryProvider.IsSupportedPath(path))
+                {
+                    continue;
+                }
+
                 Console.WriteLine($"Downloading remote repository: {path}...");
                 try
                 {
-                    var localPath = await remoteProvider.DownloadAndExtractAsync(path);
-                    processedPaths.Add(localPath);
+                    return await remoteRepositoryProvider.DownloadAsync(path);
                 }
                 catch (Exception ex)
                 {
@@ -104,31 +116,23 @@ public class App
                     return null;
                 }
             }
-            else
-            {
-                processedPaths.Add(path);
-            }
-        }
 
-        return processedPaths;
+            return null;
+        }
     }
 
     private static IIgnoreMatcher CreateIgnoreMatcher(
-        List<DirectoryInfo> roots,
+        List<IFileProvider> roots,
         bool useGitIgnore,
         List<string> extraIgnorePatterns,
         bool useDefaultExcludes,
         bool allowDangerousFiles)
     {
         var ignoreMatchBuilder = new IgnoreMatcherBuilder();
-
-        foreach (var root in roots)
+        var ignoreLines = roots.SelectMany(root => LoadIgnoreLines(root, useGitIgnore, extraIgnorePatterns)).ToList();
+        if (ignoreLines.Count > 0)
         {
-            var ignoreLines = LoadIgnoreLines(root, useGitIgnore, extraIgnorePatterns);
-            if (ignoreLines.Count > 0)
-            {
-                ignoreMatchBuilder.Add(new GitIgnoreMatcher(new IgnoreList(ignoreLines)));
-            }
+            ignoreMatchBuilder.Add(new GitIgnoreMatcher(new IgnoreList(ignoreLines)));
         }
 
         if (useDefaultExcludes)
@@ -144,22 +148,29 @@ public class App
         return ignoreMatchBuilder.Build();
     }
 
-    private static List<string> LoadIgnoreLines(DirectoryInfo root, bool useGitIgnore, List<string> extraIgnorePatterns)
+    private static List<string> LoadIgnoreLines(IFileProvider provider, bool useGitIgnore, List<string> extraIgnorePatterns)
     {
         var lines = new List<string>();
 
         if (useGitIgnore)
         {
-            var gitIgnorePath = Path.Combine(root.FullName, ".gitignore");
-            if (File.Exists(gitIgnorePath))
+            var gitIgnoreFile = provider.GetFileInfo(".gitignore");
+            if (gitIgnoreFile.Exists)
             {
                 try
                 {
-                    lines.AddRange(File.ReadAllLines(gitIgnorePath, Encoding.UTF8));
+                    using var stream = gitIgnoreFile.CreateReadStream();
+                    using var reader = new StreamReader(stream, Encoding.UTF8);
+
+                    string? line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        lines.Add(line);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Warning: failed to read {gitIgnorePath}: {ex.Message}");
+                    Console.Error.WriteLine($"Warning: failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
                 }
             }
         }

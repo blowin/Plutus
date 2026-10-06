@@ -2,6 +2,10 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using MAB.DotIgnore;
+using Plutus.Domain.IgnoreMatcher;
+using Plutus.Infrastructure;
+using Plutus.Infrastructure.IgnoreMatcher;
 
 namespace Plutus.CLI;
 
@@ -65,7 +69,7 @@ public static class Program
             allowDangerousFilesOption
         };
 
-        rootCommand.SetAction(parseResult =>
+        rootCommand.SetAction(async parseResult =>
         {
             var projectPath = parseResult.GetValue(projectPathsArgument)!;
             var outputPath = parseResult.GetValue(outputOption);
@@ -77,9 +81,10 @@ public static class Program
 
             try
             {
-                long maxFileSize = ParseSize(maxSizeStr);
-                var app = new App();
-                return app.RunBundleAsync(
+                var maxFileSize = ParseSize(maxSizeStr);
+                using var remoteRepositoryProvider = new GitHubRemoteRepositoryProvider();
+                var app = new App([remoteRepositoryProvider]);
+                return await app.RunBundleAsync(
                     projectPath,
                     outputPath,
                     maxFileSize,
@@ -91,7 +96,7 @@ public static class Program
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"Error: {ex.Message}");
-                return Task.FromResult(1);
+                return 1;
             }
         });
 
@@ -135,5 +140,60 @@ public static class Program
         }
 
         return size;
+    }
+
+    private static IIgnoreMatcher CreateIgnoreMatcher(
+        List<DirectoryInfo> roots,
+        bool useGitIgnore,
+        List<string> extraIgnorePatterns,
+        bool useDefaultExcludes,
+        bool allowDangerousFiles)
+    {
+        var ignoreMatchBuilder = new IgnoreMatcherBuilder();
+
+        foreach (var root in roots)
+        {
+            var ignoreLines = LoadIgnoreLines(root, useGitIgnore, extraIgnorePatterns);
+            if (ignoreLines.Count > 0)
+            {
+                ignoreMatchBuilder.Add(new GitIgnoreMatcher(new IgnoreList(ignoreLines)));
+            }
+        }
+
+        if (useDefaultExcludes)
+        {
+            ignoreMatchBuilder.IgnoreJunk();
+        }
+
+        if (!allowDangerousFiles)
+        {
+            ignoreMatchBuilder.IgnoreDangerousFile();
+        }
+
+        return ignoreMatchBuilder.Build();
+    }
+
+    private static List<string> LoadIgnoreLines(DirectoryInfo root, bool useGitIgnore, List<string> extraIgnorePatterns)
+    {
+        var lines = new List<string>();
+
+        if (useGitIgnore)
+        {
+            var gitIgnorePath = Path.Combine(root.FullName, ".gitignore");
+            if (File.Exists(gitIgnorePath))
+            {
+                try
+                {
+                    lines.AddRange(File.ReadAllLines(gitIgnorePath, Encoding.UTF8));
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Warning: failed to read {gitIgnorePath}: {ex.Message}");
+                }
+            }
+        }
+
+        lines.AddRange(extraIgnorePatterns);
+        return lines;
     }
 }
