@@ -1,6 +1,3 @@
-using Microsoft.Extensions.FileProviders;
-using Plutus.Domain.IgnoreMatcher;
-
 namespace Plutus.Domain;
 
 public class TreeRenderer

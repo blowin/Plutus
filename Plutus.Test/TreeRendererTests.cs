@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
-using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Test;
 

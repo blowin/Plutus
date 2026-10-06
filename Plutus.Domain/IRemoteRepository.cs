@@ -1,6 +1,6 @@
 namespace Plutus.Domain;
 
-public interface IRemoteRepositoryProvider
+public interface IRemoteRepository
 {
     bool IsSupportedPath(string path);
 

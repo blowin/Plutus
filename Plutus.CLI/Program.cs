@@ -2,11 +2,8 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using MAB.DotIgnore;
-using Plutus.Domain;
-using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure;
-using Plutus.Infrastructure.IgnoreMatcher;
+using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.CLI;
 
@@ -83,9 +80,11 @@ public static class Program
             try
             {
                 var maxFileSize = ParseSize(maxSizeStr);
-                using var remoteRepositoryProvider = new GitHubRemoteRepositoryProvider();
+                using var githubRemoteRepository = new GitHubRemoteRepository();
+                using var gitlabRemoteRepository = new GitLabRemoteRepository();
+                using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
                 var app = new App(
-                    [remoteRepositoryProvider],
+                    [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository],
                     new PhysicianPlutusFileInfo());
                 return await app.RunBundleAsync(
                     projectPath,

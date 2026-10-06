@@ -1,7 +1,6 @@
 using System.Text;
 using MAB.DotIgnore;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.FileProviders.Physical;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure.IgnoreMatcher;
@@ -9,7 +8,7 @@ using Plutus.Infrastructure.IgnoreMatcher;
 namespace Plutus.CLI;
 
 public class App(
-    IRemoteRepositoryProvider[] remoteRepositoryProviders,
+    IRemoteRepository[] remoteRepositoryProviders,
     IFileInfoDetailProvider fileInfoDetailProvider)
 {
     public async Task<int> RunBundleAsync(
@@ -91,8 +90,15 @@ public class App(
         var processedPaths = new List<string>();
         foreach (var path in projectPaths)
         {
-            var remotePath = await ExtractRemotePathAsync(path);
-            processedPaths.Add(remotePath ?? path);
+            try
+            {
+                var remotePath = await ExtractRemotePathAsync(path);
+                processedPaths.Add(remotePath ?? path);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         return processedPaths;
@@ -114,7 +120,7 @@ public class App(
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error downloading repository {path}: {ex.Message}");
-                    return null;
+                    throw;
                 }
             }
 
