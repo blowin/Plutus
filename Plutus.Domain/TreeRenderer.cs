@@ -31,19 +31,9 @@ public class TreeRenderer(IIgnoreMatcher ignoreMatcher, IFileInfoDetailProvider 
                     continue;
                 }
 
-                if (!string.IsNullOrEmpty(child.PhysicalPath))
+                if (fileInfoDetailProvider.IsReparsePoint(child))
                 {
-                    try
-                    {
-                        if ((fileInfoDetailProvider.GetFileAttributes(child) & FileAttributes.ReparsePoint) != 0)
-                        {
-                            continue;
-                        }
-                    }
-                    catch
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 var isLast = i == children.Count - 1;

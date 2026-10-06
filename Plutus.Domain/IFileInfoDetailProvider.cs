@@ -4,13 +4,26 @@ namespace Plutus.Domain;
 
 public interface IFileInfoDetailProvider
 {
-    FileAttributes GetFileAttributes(IFileInfo fileInfo);
+    bool IsReparsePoint(IFileInfo fileInfo);
 }
 
-public sealed class PhysicianPlutusFileInfo(IFileInfo root) : IFileInfoDetailProvider
+public sealed class PhysicianPlutusFileInfo : IFileInfoDetailProvider
 {
-    public FileAttributes GetFileAttributes(IFileInfo fileInfo)
+    public bool IsReparsePoint(IFileInfo fileInfo)
     {
-        return fileInfo.PhysicalPath != null ? File.GetAttributes(fileInfo.PhysicalPath) : FileAttributes.None;
+        if (fileInfo.PhysicalPath is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var fileAttributes = File.GetAttributes(fileInfo.PhysicalPath);
+            return (fileAttributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
