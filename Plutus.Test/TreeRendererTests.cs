@@ -9,58 +9,70 @@ namespace Plutus.Test;
 public class TreeRendererTests
 {
     [Fact]
-    public void RenderTree_ShouldDrawCorrectBranches_AndSkipOutputFile()
+    public void RenderTree_ShouldDrawCorrectBranchesBasedOnProjectNodeTree()
     {
         // Arrange
-        var mockProvider = Substitute.For<IFileProvider>();
-        var mockDetailProvider = Substitute.For<IFileInfoDetailProvider>();
-        var mockMatcher = Substitute.For<IIgnoreMatcher>();
+        // Строим дерево проекта в памяти с помощью простых POCO-объектов
+        var rootNode = new ProjectNode
+        {
+            Name = "RootNode/",
+            RelativePath = "",
+            IsDirectory = true,
+            Status = NodeStatus.Included
+        };
 
-        // Симулируем корень с одной папкой "src" и одним файлом "README.md"
-        var rootContents = Substitute.For<IDirectoryContents>();
-        var dirSrc = CreateMockFile("src", isDirectory: true);
-        var fileReadme = CreateMockFile("README.md", isDirectory: false, length: 100);
+        var srcDir = new ProjectNode
+        {
+            Name = "src",
+            RelativePath = "src",
+            IsDirectory = true,
+            Status = NodeStatus.Included
+        };
 
-        rootContents.Exists.Returns(true);
-        rootContents.GetEnumerator().Returns(new List<IFileInfo> { dirSrc, fileReadme }.GetEnumerator());
-        mockProvider.GetDirectoryContents("").Returns(rootContents);
+        var fileProgram = new ProjectNode
+        {
+            Name = "Program.cs",
+            RelativePath = "src/Program.cs",
+            IsDirectory = false,
+            Status = NodeStatus.Included,
+            FileInfo = CreateMockFile("Program.cs", length: 200)
+        };
 
-        // Симулируем содержимое папки "src" (в ней лежит Program.cs и генерируемый бандл)
-        var srcContents = Substitute.For<IDirectoryContents>();
-        var fileProgram = CreateMockFile("Program.cs", isDirectory: false, length: 200, physicalPath: @"C:\Project\src\Program.cs");
-        var fileOutput = CreateMockFile("bundle.md", isDirectory: false, length: 0, physicalPath: @"C:\Project\src\bundle.md");
+        var fileReadme = new ProjectNode
+        {
+            Name = "README.md",
+            RelativePath = "README.md",
+            IsDirectory = false,
+            Status = NodeStatus.Included,
+            FileInfo = CreateMockFile("README.md", length: 100)
+        };
 
-        srcContents.Exists.Returns(true);
-        srcContents.GetEnumerator().Returns(new List<IFileInfo> { fileProgram, fileOutput }.GetEnumerator());
-        mockProvider.GetDirectoryContents("src").Returns(srcContents);
+        // Собираем иерархию
+        srcDir.Children.Add(fileProgram);
+        rootNode.Children.Add(srcDir);
+        rootNode.Children.Add(fileReadme);
 
-        var scanner = new ProjectScanner(mockDetailProvider, mockMatcher);
-        var scanResult = scanner.Scan(mockProvider, "RootNode", @"C:\Project\src\bundle.md", maxFileSize: 1024);
         var renderer = new TreeRenderer();
 
         // Act
-        // Передаем путь к бандлу @"C:\Project\src\bundle.md", чтобы проверить его исключение
-        var result = renderer.RenderTree(scanResult);
+        var result = renderer.RenderTree(rootNode);
 
         // Assert
         result.Should().ContainInOrder(
             "RootNode/",
             "├── src/",
-            "│   └── Program.cs [200 B]", // Единственный валидный файл в подпапке (стал последним)
-            "└── README.md [100 B]"      // Последний элемент корня
+            "│   └── Program.cs [200 B]",
+            "└── README.md [100 B]"
         );
-
-        // Проверяем, что файл вывода не попал в отрисовку
-        result.Should().NotContain("bundle.md");
     }
 
-    private static IFileInfo CreateMockFile(string name, bool isDirectory, long length = 0, string? physicalPath = null)
+    private static IFileInfo CreateMockFile(string name, long length)
     {
         var file = Substitute.For<IFileInfo>();
         file.Name.Returns(name);
-        file.IsDirectory.Returns(isDirectory);
+        file.IsDirectory.Returns(false);
         file.Length.Returns(length);
-        file.PhysicalPath.Returns(physicalPath);
+        file.Exists.Returns(true);
         return file;
     }
 }
