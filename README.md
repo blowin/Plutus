@@ -1,81 +1,103 @@
 # Plutus
+Plutus is a high-performance, architecturally pure .NET 10 command-line interface (CLI) utility designed to scan local directories or remote repositories and consolidate source files into a single structured Markdown document.
 
-Plutus is a high-performance .NET 10 command-line interface (CLI) utility designed to bundle source code and project assets into a single structured Markdown document. It simplifies sharing source code repositories with Large Language Models (LLMs), generating project backups, and performing offline code reviews by capturing directory structure, file hierarchy, and text content in a consolidated format.
+Optimized for **Large Language Models (LLMs)** context window injection, project auditing, and offline code reviews, Plutus generates an integrated project capsule containing visual directory hierarchies, complete file lists, and accurately syntax-highlighted code fences.
 
-## Features
+---
 
-- **Automated Directory Tree Generation**: Produces a clean visual representation of the project hierarchy including indicators for ignored or oversized files.
-- **Flexible Ignore System**: Integrates native support for standard `.gitignore` rules via `MAB.DotIgnore`, combined with built-in rules for common development junk files.
-- **Security Protections**: Features a `DangerousFileIgnoreMatcher` that automatically blocks accidental collection of private keys, environment files, and credentials.
-- **Smart Text Encoding**: Safely reads UTF-8, Windows-1251, and generic text encodings while actively detecting and ignoring binary data streams.
-- **Configurable Restrictions**: Supports strict constraints on maximum individual file size to manage token consumption or storage space.
+## Technical Highlights & Architecture
 
-## Architecture
+1. **Plutus.CLI**: Handles command-line invocation arguments, input normalization, and overall workflow orchestration via `App.cs`.
+2. **Plutus.Domain**: Contains the invariant business rules, the unified `ProjectScanner` graph engine, text encoding detectors, and formatting logic. It operates purely on Microsoft's `IFileProvider` and `IFileInfo` abstractions.
+3. **Plutus.Infrastructure**: Implements concrete structural bridges. It wraps physical platform disk drivers via specialized file providers and translates public cloud repository URLs into automated download workflows.
 
-The project follows a clean, modular class library structure split across three distinct layers:
+---
 
-1. **Plutus.CLI**: Consists of user interaction components, CLI parameter parsing routines, and overall orchestrator logic.
-2. **Plutus.Domain**: Contains the core business behavior including file discovery, human-readable size formatting, formatting rules, directory rendering tree logic, and individual domain matching policies.
-3. **Plutus.Infrastructure**: Provides platform adapters, such as the `GitIgnoreMatcher` wrapping external dependency abstractions.
+## Core Features
 
-## Requirements
+* **Multi-Platform Remote Ingestion**: Pass raw repository links from **GitHub**, **GitLab**, or **Bitbucket**. The infrastructure automatically maps branches, sanitizes URL paths, follows web redirects, handles nested source segments, and extracts the code into sandboxed execution containers.
+* **Unified Single-Pass Scanning**: Replaced redundant multi-run tree traversals with a single-pass hierarchical execution tree (`ProjectScanner`). It populates an immutable in-memory graph (`ProjectNode`) that feeds both the code compiler and the visual layout renderer simultaneously.
+* **High-Fidelity Virtualization**: Completely isolated from the `System.IO` footprint. It executes interchangeably against physical hard drives or in-memory virtual arrays, facilitating fully non-destructive isolated unit testing.
+* **Smart Text/Binary Demuxing**: Inspects the preliminary byte arrays of file streams dynamically. It handles complex character maps (UTF-8, Windows-1251) seamlessly while flagging and isolating corrupted nodes or binary objects (images, compiled artifacts) to protect LLM token budget capacities.
 
-- .NET 10.0 SDK or higher
-- Supported on Windows, macOS, and Linux operating systems
+---
 
-## Installation
+## Security Engineering
 
-Clone the repository and compile using the standard .NET CLI build pipeline:
+Plutus contains multi-tiered structural guardrails to prevent accidental exposure of cryptographic signatures, sensitive parameters, or infrastructure keys:
 
-```bash
-git clone https://github.com/yourusername/Plutus.git
-cd Plutus
-dotnet build -c Release
-```
+* **Junk Exclusions (`JunkDirectoryIgnoreMatcher`)**: Automatically intercepts and cuts out transient build files, operational runtimes, package trees, and storage logs (`node_modules`, `bin`, `obj`, `.git`, `venv`, `.vs`).
+* **Leak Protection (`DangerousFileIgnoreMatcher`)**: Actively blocks localized credentials, token configuration stores, and encryption files (`.env`, `credentials.json`, `secrets.json`, `id_rsa`, `*.pem`, `*.key`).
+* **Oversized Threshold Filtering**: Restricts injection paths based on size boundaries. Files exceeding the target threshold are cleanly mapped in the directory tree structure but omitted from the body text stream.
+
+---
 
 ## Usage
 
-Run the compiled executable through the terminal while passing the path to the target project directory.
-
 ```bash
-plutus <project-path> [options]
+plutus <project-path-or-url> [options]
 ```
 
 ### Options
 
-- `-o, --output <path>`: Specifies the exact output location for the generated file bundle. Defaults to `<folder-name>_bundle.md`.
-- `--max-file-size <size>`: Sets the upper threshold for processing single files (e.g., `512K`, `1M`, `2MB`). Defaults to `1M`.
-- `--no-gitignore`: Disables searching and parsing the root `.gitignore` configuration file.
-- `--ignore <pattern>`: Inserts custom gitignore-style exclusion rules directly via parameter strings (can be repeated).
-- `--no-default-excludes`: Disables default rules for common environment folder exclusions (`node_modules`, `bin`, `obj`).
-- `--allow-dangerous-files`: Bypasses security rules preventing ingestion of sensitive files (`.env`, private keys).
-- `-h, --help`: Displays reference guidance details for available commands.
+* `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
+* `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
+* `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
+* `--ignore <pattern>`: Injects user-defined custom gitignore-style exclusions via command-line arguments (can be repeated).
+* `--no-default-excludes`: Disables built-in automated junk directory tracking filters.
+* `--allow-dangerous-files`: Overrides the security matching protocols to force ingestion of secure asset blocks (`.env`, private identities).
 
-### Examples
+### Operational Examples
 
-Bundle the current working directory with standard rules:
+**Compile local working environments with standard configurations:**
 ```bash
 plutus .
 ```
 
-Bundle a specific application with custom file constraints:
+**Ingest a public remote GitHub repository directly from the web:**
 ```bash
-plutus C:\projects\MyApp --max-file-size 5M
+plutus "https://github.com"
 ```
 
-Exclude specific assets and compile a direct layout to a temporary storage directory:
+**Ingest a nested GitLab group repository architecture:**
 ```bash
-plutus . --ignore "vendor/" --ignore "*.min.js" -o /tmp/project_bundle.md
+plutus "https://gitlab.com"
 ```
 
-## Contributing
+**Ingest and trim specific sub-browser tracks on Bitbucket:**
+```bash
+plutus "https://bitbucket.org" --max-file-size 250K
+```
 
-1. Fork the repository.
-2. Create a specific feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit modification sets (`git commit -m 'Add some AmazingFeature'`).
-4. Push updates to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request for code review.
+---
+
+## Extending the Engine: Custom Remote Cloud Providers
+
+Due to the Strategy Pattern decoupling layout, adding new remote Git platforms requires zero modification to the core engine. Simply inherit from `BaseRemoteRepository` inside the Infrastructure project layer:
+
+```csharp
+public sealed class GiteaRemoteRepository : BaseRemoteRepository
+{
+    protected override string PlatformPrefix => "gitea";
+
+    public override bool IsSupportedPath(string path) =>
+        path.StartsWith("https://gitea.com", StringComparison.OrdinalIgnoreCase);
+
+    protected override string BuildZipUrl(string path) =>
+        path.TrimEnd('/') + "/archive/master.zip";
+}
+```
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## License
+
+Copyright (c) 2026 blowin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
