@@ -16,7 +16,7 @@ public static class Program
 
         var projectPathsArgument = new Argument<List<string>>("project-path")
         {
-            Description = "Path to the target project directory.",
+            Description = "Path to the target project directory or GitHub repository URL.",
             Arity = ArgumentArity.OneOrMore,
         };
 
