@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.FileProviders.Physical;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
+using Plutus.Infrastructure;
 using Plutus.Infrastructure.IgnoreMatcher;
 
 namespace Plutus.CLI;
@@ -27,7 +28,16 @@ public class App
 
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-        var roots = projectPaths.Select(ResolveDirectory).ToList();
+        using var remoteProvider = new RemoteRepositoryProvider();
+        var processedPaths = await GetPathForProcessAsync(projectPaths, remoteProvider);
+        var roots = processedPaths?.Select(ResolveDirectory).ToList();
+        if (roots is null)
+        {
+            return 1;
+        }
+
+        outputPath = NormalizeOutputPath(projectPaths, outputPath, remoteProvider);
+
         var primaryRoot = roots.First();
         var output = ResolveOutput(primaryRoot.Directory, outputPath);
 
@@ -40,9 +50,9 @@ public class App
         var allEntries = new List<BundleEntry>();
 
         IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Directory), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
+        var collector = new FileCollector(ignoreMatcher);
         foreach (var root in roots)
         {
-            var collector = new FileCollector(ignoreMatcher);
             var entries = collector.CollectFiles(root.Provider, output.FullName);
             allEntries.AddRange(entries);
         }
@@ -62,6 +72,45 @@ public class App
         Console.WriteLine($"Files included: {allEntries.Count}");
         Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
         return 0;
+    }
+
+    private static string? NormalizeOutputPath(List<string> projectPaths, string? outputPath, RemoteRepositoryProvider remoteProvider)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath) && remoteProvider.IsGitHubUrl(projectPaths.First()))
+        {
+            var repoName = projectPaths.First().Split('/').LastOrDefault(s => !string.IsNullOrEmpty(s)) ?? "remote_project_" + Guid.CreateVersion7().ToString("N");
+            return Path.Combine(Directory.GetCurrentDirectory(), $"{repoName}_bundle.md");
+        }
+
+        return outputPath;
+    }
+
+    private static async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, RemoteRepositoryProvider remoteProvider)
+    {
+        var processedPaths = new List<string>();
+        foreach (var path in projectPaths)
+        {
+            if (remoteProvider.IsGitHubUrl(path))
+            {
+                Console.WriteLine($"Downloading remote repository: {path}...");
+                try
+                {
+                    var localPath = await remoteProvider.DownloadAndExtractAsync(path);
+                    processedPaths.Add(localPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error downloading repository {path}: {ex.Message}");
+                    return null;
+                }
+            }
+            else
+            {
+                processedPaths.Add(path);
+            }
+        }
+
+        return processedPaths;
     }
 
     private static IIgnoreMatcher CreateIgnoreMatcher(
