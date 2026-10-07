@@ -21,7 +21,7 @@ public sealed class PhysicianPlutusFileInfo : IFileInfoDetailProvider
         return new StreamWriter(fileInfoPhysicalPath, append: false, encoding: encoding);
     }
 
-    public IFileProvider CreateFileProvider(IFileInfo fileInfo) => new PhysicalFileProvider(fileInfo.PhysicalPath ?? throw new ArgumentException("Unable to determine PhysicalPath"));
+    public IFileProvider CreateFileProvider(IFileInfo fileInfo) => new PhysicalFileProvider(fileInfo.PhysicalPath ?? throw new ArgumentException("Unable to determine PhysicalPath"), ExclusionFilters.None);
 
     public bool IsReparsePoint(IFileInfo fileInfo)
     {

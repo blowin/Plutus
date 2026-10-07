@@ -7,9 +7,7 @@ using Plutus.Infrastructure.IgnoreMatcher;
 
 namespace Plutus.CLI;
 
-public class App(
-    IRemoteRepository[] remoteRepositoryProviders,
-    IFileInfoDetailProvider fileInfoDetailProvider)
+public class App(IRemoteRepository[] remoteRepositoryProviders, IFileInfoDetailProvider fileInfoDetailProvider)
 {
     public async Task<int> RunBundleAsync(List<string>? projectPaths,
         string? outputPath,
@@ -17,8 +15,7 @@ public class App(
         bool useGitIgnore,
         List<string> extraIgnorePatterns,
         bool useDefaultExcludes,
-        bool allowDangerousFiles,
-        List<string>? excludeDirectories)
+        bool allowDangerousFiles)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
@@ -37,7 +34,7 @@ public class App(
 
         var primaryRoot = roots.First();
         var normalizeOutputPath = NormalizeOutputPath(projectPaths, outputPath);
-        var output = ResolveOutput(primaryRoot.Directory, normalizeOutputPath);
+        var output = ResolveOutput(primaryRoot, normalizeOutputPath);
 
         if (output.IsDirectory)
         {
@@ -53,18 +50,18 @@ public class App(
         }
 
         IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(
-            roots.ConvertAll(e => e.Provider),
+            roots.ConvertAll(fileInfoDetailProvider.CreateFileProvider),
             useGitIgnore,
             extraIgnorePatterns,
             useDefaultExcludes,
-            allowDangerousFiles,
-            excludeDirectories);
+            allowDangerousFiles);
         var projectScanner = new ProjectScanner(fileInfoDetailProvider, ignoreMatcher);
         var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
         {
-            var projectNode = projectScanner.Scan(root.Provider, root.RootName, physicalPath, maxFileSize);
-            bundleWriterEntries.Add((root.Provider, root.RootName, root.OriginalPath, projectNode));
+            var provider = fileInfoDetailProvider.CreateFileProvider(root);
+            var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, maxFileSize);
+            bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
         var bundleWriter = new BundleWriter(fileInfoDetailProvider);
@@ -138,16 +135,16 @@ public class App(
         bool useGitIgnore,
         List<string> extraIgnorePatterns,
         bool useDefaultExcludes,
-        bool allowDangerousFiles,
-        List<string>? excludeDirectories)
+        bool allowDangerousFiles)
     {
         var ignoreMatchBuilder = new IgnoreMatcherBuilder();
-        if (excludeDirectories is not null && excludeDirectories.Count > 0)
+        var ignoreLines = useGitIgnore ? roots.SelectMany(LoadIgnoreLines).ToHashSet() : [];
+        foreach (var extraIgnorePattern in extraIgnorePatterns)
         {
-            ignoreMatchBuilder.Add(new DirectoryExcludeMatcher(excludeDirectories));
+            ignoreLines.Add(extraIgnorePattern);
         }
+        ignoreLines.RemoveWhere(string.IsNullOrWhiteSpace);
 
-        var ignoreLines = roots.SelectMany(root => LoadIgnoreLines(root, useGitIgnore, extraIgnorePatterns)).ToList();
         if (ignoreLines.Count > 0)
         {
             ignoreMatchBuilder.Add(new GitIgnoreMatcher(new IgnoreList(ignoreLines)));
@@ -166,40 +163,37 @@ public class App(
         return ignoreMatchBuilder.Build();
     }
 
-    private static List<string> LoadIgnoreLines(IFileProvider provider, bool useGitIgnore, List<string> extraIgnorePatterns)
+    private static List<string> LoadIgnoreLines(IFileProvider provider)
     {
         var lines = new List<string>();
-
-        if (useGitIgnore)
+        var gitIgnoreFile = provider.GetFileInfo(".gitignore");
+        if (!gitIgnoreFile.Exists)
         {
-            var gitIgnoreFile = provider.GetFileInfo(".gitignore");
-            if (gitIgnoreFile.Exists)
-            {
-                try
-                {
-                    using var stream = gitIgnoreFile.CreateReadStream();
-                    using var reader = new StreamReader(stream, Encoding.UTF8);
-
-                    string? line;
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        lines.Add(line);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Warning: failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
-                }
-            }
+            return lines;
         }
 
-        lines.AddRange(extraIgnorePatterns);
+        try
+        {
+            using var stream = gitIgnoreFile.CreateReadStream();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                lines.Add(line);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
+        }
+
         return lines;
     }
 
-    private (IFileProvider Provider, IFileInfo Directory, string RootName, string OriginalPath) ResolveDirectory(string path)
+    private IFileInfo ResolveDirectory(string path)
     {
-        var full = ExpandPath(path);
+        var full = path.GetExpandPath();
         var dir = fileInfoDetailProvider.CreateDirectory(full);
 
         if (!dir.Exists)
@@ -207,32 +201,18 @@ public class App(
             throw new DirectoryNotFoundException($"Project directory not found: {full}");
         }
 
-        return (fileInfoDetailProvider.CreateFileProvider(dir), dir, dir.Name, full);
+        return dir;
     }
 
     private IFileInfo ResolveOutput(IFileInfo root, string? outputPath)
     {
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
-            return fileInfoDetailProvider.CreateFile(ExpandPath(outputPath));
+            return fileInfoDetailProvider.CreateFile(outputPath.GetExpandPath());
         }
 
         var folderName = string.IsNullOrWhiteSpace(root.Name) ? "project" : root.Name;
         var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), $"{folderName}_bundle.md");
-        return fileInfoDetailProvider.CreateFile(ExpandPath(defaultPath));
-    }
-
-    private static string ExpandPath(string pathForExpand)
-    {
-        var path = Environment.ExpandEnvironmentVariables(pathForExpand);
-
-        if (path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
-        {
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var rest = path.TrimStart('~').TrimStart('/', '\\');
-            path = string.IsNullOrEmpty(rest) ? home : Path.Combine(home, rest);
-        }
-
-        return Path.GetFullPath(path);
+        return fileInfoDetailProvider.CreateFile(defaultPath.GetExpandPath());
     }
 }

@@ -56,12 +56,6 @@ public static class Program
             Description = "Include files normally treated as dangerous (.env, keys, etc.)."
         };
 
-        var excludeOption = new Option<List<string>>("--exclude")
-        {
-            Description = "Exclude directories by name or mask (e.g., 'frontend', 'build_*', '*test*'). Matches all nested directories.",
-            AllowMultipleArgumentsPerToken = true
-        };
-
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -71,7 +65,6 @@ public static class Program
             ignoreOption,
             useDefaultExcludesOption,
             allowDangerousFilesOption,
-            excludeOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -83,7 +76,6 @@ public static class Program
             var extraIgnores = parseResult.GetValue(ignoreOption) ?? new List<string>();
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
-            var excludeDirectories = parseResult.GetValue(excludeOption);
 
             try
             {
@@ -101,8 +93,7 @@ public static class Program
                     !noGitignore,
                     extraIgnores,
                     useDefaultExcludes,
-                    allowDangerous,
-                    excludeDirectories);
+                    allowDangerous);
             }
             catch (Exception ex)
             {
