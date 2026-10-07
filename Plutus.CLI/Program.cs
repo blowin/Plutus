@@ -2,7 +2,12 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using MAB.DotIgnore;
+using Microsoft.Extensions.FileProviders;
+using Plutus.Domain;
+using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure;
+using Plutus.Infrastructure.IgnoreMatcher;
 using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.CLI;
@@ -15,6 +20,7 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         var projectPathsArgument = new Argument<List<string>>("project-path")
         {
@@ -83,17 +89,23 @@ public static class Program
                 using var githubRemoteRepository = new GitHubRemoteRepository();
                 using var gitlabRemoteRepository = new GitLabRemoteRepository();
                 using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
-                var app = new App(
-                    [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository],
-                    new PhysicianPlutusFileInfo());
-                return await app.RunBundleAsync(
-                    projectPath,
-                    outputPath,
-                    maxFileSize,
+                IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
+                var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
+                var details = await GetProcessDetail(physicianPlutusFileInfo, remoteRepositoryProviders, projectPath, outputPath);
+                if (details is null)
+                {
+                    return 1;
+                }
+
+                var (roots, output) = details.Value;
+                var ignoreMatcher = CreateIgnoreMatcher(
+                    roots.ConvertAll(physicianPlutusFileInfo.CreateFileProvider),
                     !noGitignore,
                     extraIgnores,
                     useDefaultExcludes,
                     allowDangerous);
+                var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher);
+                return await app.RunBundleAsync(roots, output, maxFileSize);
             }
             catch (Exception ex)
             {
@@ -142,5 +154,180 @@ public static class Program
         }
 
         return size;
+    }
+
+    private static IIgnoreMatcher CreateIgnoreMatcher(
+        List<IFileProvider> roots,
+        bool useGitIgnore,
+        List<string> extraIgnorePatterns,
+        bool useDefaultExcludes,
+        bool allowDangerousFiles)
+    {
+        var ignoreMatchBuilder = new IgnoreMatcherBuilder();
+        var ignoreLines = useGitIgnore ? roots.SelectMany(LoadIgnoreLines).ToHashSet() : [];
+        foreach (var extraIgnorePattern in extraIgnorePatterns)
+        {
+            ignoreLines.Add(extraIgnorePattern);
+        }
+        ignoreLines.RemoveWhere(string.IsNullOrWhiteSpace);
+
+        if (ignoreLines.Count > 0)
+        {
+            ignoreMatchBuilder.Add(new GitIgnoreMatcher(new IgnoreList(ignoreLines)));
+        }
+
+        if (useDefaultExcludes)
+        {
+            ignoreMatchBuilder.IgnoreJunk();
+        }
+
+        if (!allowDangerousFiles)
+        {
+            ignoreMatchBuilder.IgnoreDangerousFile();
+        }
+
+        return ignoreMatchBuilder.Build();
+    }
+
+    private static List<string> LoadIgnoreLines(IFileProvider provider)
+    {
+        var lines = new List<string>();
+        var gitIgnoreFile = provider.GetFileInfo(".gitignore");
+        if (!gitIgnoreFile.Exists)
+        {
+            return lines;
+        }
+
+        try
+        {
+            using var stream = gitIgnoreFile.CreateReadStream();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                lines.Add(line);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
+        }
+
+        return lines;
+    }
+
+    private static async Task<(List<IFileInfo> Roots, IFileInfo Output)?> GetProcessDetail(
+        IFileInfoDetailProvider provider,
+        IReadOnlyCollection<IRemoteRepository> remoteRepositories,
+        List<string>? projectPaths,
+        string? outputPath)
+    {
+        if (projectPaths == null || projectPaths.Count == 0)
+        {
+            Console.Error.WriteLine("Error: No project paths specified.");
+            return null;
+        }
+
+        var processedPaths = await GetPathForProcessAsync(remoteRepositories, projectPaths);
+        var roots = processedPaths?.Select(e => ResolveDirectory(provider, e)).ToList();
+        if (roots is null)
+        {
+            return null;
+        }
+
+        var primaryRoot = roots.First();
+        var normalizeOutputPath = NormalizeOutputPath(remoteRepositories, projectPaths, outputPath);
+        var output = ResolveOutput(provider, primaryRoot, normalizeOutputPath);
+
+        if (output.IsDirectory)
+        {
+            Console.Error.WriteLine($"Error: Output path is a directory: {output.PhysicalPath ?? output.Name}");
+            return null;
+        }
+
+        return (roots, output);
+    }
+
+    private static async Task<List<string>?> GetPathForProcessAsync(IReadOnlyCollection<IRemoteRepository> remoteRepositories, List<string> projectPaths)
+    {
+        var processedPaths = new List<string>();
+        foreach (var path in projectPaths)
+        {
+            try
+            {
+                var remotePath = await ExtractRemotePathAsync(path);
+                processedPaths.Add(remotePath ?? path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return processedPaths;
+
+        async ValueTask<string?> ExtractRemotePathAsync(string path)
+        {
+            foreach (var remoteRepositoryProvider in remoteRepositories)
+            {
+                if (!remoteRepositoryProvider.IsSupportedPath(path))
+                {
+                    continue;
+                }
+
+                Console.WriteLine($"Downloading remote repository: {path}...");
+                try
+                {
+                    return await remoteRepositoryProvider.DownloadAsync(path);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error downloading repository {path}: {ex.Message}");
+                    throw;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    private static string? NormalizeOutputPath(IReadOnlyCollection<IRemoteRepository> remoteRepositories, List<string> projectPaths, string? outputPath)
+    {
+        if (!string.IsNullOrWhiteSpace(outputPath))
+        {
+            return outputPath;
+        }
+
+        var firstProjectPath = projectPaths.First();
+        return remoteRepositories
+            .Where(r => r.IsSupportedPath(firstProjectPath))
+            .Select(r => r.NormalizeOutputPath(firstProjectPath))
+            .FirstOrDefault();
+    }
+
+    private static IFileInfo ResolveDirectory(IFileInfoDetailProvider provider, string path)
+    {
+        var full = path.GetExpandPath();
+        var dir = provider.CreateDirectory(full);
+
+        if (!dir.Exists)
+        {
+            throw new DirectoryNotFoundException($"Project directory not found: {full}");
+        }
+
+        return dir;
+    }
+
+    private static IFileInfo ResolveOutput(IFileInfoDetailProvider provider, IFileInfo root, string? outputPath)
+    {
+        if (!string.IsNullOrWhiteSpace(outputPath))
+        {
+            return provider.CreateFile(outputPath.GetExpandPath());
+        }
+
+        var folderName = string.IsNullOrWhiteSpace(root.Name) ? "project" : root.Name;
+        var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), $"{folderName}_bundle.md");
+        return provider.CreateFile(defaultPath.GetExpandPath());
     }
 }
