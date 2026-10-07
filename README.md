@@ -46,6 +46,7 @@ plutus <project-path-or-url> [options]
 * `--ignore <pattern>`: Injects user-defined custom gitignore-style exclusions via command-line arguments (can be repeated).
 * `--no-default-excludes`: Disables built-in automated junk directory tracking filters.
 * `--allow-dangerous-files`: Overrides the security matching protocols to force ingestion of secure asset blocks (`.env`, private identities).
+*  `--exclude <mask>`: **Exclude directories by name or wildcard mask (e.g., `frontend`, `build_*`, `*test*`). Matches the directory name at any nesting level.**
 
 ### Operational Examples
 

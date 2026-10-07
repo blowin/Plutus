@@ -11,14 +11,14 @@ public class App(
     IRemoteRepository[] remoteRepositoryProviders,
     IFileInfoDetailProvider fileInfoDetailProvider)
 {
-    public async Task<int> RunBundleAsync(
-        List<string>? projectPaths,
+    public async Task<int> RunBundleAsync(List<string>? projectPaths,
         string? outputPath,
         long maxFileSize,
         bool useGitIgnore,
         List<string> extraIgnorePatterns,
         bool useDefaultExcludes,
-        bool allowDangerousFiles)
+        bool allowDangerousFiles,
+        List<string>? excludeDirectories)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
@@ -52,7 +52,13 @@ public class App(
             return 1;
         }
 
-        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(roots.ConvertAll(e => e.Provider), useGitIgnore, extraIgnorePatterns, useDefaultExcludes, allowDangerousFiles);
+        IIgnoreMatcher ignoreMatcher = CreateIgnoreMatcher(
+            roots.ConvertAll(e => e.Provider),
+            useGitIgnore,
+            extraIgnorePatterns,
+            useDefaultExcludes,
+            allowDangerousFiles,
+            excludeDirectories);
         var projectScanner = new ProjectScanner(fileInfoDetailProvider, ignoreMatcher);
         var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
@@ -128,14 +134,19 @@ public class App(
         }
     }
 
-    private static IIgnoreMatcher CreateIgnoreMatcher(
-        List<IFileProvider> roots,
+    private static IIgnoreMatcher CreateIgnoreMatcher(List<IFileProvider> roots,
         bool useGitIgnore,
         List<string> extraIgnorePatterns,
         bool useDefaultExcludes,
-        bool allowDangerousFiles)
+        bool allowDangerousFiles,
+        List<string>? excludeDirectories)
     {
         var ignoreMatchBuilder = new IgnoreMatcherBuilder();
+        if (excludeDirectories is not null && excludeDirectories.Count > 0)
+        {
+            ignoreMatchBuilder.Add(new DirectoryExcludeMatcher(excludeDirectories));
+        }
+
         var ignoreLines = roots.SelectMany(root => LoadIgnoreLines(root, useGitIgnore, extraIgnorePatterns)).ToList();
         if (ignoreLines.Count > 0)
         {
