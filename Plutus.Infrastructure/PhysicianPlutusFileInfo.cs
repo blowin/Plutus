@@ -40,4 +40,6 @@ public sealed class PhysicianPlutusFileInfo : IFileInfoDetailProvider
             return false;
         }
     }
+
+    public string GetCurrentDirectory() => Directory.GetCurrentDirectory();
 }

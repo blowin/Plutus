@@ -15,7 +15,7 @@ public class ProjectContextResolverTests
     public async Task ResolveContextAsync_WithEmptyPaths_ShouldReturnNull()
     {
         // Arrange
-        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo]);
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
         var result = await resolver.ResolveContextAsync([], "out.md");
@@ -35,7 +35,7 @@ public class ProjectContextResolverTests
         _mockProvider.CreateDirectory(Arg.Any<string>()).Returns(mockDir);
         _mockProvider.CreateFile(Arg.Any<string>()).Returns(mockDir);
 
-        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo]);
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
         var result = await resolver.ResolveContextAsync(["C:\\Src"], "C:\\OutDir");
@@ -59,7 +59,7 @@ public class ProjectContextResolverTests
         _mockProvider.CreateDirectory(Arg.Any<string>()).Returns(localDir);
         _mockProvider.CreateFile(Arg.Any<string>()).Returns(defaultOutput);
 
-        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo]);
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
         var result = await resolver.ResolveContextAsync(["MyProject"], null);
@@ -89,7 +89,7 @@ public class ProjectContextResolverTests
         _mockProvider.CreateDirectory(Arg.Any<string>()).Returns(remoteDir);
         _mockProvider.CreateFile(Arg.Any<string>()).Returns(output);
 
-        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo]);
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
         var result = await resolver.ResolveContextAsync([remoteUrl], "out.md");
@@ -97,5 +97,10 @@ public class ProjectContextResolverTests
         // Assert
         result.Should().NotBeNull();
         await _mockRepo.Received(1).DownloadAsync(remoteUrl);
+    }
+
+    private sealed class IdentPathService : IPathService
+    {
+        public string GetExpandPath(string path) => path;
     }
 }

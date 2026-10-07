@@ -113,7 +113,7 @@ public static class Program
         using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
         IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
         var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
-        var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders);
+        var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
         var details = await projectContextResolver.ResolveContextAsync(projectPath, outputPath);
         if (details is null)
         {

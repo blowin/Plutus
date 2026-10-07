@@ -3,7 +3,10 @@ using Plutus.Domain;
 
 namespace Plutus.Infrastructure;
 
-public class ProjectContextResolver(IFileInfoDetailProvider provider, IReadOnlyCollection<IRemoteRepository> remoteRepositories) : IProjectContextResolver
+public class ProjectContextResolver(
+    IFileInfoDetailProvider provider,
+    IReadOnlyCollection<IRemoteRepository> remoteRepositories,
+    IPathService pathService) : IProjectContextResolver
 {
     public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath)
     {
@@ -92,7 +95,7 @@ public class ProjectContextResolver(IFileInfoDetailProvider provider, IReadOnlyC
 
     private IFileInfo ResolveDirectory(string path)
     {
-        var full = path.GetExpandPath();
+        var full = pathService.GetExpandPath(path);
         var dir = provider.CreateDirectory(full);
 
         if (!dir.Exists)
@@ -107,11 +110,11 @@ public class ProjectContextResolver(IFileInfoDetailProvider provider, IReadOnlyC
     {
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
-            return provider.CreateFile(outputPath.GetExpandPath());
+            return provider.CreateFile(pathService.GetExpandPath(outputPath));
         }
 
         var folderName = string.IsNullOrWhiteSpace(root.Name) ? "project" : root.Name;
-        var defaultPath = Path.Combine(Directory.GetCurrentDirectory(), $"{folderName}_bundle.md");
-        return provider.CreateFile(defaultPath.GetExpandPath());
+        var defaultPath = Path.Combine(provider.GetCurrentDirectory(), $"{folderName}_bundle.md");
+        return provider.CreateFile(pathService.GetExpandPath(defaultPath));
     }
 }
