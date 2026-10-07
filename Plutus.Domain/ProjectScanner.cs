@@ -5,7 +5,7 @@ namespace Plutus.Domain;
 
 public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
 {
-    public ProjectNode Scan(IFileProvider fileProvider, string rootName, string outputPhysicalPath, long maxFileSize)
+    public ProjectNode Scan(IFileProvider fileProvider, string rootName, string outputPhysicalPath, FileSize maxFileSize)
     {
         var rootNode = new ProjectNode
         {
@@ -19,7 +19,7 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
         return rootNode;
     }
 
-    private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, long maxFileSize)
+    private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, FileSize maxFileSize)
     {
         var contents = fileProvider.GetDirectoryContents(subPath);
         if (!contents.Exists)

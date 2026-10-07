@@ -1,4 +1,4 @@
-namespace Plutus.CLI;
+namespace Plutus.Infrastructure;
 
 public static class StringExt
 {

@@ -34,7 +34,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: 2048);
+        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: FileSize.FromBytes(2048));
 
         // Assert
         result.Should().NotBeNull();
@@ -66,7 +66,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: 1000);
+        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: FileSize.FromBytes(1000));
 
         // Assert
         var fileNode = result.Children.Should().ContainSingle().Subject;
@@ -90,7 +90,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: 1024);
+        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: FileSize.FromBytes(1024));
 
         // Assert
         var dirNode = result.Children.Should().ContainSingle().Subject;
@@ -118,7 +118,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: 1024);
+        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: FileSize.FromBytes(1024));
 
         // Assert
         var fileNode = result.Children.Should().ContainSingle().Subject;
@@ -142,7 +142,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: 1024);
+        var result = scanner.Scan(_mockProvider, "Root", "out.md", maxFileSize: FileSize.FromBytes(1024));
 
         // Assert
         result.Children.Should().BeEmpty();
@@ -163,7 +163,7 @@ public class ProjectScannerTests
         var scanner = new ProjectScanner(_mockDetailProvider, _mockMatcher);
 
         // Act
-        var result = scanner.Scan(_mockProvider, "Root", outputPath, maxFileSize: 1024);
+        var result = scanner.Scan(_mockProvider, "Root", outputPath, maxFileSize: FileSize.FromBytes(1024));
 
         // Assert
         result.Children.Should().BeEmpty();

@@ -3,12 +3,12 @@ using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
-public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
+public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher, IMarkdownLanguageProvider markdownLanguageProvider)
 {
     public async Task<int> RunBundleAsync(
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
-        long maxFileSize)
+        FileSize maxFileSize)
     {
         if (output.IsDirectory)
         {
@@ -32,7 +32,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IIgno
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
-        var bundleWriter = new BundleWriter(fileInfoDetailProvider);
+        var bundleWriter = new BundleWriter(fileInfoDetailProvider, markdownLanguageProvider);
 
         var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
