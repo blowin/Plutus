@@ -17,15 +17,24 @@ public sealed class CompositeCodeMinifier : ICodeMinifier
             StringComparer.OrdinalIgnoreCase);
     }
 
-    public static CompositeCodeMinifier CreateFull() =>
-        new([
+    public static CompositeCodeMinifier CreateFull()
+    {
+        var jsMinifier = new JavaScriptLanguageMinifier();
+        return new CompositeCodeMinifier([
             new CSharpLanguageMinifier(),
             new GoLanguageMinifier(),
             new JavaLanguageMinifier(),
             new PhpLanguageMinifier(),
             new RustLanguageMinifier(),
             new SqlLanguageMinifier(),
+
+            // JavaScript & TypeScript stack registration
+            jsMinifier, // Handles "javascript" identifier from MarkdownLanguageProvider
+            new AliasLanguageMinifier("typescript", jsMinifier),
+            new AliasLanguageMinifier("tsx", jsMinifier),
+            new AliasLanguageMinifier("jsx", jsMinifier)
         ]);
+    }
 
     public string Minify(string sourceCode, string language)
     {
