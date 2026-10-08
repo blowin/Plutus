@@ -45,9 +45,34 @@ public static class Program
             Description = "Do not read root .gitignore"
         };
 
-        var ignoreOption = new Option<List<string>>("--ignore")
+        var excludeOption = new Option<List<string>>("--exclude")
         {
-            Description = "Additional gitignore-style pattern (can be repeated).",
+            Description = "Global gitignore-style wildcard patterns to exclude BOTH files and directories. Can be repeated",
+            AllowMultipleArgumentsPerToken = true
+        };
+        excludeOption.Aliases.Add("-e");
+
+        var excludeFilesOption = new Option<List<string>>("--exclude-files")
+        {
+            Description = "Gitignore-style wildcard patterns targeting strictly FILES for exclusion. Useful for ignoring specific file names or extensions across the entire project graph",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var excludeDirsOption = new Option<List<string>>("--exclude-dirs")
+        {
+            Description = "Gitignore-style wildcard patterns targeting strictly DIRECTORIES for exclusion. Matches the target directory name or absolute tree path at any nesting level",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var includeFilesOption = new Option<List<string>>("--include-files")
+        {
+            Description = "Inverted gitignore-style filters. Explicitly isolates and restricts processing strictly to FILES that match these patterns. When active, all other unmatched files are omitted by default",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var includeDirsOption = new Option<List<string>>("--include-dirs")
+        {
+            Description = "Inverted gitignore-style filters. Explicitly restricts scanning paths strictly to DIRECTORIES that match these patterns. Allows you to whitelist and isolate processing to specific module trees",
             AllowMultipleArgumentsPerToken = true
         };
 
@@ -68,7 +93,11 @@ public static class Program
             outputOption,
             maxSizeOption,
             noGitignoreOption,
-            ignoreOption,
+            excludeOption,
+            excludeFilesOption,
+            excludeDirsOption,
+            includeFilesOption,
+            includeDirsOption,
             useDefaultExcludesOption,
             allowDangerousFilesOption,
         };
@@ -79,14 +108,33 @@ public static class Program
             var outputPath = parseResult.GetValue(outputOption);
             var maxSizeStr = parseResult.GetValue(maxSizeOption)!;
             var noGitignore = parseResult.GetValue(noGitignoreOption);
-            var extraIgnores = parseResult.GetValue(ignoreOption) ?? new List<string>();
+            var excludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>();
+            var excludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>();
+            var excludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>();
+            var includeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>();
+            var includeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>();
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
 
             try
             {
                 var maxFileSize = FileSize.Parse(maxSizeStr);
-                return await RunAppAsync(projectPath, outputPath, noGitignore, extraIgnores, useDefaultExcludes, allowDangerous, maxFileSize);
+                var options = new RunAppOptions
+                {
+                    ProjectPath = projectPath,
+                    OutputPath = outputPath,
+                    UseGitignore = !noGitignore,
+                    ExcludePatterns = excludePatterns,
+                    UseDefaultExcludes = useDefaultExcludes,
+                    AllowDangerous = allowDangerous,
+                    MaxFileSize = maxFileSize,
+                    ExcludeDirPatterns =excludeDirPatterns,
+                    ExcludeFilePatterns = excludeFilePatterns,
+                    IncludeDirPatterns =includeDirPatterns,
+                    IncludeFilePatterns = includeFilePatterns,
+                };
+
+                return await RunAppAsync(options);
             }
             catch (Exception ex)
             {
@@ -99,14 +147,7 @@ public static class Program
         return await Task.FromResult(await result.InvokeAsync()).ConfigureAwait(false);
     }
 
-    private static async Task<int> RunAppAsync(
-        List<string> projectPath,
-        string? outputPath,
-        bool noGitignore,
-        List<string> extraIgnores,
-        bool useDefaultExcludes,
-        bool allowDangerous,
-        FileSize maxFileSize)
+    private static async Task<int> RunAppAsync(RunAppOptions options)
     {
         using var githubRemoteRepository = new GitHubRemoteRepository();
         using var gitlabRemoteRepository = new GitLabRemoteRepository();
@@ -114,7 +155,7 @@ public static class Program
         IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
         var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
         var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
-        var details = await projectContextResolver.ResolveContextAsync(projectPath, outputPath);
+        var details = await projectContextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
         if (details is null)
         {
             return 1;
@@ -123,24 +164,58 @@ public static class Program
         var (roots, output) = details;
         var additionalIgnoreMatchers = CreateAdditionalIgnoreMatchers(
             roots.ConvertAll(physicianPlutusFileInfo.CreateFileProvider),
-            noGitignore,
-            extraIgnores).ToList();
+            options).ToList();
         var ignoreMatcherFactory = new IgnoreMatcherFactory(additionalIgnoreMatchers);
-        var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(useDefaultExcludes, allowDangerous);
+        var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
         var markdownLanguageProvider = new MarkdownLanguageProvider();
         var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider);
-        return await app.RunBundleAsync(roots, output, maxFileSize);
+        return await app.RunBundleAsync(roots, output, options.MaxFileSize);
     }
 
-    private static IEnumerable<IIgnoreMatcher> CreateAdditionalIgnoreMatchers(List<IFileProvider> roots, bool noGitignore, List<string> extraIgnorePatterns)
+    private static IEnumerable<IIgnoreMatcher> CreateAdditionalIgnoreMatchers(List<IFileProvider> roots, RunAppOptions options)
     {
-        if (!noGitignore)
+        if (options.UseGitignore)
         {
-            yield return GitIgnoreMatcher.CreateFromFolders(roots, extraIgnorePatterns);
+            yield return GitIgnoreMatcher.FromFolders(roots, options.ExcludePatterns);
         }
         else
         {
-            yield return GitIgnoreMatcher.CreateFromLines(extraIgnorePatterns);
+            yield return GitIgnoreMatcher.FromLines(options.ExcludePatterns);
         }
+
+        if (options.ExcludeFilePatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromExcludeFiles(options.ExcludeFilePatterns);
+        }
+
+        if (options.ExcludeDirPatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromExcludeDirs(options.ExcludeDirPatterns);
+        }
+
+        if (options.IncludeFilePatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromIncludeFiles(options.IncludeFilePatterns);
+        }
+
+        if (options.IncludeDirPatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromIncludeDirs(options.IncludeDirPatterns);
+        }
+    }
+
+    private record RunAppOptions
+    {
+        public required List<string> ProjectPath { get; init; }
+        public required string? OutputPath { get; init; }
+        public required bool UseGitignore { get; init; }
+        public required List<string> ExcludePatterns { get; init; }
+        public required bool UseDefaultExcludes { get; init; }
+        public required bool AllowDangerous { get; init; }
+        public required FileSize MaxFileSize { get; init; }
+        public required List<string> ExcludeDirPatterns { get; set; }
+        public required List<string> ExcludeFilePatterns { get; set; }
+        public required List<string> IncludeDirPatterns { get; set; }
+        public required List<string> IncludeFilePatterns { get; set; }
     }
 }

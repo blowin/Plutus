@@ -22,13 +22,17 @@ Optimized for **Large Language Models (LLMs)** context window injection, project
 
 ---
 
-## Security Engineering
+## Smart Filtering Engine (Git-Style)
 
-Plutus contains multi-tiered structural guardrails to prevent accidental exposure of cryptographic signatures, sensitive parameters, or infrastructure keys:
+Plutus contains a multi-tiered, highly flexible filtering system designed to either restrict or expand your target codebase context window using native Git wildcard syntax:
 
-* **Junk Exclusions (`JunkDirectoryIgnoreMatcher`)**: Automatically intercepts and cuts out transient build files, operational runtimes, package trees, and storage logs (`node_modules`, `bin`, `obj`, `.git`, `venv`, `.vs`).
-* **Leak Protection (`DangerousFileIgnoreMatcher`)**: Actively blocks localized credentials, token configuration stores, and encryption files (`.env`, `credentials.json`, `secrets.json`, `id_rsa`, `*.pem`, `*.key`).
-* **Oversized Threshold Filtering**: Restricts injection paths based on size boundaries. Files exceeding the target threshold are cleanly mapped in the directory tree structure but omitted from the body text stream.
+###  Exclusions (Black-lists)
+* **Built-in Junk Exclusions**: Automatically cuts out transient build files, operational runtimes, package trees, and storage logs (`node_modules`, `bin`, `obj`, `.git`, `venv`, `.vs`).
+* **Leak Protection**: Actively blocks localized credentials, token configuration stores, and encryption files (`.env`, `credentials.json`, `secrets.json`, `id_rsa`, `*.pem`, `*.key`).
+* **Custom Targets**: Exclude generic patterns, strict files, or strict directory trees via CLI flags.
+
+### Inverted Inclusions (White-lists)
+* **Strict Targeting**: Force the compiler to completely drop everything *unless* it matches specific files or directory module pathways. Ideal for omitting heavy client-side assets when auditing backend source patterns.
 
 ---
 
@@ -43,7 +47,10 @@ plutus <project-path-or-url> [options]
 * `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
 * `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
 * `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
-* `--ignore <pattern>`: Injects user-defined custom gitignore-style exclusions via command-line arguments (can be repeated).
+* `--exclude-files <mask|`| `List<string>` | Gitignore-style wildcard patterns targeting strictly **FILES** for exclusion. |
+* `--exclude-dirs <mask|` | `List<string>` | Gitignore-style wildcard patterns targeting strictly **DIRECTORIES** for exclusion. |
+* `--include-files <mask|`| `List<string>` | Inverted filter: explicitly isolates processing strictly to matching **FILES**. |
+* `--include-dirs <mask|` | `List<string>` | Inverted filter: explicitly restricts scanning paths strictly to matching **DIRECTORIES**. |
 * `--no-default-excludes`: Disables built-in automated junk directory tracking filters.
 * `--allow-dangerous-files`: Overrides the security matching protocols to force ingestion of secure asset blocks (`.env`, private identities).
 *  `--exclude <mask>`: **Exclude directories by name or wildcard mask (e.g., `frontend`, `build_*`, `*test*`). Matches the directory name at any nesting level.**
@@ -51,23 +58,24 @@ plutus <project-path-or-url> [options]
 ### Operational Examples
 
 **Compile local working environments with standard configurations:**
+
 ```bash
 plutus .
 ```
 
-**Ingest a public remote GitHub repository directly from the web:**
+**Isolate processing strictly to C# code sheets while ignoring Test projects:**
 ```bash
-plutus "https://github.com"
+plutus . --include-files "*.cs" --exclude-dirs "*Test*"
 ```
 
-**Ingest a nested GitLab group repository architecture:**
+**Ingest a public remote GitHub repository and bundle only the documentation folder:**
 ```bash
-plutus "https://gitlab.com"
+plutus "https://github.com" --include-dirs "docs/"
 ```
 
-**Ingest and trim specific sub-browser tracks on Bitbucket:**
+**Ingest a nested GitLab group architecture down to a 250K threshold map:**
 ```bash
-plutus "https://bitbucket.org" --max-file-size 250K
+plutus "https://gitlab.com" --max-file-size 250K
 ```
 
 ---

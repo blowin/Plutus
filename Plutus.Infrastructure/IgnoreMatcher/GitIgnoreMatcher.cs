@@ -11,17 +11,32 @@ public sealed class GitIgnoreMatcher(IgnoreList ignoreList) : IIgnoreMatcher
 
     public bool IsIgnoredDirectory(string relativePath) => ignoreList.IsIgnored(relativePath, true);
 
-    public static GitIgnoreMatcher CreateFromLines(IReadOnlyCollection<string> extraIgnorePatterns)
+    public static IIgnoreMatcher FromIncludeFiles(IReadOnlyCollection<string> extraIgnorePatterns)
+        => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new IncludeFileMatcher(e));
+
+    public static IIgnoreMatcher FromIncludeDirs(IReadOnlyCollection<string> extraIgnorePatterns)
+        => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new IncludeDirectoryMatcher(e));
+
+    public static IIgnoreMatcher FromExcludeFiles(IReadOnlyCollection<string> extraIgnorePatterns)
+        => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new ExcludeFileMatcher(e));
+
+    public static IIgnoreMatcher FromExcludeDirs(IReadOnlyCollection<string> extraIgnorePatterns)
+        => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new ExcludeDirectoryMatcher(e));
+
+    public static IIgnoreMatcher FromLines(IReadOnlyCollection<string> extraIgnorePatterns)
+        => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new GitIgnoreMatcher(e));
+
+    public static IIgnoreMatcher FromFolders(List<IFileProvider> roots, List<string> ignorePatterns, Encoding? encoding = null)
     {
-        var ignoreLines = extraIgnorePatterns.ToHashSet();
-        ignoreLines.RemoveWhere(string.IsNullOrWhiteSpace);
-        return new GitIgnoreMatcher(new IgnoreList(ignoreLines));
+        var ignoreLines = roots.SelectMany(e => LoadIgnoreLines(e, encoding)).Concat(ignorePatterns).ToList();
+        return FromLines(ignoreLines);
     }
 
-    public static GitIgnoreMatcher CreateFromFolders(List<IFileProvider> roots, List<string> extraIgnorePatterns, Encoding? encoding = null)
+    private static IIgnoreMatcher CreateIgnoreMatcherOrEmpty(IEnumerable<string> ignorePatterns, Func<IgnoreList, IIgnoreMatcher> factory)
     {
-        var ignoreLines = roots.SelectMany(e => LoadIgnoreLines(e, encoding)).Concat(extraIgnorePatterns).ToList();
-        return CreateFromLines(ignoreLines);
+        var ignoreLines = ignorePatterns.ToHashSet();
+        ignoreLines.RemoveWhere(string.IsNullOrWhiteSpace);
+        return ignoreLines.Count == 0 ? EmptyIgnoreMatcher.Instance : factory(new IgnoreList(ignoreLines));
     }
 
     private static List<string> LoadIgnoreLines(IFileProvider provider, Encoding? encoding = null)
