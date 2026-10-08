@@ -12,4 +12,5 @@ public interface IFileInfoDetailProvider
     IFileProvider CreateFileProvider(IFileInfo fileInfo);
 
     bool IsReparsePoint(IFileInfo fileInfo);
+    string GetCurrentDirectory();
 }

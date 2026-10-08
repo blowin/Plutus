@@ -3,7 +3,7 @@ using Plutus.Domain;
 
 namespace Plutus.Test;
 
-public class ByteExtTests
+public class LongExtTests
 {
     [Theory]
     [InlineData(0, "0 B")]

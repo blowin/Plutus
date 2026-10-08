@@ -1,6 +1,6 @@
 namespace Plutus.Domain;
 
-public static class ByteExt
+public static class LongExt
 {
     public static string HumanSize(this long self)
     {

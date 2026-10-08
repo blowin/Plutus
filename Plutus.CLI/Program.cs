@@ -2,7 +2,12 @@ using System.CommandLine;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using MAB.DotIgnore;
+using Microsoft.Extensions.FileProviders;
+using Plutus.Domain;
+using Plutus.Domain.IgnoreMatcher;
 using Plutus.Infrastructure;
+using Plutus.Infrastructure.IgnoreMatcher;
 using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.CLI;
@@ -15,6 +20,7 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         var projectPathsArgument = new Argument<List<string>>("project-path")
         {
@@ -39,9 +45,34 @@ public static class Program
             Description = "Do not read root .gitignore"
         };
 
-        var ignoreOption = new Option<List<string>>("--ignore")
+        var excludeOption = new Option<List<string>>("--exclude")
         {
-            Description = "Additional gitignore-style pattern (can be repeated).",
+            Description = "Global gitignore-style wildcard patterns to exclude BOTH files and directories. Can be repeated",
+            AllowMultipleArgumentsPerToken = true
+        };
+        excludeOption.Aliases.Add("-e");
+
+        var excludeFilesOption = new Option<List<string>>("--exclude-files")
+        {
+            Description = "Gitignore-style wildcard patterns targeting strictly FILES for exclusion. Useful for ignoring specific file names or extensions across the entire project graph",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var excludeDirsOption = new Option<List<string>>("--exclude-dirs")
+        {
+            Description = "Gitignore-style wildcard patterns targeting strictly DIRECTORIES for exclusion. Matches the target directory name or absolute tree path at any nesting level",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var includeFilesOption = new Option<List<string>>("--include-files")
+        {
+            Description = "Inverted gitignore-style filters. Explicitly isolates and restricts processing strictly to FILES that match these patterns. When active, all other unmatched files are omitted by default",
+            AllowMultipleArgumentsPerToken = true
+        };
+
+        var includeDirsOption = new Option<List<string>>("--include-dirs")
+        {
+            Description = "Inverted gitignore-style filters. Explicitly restricts scanning paths strictly to DIRECTORIES that match these patterns. Allows you to whitelist and isolate processing to specific module trees",
             AllowMultipleArgumentsPerToken = true
         };
 
@@ -62,9 +93,13 @@ public static class Program
             outputOption,
             maxSizeOption,
             noGitignoreOption,
-            ignoreOption,
+            excludeOption,
+            excludeFilesOption,
+            excludeDirsOption,
+            includeFilesOption,
+            includeDirsOption,
             useDefaultExcludesOption,
-            allowDangerousFilesOption
+            allowDangerousFilesOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -73,27 +108,33 @@ public static class Program
             var outputPath = parseResult.GetValue(outputOption);
             var maxSizeStr = parseResult.GetValue(maxSizeOption)!;
             var noGitignore = parseResult.GetValue(noGitignoreOption);
-            var extraIgnores = parseResult.GetValue(ignoreOption) ?? new List<string>();
+            var excludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>();
+            var excludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>();
+            var excludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>();
+            var includeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>();
+            var includeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>();
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
 
             try
             {
-                var maxFileSize = ParseSize(maxSizeStr);
-                using var githubRemoteRepository = new GitHubRemoteRepository();
-                using var gitlabRemoteRepository = new GitLabRemoteRepository();
-                using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
-                var app = new App(
-                    [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository],
-                    new PhysicianPlutusFileInfo());
-                return await app.RunBundleAsync(
-                    projectPath,
-                    outputPath,
-                    maxFileSize,
-                    !noGitignore,
-                    extraIgnores,
-                    useDefaultExcludes,
-                    allowDangerous);
+                var maxFileSize = FileSize.Parse(maxSizeStr);
+                var options = new RunAppOptions
+                {
+                    ProjectPath = projectPath,
+                    OutputPath = outputPath,
+                    UseGitignore = !noGitignore,
+                    ExcludePatterns = excludePatterns,
+                    UseDefaultExcludes = useDefaultExcludes,
+                    AllowDangerous = allowDangerous,
+                    MaxFileSize = maxFileSize,
+                    ExcludeDirPatterns = excludeDirPatterns,
+                    ExcludeFilePatterns = excludeFilePatterns,
+                    IncludeDirPatterns = includeDirPatterns,
+                    IncludeFilePatterns = includeFilePatterns,
+                };
+
+                return await RunAppAsync(options);
             }
             catch (Exception ex)
             {
@@ -106,41 +147,75 @@ public static class Program
         return await Task.FromResult(await result.InvokeAsync()).ConfigureAwait(false);
     }
 
-    private static long ParseSize(string value)
+    private static async Task<int> RunAppAsync(RunAppOptions options)
     {
-        var raw = value.Trim().ToUpperInvariant();
-        var match = Regex.Match(raw, "^([0-9]+(?:\\.[0-9]+)?)\\s*(B|KB|MB|GB|TB|K|M|G|T)?$");
-
-        if (!match.Success)
+        using var githubRemoteRepository = new GitHubRemoteRepository();
+        using var gitlabRemoteRepository = new GitLabRemoteRepository();
+        using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
+        IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
+        var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
+        var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
+        var details = await projectContextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
+        if (details is null)
         {
-            throw new ArgumentException($"Invalid size: '{value}'. Examples: 512K, 1M, 2MB, 1024.");
+            return 1;
         }
 
-        var number = double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-        var unit = match.Groups[2].Value;
+        var (roots, output) = details;
+        var additionalIgnoreMatchers = CreateAdditionalIgnoreMatchers(
+            roots.ConvertAll(physicianPlutusFileInfo.CreateFileProvider),
+            options).ToList();
+        var ignoreMatcherFactory = new IgnoreMatcherFactory(additionalIgnoreMatchers);
+        var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
+        var markdownLanguageProvider = new MarkdownLanguageProvider();
+        var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider);
+        return await app.RunBundleAsync(roots, output, options.MaxFileSize);
+    }
 
-        if (string.IsNullOrEmpty(unit))
+    private static IEnumerable<IIgnoreMatcher> CreateAdditionalIgnoreMatchers(List<IFileProvider> roots, RunAppOptions options)
+    {
+        if (options.UseGitignore)
         {
-            unit = "B";
+            yield return GitIgnoreMatcher.FromFolders(roots, options.ExcludePatterns);
+        }
+        else
+        {
+            yield return GitIgnoreMatcher.FromLines(options.ExcludePatterns);
         }
 
-        var multiplier = unit switch
+        if (options.ExcludeFilePatterns.Count > 0)
         {
-            "B" => 1L,
-            "KB" or "K" => 1024L,
-            "MB" or "M" => 1024L * 1024L,
-            "GB" or "G" => 1024L * 1024L * 1024L,
-            "TB" or "T" => 1024L * 1024L * 1024L * 1024L,
-            _ => throw new ArgumentException($"Unsupported size unit: {unit}")
-        };
-
-        var size = (long)(number * multiplier);
-
-        if (size < 0)
-        {
-            throw new ArgumentException("Size cannot be negative.");
+            yield return GitIgnoreMatcher.FromExcludeFiles(options.ExcludeFilePatterns);
         }
 
-        return size;
+        if (options.ExcludeDirPatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromExcludeDirs(options.ExcludeDirPatterns);
+        }
+
+        if (options.IncludeFilePatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromIncludeFiles(options.IncludeFilePatterns);
+        }
+
+        if (options.IncludeDirPatterns.Count > 0)
+        {
+            yield return GitIgnoreMatcher.FromIncludeDirs(options.IncludeDirPatterns);
+        }
+    }
+
+    private record RunAppOptions
+    {
+        public required List<string> ProjectPath { get; init; }
+        public required string? OutputPath { get; init; }
+        public required bool UseGitignore { get; init; }
+        public required List<string> ExcludePatterns { get; init; }
+        public required bool UseDefaultExcludes { get; init; }
+        public required bool AllowDangerous { get; init; }
+        public required FileSize MaxFileSize { get; init; }
+        public required List<string> ExcludeDirPatterns { get; set; }
+        public required List<string> ExcludeFilePatterns { get; set; }
+        public required List<string> IncludeDirPatterns { get; set; }
+        public required List<string> IncludeFilePatterns { get; set; }
     }
 }

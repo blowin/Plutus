@@ -19,11 +19,11 @@ public class BundleWriterBinaryTests
         // Симулируем бинарный поток, содержащий нулевой байт (индикатор бинарника)
         var binaryBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x00, 0x1A, 0x0A };
         var memoryStream = new MemoryStream(binaryBytes);
-        mockFile.CreateReadStream().Returns(memoryStream);
+        mockFile.CreateReadStream().Returns(e => new MemoryStream(memoryStream.ToArray()));
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new BundleWriter(mockDetail);
+        var writer = new BundleWriter(mockDetail, new MarkdownLanguageProvider());
 
         var fileInfoOutput = new TestFileInfo
         {
@@ -45,7 +45,7 @@ public class BundleWriterBinaryTests
         };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: 1024);
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: FileSize.FromBytes(1024));
 
         // Assert
         await action.Should().NotThrowAsync();
