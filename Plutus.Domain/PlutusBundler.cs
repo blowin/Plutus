@@ -1,9 +1,14 @@
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
+using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 
-public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher, IMarkdownLanguageProvider markdownLanguageProvider)
+public class PlutusBundler(
+    IFileInfoDetailProvider fileInfoDetailProvider,
+    IIgnoreMatcher ignoreMatcher,
+    IMarkdownLanguageProvider markdownLanguageProvider,
+    ICodeMinifier codeMinifier)
 {
     public async Task<int> RunBundleAsync(
         IReadOnlyCollection<IFileInfo> roots,
@@ -32,7 +37,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IIgno
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
-        var bundleWriter = new BundleWriter(fileInfoDetailProvider, markdownLanguageProvider);
+        var bundleWriter = new BundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier);
 
         var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 

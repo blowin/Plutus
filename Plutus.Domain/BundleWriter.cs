@@ -1,10 +1,11 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 
-public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkdownLanguageProvider markdownLanguageProvider)
+public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkdownLanguageProvider markdownLanguageProvider, ICodeMinifier codeMinifier)
 {
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
@@ -85,7 +86,9 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkd
             }
 
             var fence = ChooseFence(content);
+
             var language = markdownLanguageProvider.GetLanguage(entry.File.Name);
+            content = codeMinifier.Minify(content, language);
 
             writer.WriteLine($"{fence}{language}");
             await writer.WriteAsync(content).ConfigureAwait(false); ;
