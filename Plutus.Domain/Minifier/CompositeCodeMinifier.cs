@@ -3,19 +3,14 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Domain.Minifier;
 
-public sealed class CompositeCodeMinifier : ICodeMinifier
+public sealed class CompositeCodeMinifier(IEnumerable<ILanguageMinifier> minifiers) : ICodeMinifier
 {
-    private readonly FrozenDictionary<string, ILanguageMinifier> _minifiers;
-
-    public IReadOnlyCollection<ILanguageMinifier> SupportedMinifiers => _minifiers.Values;
-
-    public CompositeCodeMinifier(IEnumerable<ILanguageMinifier> minifiers)
-    {
-        _minifiers = minifiers.ToFrozenDictionary(
+    private readonly FrozenDictionary<string, ILanguageMinifier> _minifiers = minifiers.ToFrozenDictionary(
             m => m.Language,
             m => m,
             StringComparer.OrdinalIgnoreCase);
-    }
+
+    public IReadOnlyCollection<ILanguageMinifier> SupportedMinifiers => _minifiers.Values;
 
     public static CompositeCodeMinifier CreateFull()
     {
