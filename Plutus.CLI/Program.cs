@@ -182,15 +182,6 @@ public static class Program
             ? CompositeCodeMinifier.CreateFull()
             : IdentityCodeMinifier.Instance;
 
-        if (options.Minify)
-        {
-            Console.WriteLine("Code minification enabled. Supported languages:");
-            foreach (var m in minifier.SupportedMinifiers)
-            {
-                Console.WriteLine($"  - [{m.Language}]: {m.Description}");
-            }
-        }
-
         var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider, minifier);
         return await app.RunBundleAsync(roots, output, options.MaxFileSize);
     }
