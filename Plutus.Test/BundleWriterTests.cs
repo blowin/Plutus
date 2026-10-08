@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
+using Plutus.Domain.Minifier;
 
 namespace Plutus.Test;
 
@@ -38,7 +39,7 @@ public class BundleWriterTests
             .Returns(_ => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
 
         // Важно: BundleWriter сам определит язык "markdown" для расширения .md
-        var writer = new BundleWriter(mockDetail, _mockLangProvider);
+        var writer = new BundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance);
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
@@ -66,7 +67,7 @@ public class BundleWriterTests
         mockFile.CreateReadStream().Returns(e => new MemoryStream(stream.ToArray()));
         mockFile.Length.Returns(stream.Length);
 
-        var writer = new BundleWriter(_mockDetail, _mockLangProvider);
+        var writer = new BundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance);
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
@@ -85,7 +86,7 @@ public class BundleWriterTests
         mockFile.Name.Returns("big_file.txt");
         mockFile.Length.Returns(5000); // Размер 5000 байт
 
-        var writer = new BundleWriter(_mockDetail, _mockLangProvider);
+        var writer = new BundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance);
         var roots = CreateSingleFileRoot("big_file.txt", mockFile);
 
         // Act

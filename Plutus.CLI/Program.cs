@@ -6,6 +6,7 @@ using MAB.DotIgnore;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
+using Plutus.Domain.Minifier;
 using Plutus.Infrastructure;
 using Plutus.Infrastructure.IgnoreMatcher;
 using Plutus.Infrastructure.RemoteRepository;
@@ -87,6 +88,12 @@ public static class Program
             Description = "Include files normally treated as dangerous (.env, keys, etc.)."
         };
 
+        var minifyOption = new Option<bool>("--minify")
+        {
+            Description = "Minify source code (remove comments and extra whitespace) for supported languages before bundling."
+        };
+        minifyOption.Aliases.Add("-m");
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -100,6 +107,7 @@ public static class Program
             includeDirsOption,
             useDefaultExcludesOption,
             allowDangerousFilesOption,
+            minifyOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -115,6 +123,7 @@ public static class Program
             var includeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>();
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
+            var minify = parseResult.GetValue(minifyOption);
 
             try
             {
@@ -132,6 +141,7 @@ public static class Program
                     ExcludeFilePatterns = excludeFilePatterns,
                     IncludeDirPatterns = includeDirPatterns,
                     IncludeFilePatterns = includeFilePatterns,
+                    Minify = minify,
                 };
 
                 return await RunAppAsync(options);
@@ -168,7 +178,20 @@ public static class Program
         var ignoreMatcherFactory = new IgnoreMatcherFactory(additionalIgnoreMatchers);
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
         var markdownLanguageProvider = new MarkdownLanguageProvider();
-        var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider);
+        var minifier = options.Minify
+            ? CompositeCodeMinifier.CreateFull()
+            : IdentityCodeMinifier.Instance;
+
+        if (options.Minify)
+        {
+            Console.WriteLine("Code minification enabled. Supported languages:");
+            foreach (var m in minifier.SupportedMinifiers)
+            {
+                Console.WriteLine($"  - [{m.Language}]: {m.Description}");
+            }
+        }
+
+        var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider, minifier);
         return await app.RunBundleAsync(roots, output, options.MaxFileSize);
     }
 
@@ -213,9 +236,10 @@ public static class Program
         public required bool UseDefaultExcludes { get; init; }
         public required bool AllowDangerous { get; init; }
         public required FileSize MaxFileSize { get; init; }
-        public required List<string> ExcludeDirPatterns { get; set; }
-        public required List<string> ExcludeFilePatterns { get; set; }
-        public required List<string> IncludeDirPatterns { get; set; }
-        public required List<string> IncludeFilePatterns { get; set; }
+        public required List<string> ExcludeDirPatterns { get; init; }
+        public required List<string> ExcludeFilePatterns { get; init; }
+        public required List<string> IncludeDirPatterns { get; init; }
+        public required List<string> IncludeFilePatterns { get; init; }
+        public bool Minify { get; init; }
     }
 }

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
+using Plutus.Domain.Minifier;
 
 namespace Plutus.Test;
 
@@ -23,7 +24,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new BundleWriter(mockDetail, new MarkdownLanguageProvider());
+        var writer = new BundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance);
 
         var fileInfoOutput = new TestFileInfo
         {
