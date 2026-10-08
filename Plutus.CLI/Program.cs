@@ -128,9 +128,9 @@ public static class Program
                     UseDefaultExcludes = useDefaultExcludes,
                     AllowDangerous = allowDangerous,
                     MaxFileSize = maxFileSize,
-                    ExcludeDirPatterns =excludeDirPatterns,
+                    ExcludeDirPatterns = excludeDirPatterns,
                     ExcludeFilePatterns = excludeFilePatterns,
-                    IncludeDirPatterns =includeDirPatterns,
+                    IncludeDirPatterns = includeDirPatterns,
                     IncludeFilePatterns = includeFilePatterns,
                 };
 

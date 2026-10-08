@@ -28,7 +28,7 @@ public class GitIgnoreMatcherTests
         result.Should().Be(expected);
     }
 
-     #region Exclude File/Directory Matcher Tests
+    #region Exclude File/Directory Matcher Tests
 
     [Theory]
     [InlineData("*.log", "logs/app.log", true)]
