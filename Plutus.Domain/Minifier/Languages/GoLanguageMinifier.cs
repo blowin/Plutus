@@ -9,5 +9,5 @@ public sealed class GoLanguageMinifier : BaseLanguageMinifier
 
     protected override Regex CommentReplacePattern { get; } = new Regex(
         @"(`[\s\S]*?`|""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

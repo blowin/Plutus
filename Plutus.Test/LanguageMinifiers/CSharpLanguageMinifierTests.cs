@@ -133,7 +133,7 @@ public class CSharpLanguageMinifierTests
         ";
 
         // Ожидаем, что четыре переноса строки схлопнутся в один стандартный пустой разделитель строк
-        var expected = $"public class StepOne {{}}\n            public class StepTwo {{}}";
+        var expected = $"public class StepOne {{}}{Environment.NewLine}            public class StepTwo {{}}";
 
         // Act
         var result = _minifier.Minify(source);

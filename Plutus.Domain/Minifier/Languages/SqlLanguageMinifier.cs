@@ -11,5 +11,5 @@ public sealed class SqlLanguageMinifier : BaseLanguageMinifier
             ( ' (?: [^'\\] | \\. | '' )* ' )             # 1. SQL string literals (handles escaped '')
             | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / ) # Block comments
             | ( -- [^\r\n]* )                            # Single-line -- comments",
-        RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

@@ -14,5 +14,5 @@ public sealed class JavaLanguageMinifier : BaseLanguageMinifier
             | ' (?: [^'\\] | \\. )* ' )
             | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / )
             | ( // [^\r\n]* )",
-        RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

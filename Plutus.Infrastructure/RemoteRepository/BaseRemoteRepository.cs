@@ -4,22 +4,10 @@ using Plutus.Domain;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public abstract class BaseRemoteRepository : IRemoteRepository, IDisposable
+public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepository, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
-    protected readonly HttpClient HttpClient;
-
-    protected BaseRemoteRepository()
-    {
-        var handler = new HttpClientHandler
-        {
-            AllowAutoRedirect = true,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-        };
-
-        HttpClient = new HttpClient(handler);
-        HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-    }
+    protected readonly HttpClient HttpClient = client;
 
     public abstract bool IsSupportedPath(string path);
 
@@ -82,7 +70,6 @@ public abstract class BaseRemoteRepository : IRemoteRepository, IDisposable
 
     public void Dispose()
     {
-        HttpClient.Dispose();
         foreach (var dir in _tempDirectories)
         {
             try
@@ -94,6 +81,5 @@ public abstract class BaseRemoteRepository : IRemoteRepository, IDisposable
                 /* ignore */
             }
         }
-        GC.SuppressFinalize(this);
     }
 }

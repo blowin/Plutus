@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using MAB.DotIgnore;
@@ -159,10 +160,19 @@ public static class Program
 
     private static async Task<int> RunAppAsync(RunAppOptions options)
     {
-        using var githubRemoteRepository = new GitHubRemoteRepository();
-        using var gitlabRemoteRepository = new GitLabRemoteRepository();
-        using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+        };
+
+        using var client = new HttpClient(handler);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        using var githubRemoteRepository = new GitHubRemoteRepository(client);
+        using var gitlabRemoteRepository = new GitLabRemoteRepository(client);
+        using var bitbucketRemoteRepository = new BitbucketRemoteRepository(client);
         IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
+
         var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
         var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
         var details = await projectContextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
