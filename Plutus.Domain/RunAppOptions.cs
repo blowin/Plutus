@@ -18,4 +18,5 @@ public record RunAppOptions
     public bool Minify { get; init; }
     public required Encoding TargetEncoding { get; init; }
     public required int MaxConcurrency { get; init; }
+    public required string Format { get; init; }
 }

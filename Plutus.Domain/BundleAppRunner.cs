@@ -10,7 +10,7 @@ public class BundleAppRunner(
 {
     public async Task<int> RunAsync(RunAppOptions options)
     {
-        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
+        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath, options.Format);
         if (details is null)
         {
             return 1;
@@ -23,6 +23,6 @@ public class BundleAppRunner(
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
 
         var projectScanner = new ProjectScanner(detailProvider, ignoreMatcher);
-        return await bundler.RunBundleAsync(projectScanner, roots, output, options.MaxFileSize);
+        return await bundler.RunBundleAsync(projectScanner, roots, output, options);
     }
 }

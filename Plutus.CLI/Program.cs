@@ -108,6 +108,11 @@ public static class Program
                 }
             }
         };
+        var formatOption = new Option<string>("--format")
+        {
+            Description = "Target serialization configuration format architecture (md, json, xml).",
+            DefaultValueFactory = _ => "md"
+        };
 
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
@@ -125,6 +130,7 @@ public static class Program
             minifyOption,
             encodingOption,
             maxConcurrencyOption,
+            formatOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -143,6 +149,7 @@ public static class Program
             var minify = parseResult.GetValue(minifyOption);
             var encodingName = parseResult.GetValue(encodingOption)!;
             var maxConcurrency = parseResult.GetValue(maxConcurrencyOption);
+            var format = parseResult.GetValue(formatOption)!;
 
             Encoding targetEncoding;
             try
@@ -174,6 +181,7 @@ public static class Program
                     Minify = minify,
                     TargetEncoding = targetEncoding,
                     MaxConcurrency = maxConcurrency,
+                    Format = format,
                 };
 
                 return await RunAppAsync(options);
