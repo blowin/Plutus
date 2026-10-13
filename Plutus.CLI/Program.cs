@@ -176,7 +176,7 @@ public static class Program
         Console.InputEncoding = options.TargetEncoding;
 
         var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options.Minify, options.TargetEncoding);
+        sc.AddInfrastructureServices(options);
         await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

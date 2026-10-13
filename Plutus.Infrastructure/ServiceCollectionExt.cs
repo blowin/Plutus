@@ -9,7 +9,7 @@ namespace Plutus.Infrastructure;
 
 public static class ServiceCollectionExt
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, bool minify, Encoding targetEncoding)
+    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, RunAppOptions options)
     {
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
@@ -38,9 +38,13 @@ public static class ServiceCollectionExt
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
-        services.AddSingleton(targetEncoding);
+        services.AddSingleton(options.TargetEncoding);
 
-        services.AddSingleton<ICodeMinifier>(_ => minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance);
+        services.AddSingleton<ICodeMinifier>(provider =>
+        {
+            var op = provider.GetRequiredService<RunAppOptions>();
+            return op.Minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance;
+        });
 
         return services;
     }
