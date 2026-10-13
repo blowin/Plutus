@@ -55,6 +55,7 @@ plutus <project-path-or-url> [options]
 * `--allow-dangerous-files`: Overrides the security matching protocols to force ingestion of secure asset blocks (`.env`, private identities).
 *  `--exclude <mask>`: **Exclude directories by name or wildcard mask (e.g., `frontend`, `build_*`, `*test*`). Matches the directory name at any nesting level.**
 * `-m, --minify`: Minifies source code before bundling by completely removing all single-line, block, and documentation comments, stripping out region directives, and collapsing all blank or whitespace-only lines. This optimizes the layout into a tight, high-density structural format, saving 20% to 40% of the token budget when injecting code into Large Language Models (LLMs). It features safe multi-language support for C#, Java, Go, JavaScript, TypeScript, PHP, Rust, SQL, CSS/SCSS, and HTML/XML, ensuring embedded string literals, URLs, and Data-URIs remain fully preserved.
+* `--encoding <name>`: Sets the target text encoding used across the entire execution graph for reading source sheets, resolving `.gitignore` files, logging console indicators, and writing the final compiled document (e.g., `utf-8`, `windows-1251`, `koi8-r`). Defaults to `utf-8`.
 
 ### Operational Examples
 
