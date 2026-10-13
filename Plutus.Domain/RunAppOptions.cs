@@ -17,4 +17,5 @@ public record RunAppOptions
     public required List<string> IncludeFilePatterns { get; init; }
     public bool Minify { get; init; }
     public required Encoding TargetEncoding { get; init; }
+    public required int MaxConcurrency { get; init; }
 }

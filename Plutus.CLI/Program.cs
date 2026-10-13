@@ -92,6 +92,22 @@ public static class Program
             Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
             DefaultValueFactory = _ => "utf-8"
         };
+        var maxConcurrencyOption = new Option<int>("--max-concurrency")
+        {
+            Description = "Limit maximum concurrent file processing I/O tasks bound by a semaphore.",
+            DefaultValueFactory = _ => 8,
+            Validators =
+            {
+                result =>
+                {
+                    var value = result.GetValueOrDefault<int>();
+                    if (value < 1)
+                    {
+                        result.AddError($"The {result.Option.Name} option must be at least 1.");
+                    }
+                }
+            }
+        };
 
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
@@ -108,6 +124,7 @@ public static class Program
             allowDangerousFilesOption,
             minifyOption,
             encodingOption,
+            maxConcurrencyOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -125,6 +142,7 @@ public static class Program
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
             var minify = parseResult.GetValue(minifyOption);
             var encodingName = parseResult.GetValue(encodingOption)!;
+            var maxConcurrency = parseResult.GetValue(maxConcurrencyOption);
 
             Encoding targetEncoding;
             try
@@ -155,6 +173,7 @@ public static class Program
                     IncludeFilePatterns = includeFilePatterns,
                     Minify = minify,
                     TargetEncoding = targetEncoding,
+                    MaxConcurrency = maxConcurrency,
                 };
 
                 return await RunAppAsync(options);

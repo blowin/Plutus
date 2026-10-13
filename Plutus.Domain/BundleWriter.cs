@@ -11,7 +11,7 @@ public class BundleWriter(
     ICodeMinifier codeMinifier,
     Encoding encoding)
 {
-    public int MaxConcurrentFileReads { get; init; } = 8;
+    public int MaxConcurrentFileReads { get; set; } = 8;
 
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,

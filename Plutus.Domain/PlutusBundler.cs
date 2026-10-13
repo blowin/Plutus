@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
@@ -25,6 +26,9 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, Bundl
             return 1;
         }
 
+        // Start core operational stopwatch benchmarking
+        var stopwatch = Stopwatch.StartNew();
+
         var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
         {
@@ -35,9 +39,12 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, Bundl
 
         var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
+        stopwatch.Stop();
+
         Console.WriteLine($"Bundle created: {physicalPath}");
         Console.WriteLine($"Files included: {allEntries.Count}");
         Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
+        Console.WriteLine($"Elapsed time:   {stopwatch.Elapsed.TotalSeconds:F2}s ({stopwatch.ElapsedMilliseconds} ms)");
         return 0;
     }
 }
