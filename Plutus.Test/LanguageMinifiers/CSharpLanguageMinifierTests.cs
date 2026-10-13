@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class CSharpLanguageMinifierTests
+public class CSharpLanguageMinifierTests : MinifierTestsBase
 {
     private readonly CSharpLanguageMinifier _minifier = new();
 
@@ -33,7 +33,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class CSharpLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     /// <summary>

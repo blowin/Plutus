@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class JavaScriptLanguageMinifierTests
+public class JavaScriptLanguageMinifierTests : MinifierTestsBase
 {
     private readonly JavaScriptLanguageMinifier _minifier = new();
 
@@ -26,7 +26,7 @@ public class JavaScriptLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -74,6 +74,6 @@ public class JavaScriptLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }

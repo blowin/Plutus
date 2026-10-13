@@ -32,12 +32,18 @@ public static class ServiceCollectionExt
 
         services.AddScoped<BundleAppRunner>();
         services.AddScoped<PlutusBundler>();
-        services.AddScoped<BundleWriter>();
+        services.AddScoped<BundleWriter>(e =>
+        {
+            var writer = ActivatorUtilities.CreateInstance<BundleWriter>(e);
+            writer.MaxConcurrentFileReads = options.MaxConcurrency;
+            return writer;
+        });
         services.AddScoped<IProjectContextResolver, ProjectContextResolver>();
         services.AddSingleton<IFileInfoDetailProvider, PhysicianPlutusFileInfo>();
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
+        services.AddSingleton(options);
         services.AddSingleton(options.TargetEncoding);
 
         services.AddSingleton<ICodeMinifier>(provider =>

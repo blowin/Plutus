@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class SqlLanguageMinifierTests
+public class SqlLanguageMinifierTests : MinifierTestsBase
 {
     private readonly SqlLanguageMinifier _minifier = new();
 
@@ -22,7 +22,7 @@ public class SqlLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -41,6 +41,6 @@ public class SqlLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }

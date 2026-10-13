@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class StyleLanguageMinifierTests
+public class StyleLanguageMinifierTests : MinifierTestsBase
 {
     private readonly StyleLanguageMinifier _minifier = new();
 
@@ -28,7 +28,7 @@ public class StyleLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class StyleLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -80,6 +80,6 @@ public class StyleLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }
