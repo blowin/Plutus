@@ -18,7 +18,7 @@ public class ProjectContextResolverTests
         var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
-        var result = await resolver.ResolveContextAsync([], "out.md");
+        var result = await resolver.ResolveContextAsync([], "out.md", "md");
 
         // Assert
         result.Should().BeNull();
@@ -38,7 +38,7 @@ public class ProjectContextResolverTests
         var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
-        var result = await resolver.ResolveContextAsync(["C:\\Src"], "C:\\OutDir");
+        var result = await resolver.ResolveContextAsync(["C:\\Src"], "C:\\OutDir", "md");
 
         // Assert
         result.Should().BeNull();
@@ -62,7 +62,7 @@ public class ProjectContextResolverTests
         var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
-        var result = await resolver.ResolveContextAsync(["MyProject"], null);
+        var result = await resolver.ResolveContextAsync(["MyProject"], null, "md");
 
         // Assert
         result.Should().NotBeNull();
@@ -92,7 +92,7 @@ public class ProjectContextResolverTests
         var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
 
         // Act
-        var result = await resolver.ResolveContextAsync([remoteUrl], "out.md");
+        var result = await resolver.ResolveContextAsync([remoteUrl], "out.md", "md");
 
         // Assert
         result.Should().NotBeNull();

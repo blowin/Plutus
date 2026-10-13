@@ -11,7 +11,7 @@ public class MarkdownBundleWriter(
     ICodeMinifier codeMinifier,
     Encoding encoding) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding)
 {
-    public override string FormatExtension => "markdown";
+    public override string FormatExtension => "md";
 
     protected override async Task WriteContentAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,

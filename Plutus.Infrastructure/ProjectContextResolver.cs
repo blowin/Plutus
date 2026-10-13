@@ -8,7 +8,7 @@ public class ProjectContextResolver(
     IReadOnlyCollection<IRemoteRepository> remoteRepositories,
     IPathService pathService) : IProjectContextResolver
 {
-    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath)
+    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
@@ -25,7 +25,7 @@ public class ProjectContextResolver(
 
         var primaryRoot = roots.First();
         var normalizeOutputPath = NormalizeOutputPath(projectPaths, outputPath);
-        var output = ResolveOutput(primaryRoot, normalizeOutputPath);
+        var output = ResolveOutput(primaryRoot, normalizeOutputPath, format);
 
         if (output.IsDirectory)
         {
@@ -106,15 +106,19 @@ public class ProjectContextResolver(
         return dir;
     }
 
-    private IFileInfo ResolveOutput(IFileInfo root, string? outputPath)
+    private IFileInfo ResolveOutput(IFileInfo root, string? outputPath, string? format)
     {
         if (!string.IsNullOrWhiteSpace(outputPath))
         {
             return provider.CreateFile(pathService.GetExpandPath(outputPath));
         }
 
-        var folderName = string.IsNullOrWhiteSpace(root.Name) ? "project" : root.Name;
-        var defaultPath = Path.Combine(provider.GetCurrentDirectory(), $"{folderName}_bundle.md");
+        var cleanFolderName = string.IsNullOrWhiteSpace(root.Name)
+            ? "project"
+            : root.Name.TrimEnd('/', '\\');
+
+        var fileExt = format?.ToLowerInvariant() ?? "md";
+        var defaultPath = Path.Combine(provider.GetCurrentDirectory(), $"{cleanFolderName}_bundle.{fileExt}");
         return provider.CreateFile(pathService.GetExpandPath(defaultPath));
     }
 }

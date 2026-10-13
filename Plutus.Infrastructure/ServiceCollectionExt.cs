@@ -27,17 +27,26 @@ public static class ServiceCollectionExt
                 .AddClasses(classes => classes.AssignableTo<IRemoteRepository>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime();
+
+            scan.FromAssemblyOf<MarkdownBundleWriter>()
+                .AddClasses(classes => classes.AssignableTo<IBundleWriter>())
+                .AsImplementedInterfaces()
+                .WithScopedLifetime();
         });
 
         services.AddScoped<IReadOnlyCollection<IRemoteRepository>>(sp => sp.GetRequiredService<IEnumerable<IRemoteRepository>>().ToList());
 
         services.AddScoped<BundleAppRunner>();
         services.AddScoped<PlutusBundler>();
-        services.AddScoped<MarkdownBundleWriter>(e =>
+        services.AddScoped<IReadOnlyCollection<IBundleWriter>>(e =>
         {
-            var writer = ActivatorUtilities.CreateInstance<MarkdownBundleWriter>(e);
-            writer.MaxConcurrentFileReads = options.MaxConcurrency;
-            return writer;
+            var res = e.GetRequiredService<IEnumerable<IBundleWriter>>().ToList();
+            foreach (IBundleWriter bundleWriter in res)
+            {
+                bundleWriter.MaxConcurrentFileReads = options.MaxConcurrency;
+            }
+
+            return res;
         });
         services.AddScoped<IProjectContextResolver, ProjectContextResolver>();
         services.AddSingleton<IFileInfoDetailProvider, PhysicianPlutusFileInfo>();
