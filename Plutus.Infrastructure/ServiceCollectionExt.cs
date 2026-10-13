@@ -18,9 +18,14 @@ public static class ServiceCollectionExt
             DefaultRequestHeaders = { UserAgent = { System.Net.Http.Headers.ProductInfoHeaderValue.Parse("Mozilla/5.0...") } }
         });
 
-        services.AddScoped<IRemoteRepository, GitHubRemoteRepository>();
-        services.AddScoped<IRemoteRepository, GitLabRemoteRepository>();
-        services.AddScoped<IRemoteRepository, BitbucketRemoteRepository>();
+        services.Scan(scan =>
+        {
+            scan.FromAssemblyOf<GitLabRemoteRepository>()
+                .AddClasses(classes => classes.AssignableTo<IRemoteRepository>())
+                .AsImplementedInterfaces()
+                .WithScopedLifetime();
+        });
+
         services.AddScoped<IReadOnlyCollection<IRemoteRepository>>(sp => sp.GetRequiredService<IEnumerable<IRemoteRepository>>().ToList());
 
         services.AddScoped<IProjectContextResolver, ProjectContextResolver>();

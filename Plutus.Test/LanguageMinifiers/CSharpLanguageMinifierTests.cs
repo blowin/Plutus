@@ -1,4 +1,3 @@
-using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;

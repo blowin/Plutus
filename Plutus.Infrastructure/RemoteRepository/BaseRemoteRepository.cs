@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Net;
 using Plutus.Domain;
 
 namespace Plutus.Infrastructure.RemoteRepository;
