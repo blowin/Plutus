@@ -15,6 +15,7 @@ Optimized for **Large Language Models (LLMs)** context window injection, project
 
 ## Core Features
 
+* **Polymorphic Format Serialization**: Generates output variations tailored beyond standard text. It maps project assets cleanly into standard Markdown documentation (`md`), structured data schemas (`json`), or entities isolation markup hierarchies (`xml`) embedded inside strict character data bounds (`CDATA`).
 * **Multi-Platform Remote Ingestion**: Pass raw repository links from **GitHub**, **GitLab**, or **Bitbucket**. The infrastructure automatically maps branches, sanitizes URL paths, follows web redirects, handles nested source segments, and extracts the code into sandboxed execution containers.
 * **Unified Single-Pass Scanning**: Replaced redundant multi-run tree traversals with a single-pass hierarchical execution tree (`ProjectScanner`). It populates an immutable in-memory graph (`ProjectNode`) that feeds both the code compiler and the visual layout renderer simultaneously.
 * **High-Fidelity Virtualization**: Completely isolated from the `System.IO` footprint. It executes interchangeably against physical hard drives or in-memory virtual arrays, facilitating fully non-destructive isolated unit testing.
@@ -45,6 +46,7 @@ plutus <project-path-or-url> [options]
 ### Options
 
 * `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
+* `--format <type>`: Target serialization configuration format strategy (`md`, `json`, `xml`). Defaults to `md`.
 * `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
 * `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
 * `--exclude-files <mask|`| `List<string>` | Gitignore-style wildcard patterns targeting strictly **FILES** for exclusion. |
@@ -64,6 +66,11 @@ plutus <project-path-or-url> [options]
 
 ```bash
 plutus .
+```
+
+**Compile local projects into structured JSON data models for automated AI workflow agents:**
+```bash
+plutus . --format json -o context_capsule.json
 ```
 
 **Run high-speed bundling across large mono-repos with increased I/O concurrency:**
