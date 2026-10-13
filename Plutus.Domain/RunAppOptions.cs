@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Plutus.Domain;
 
 public record RunAppOptions
@@ -14,4 +16,5 @@ public record RunAppOptions
     public required List<string> IncludeDirPatterns { get; init; }
     public required List<string> IncludeFilePatterns { get; init; }
     public bool Minify { get; init; }
+    public required Encoding TargetEncoding { get; init; }
 }

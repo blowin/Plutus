@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
@@ -8,7 +9,7 @@ namespace Plutus.Infrastructure;
 
 public static class ServiceCollectionExt
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, RunAppOptions options)
+    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, bool minify, Encoding targetEncoding)
     {
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
@@ -37,9 +38,9 @@ public static class ServiceCollectionExt
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
+        services.AddSingleton(targetEncoding);
 
-        services.AddSingleton(options);
-        services.AddSingleton<ICodeMinifier>(_ => options.Minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance);
+        services.AddSingleton<ICodeMinifier>(_ => minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance);
 
         return services;
     }

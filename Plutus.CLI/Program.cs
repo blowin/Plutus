@@ -87,6 +87,12 @@ public static class Program
         };
         minifyOption.Aliases.Add("-m");
 
+        var encodingOption = new Option<string>("--encoding")
+        {
+            Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
+            DefaultValueFactory = _ => "utf-8"
+        };
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -101,6 +107,7 @@ public static class Program
             useDefaultExcludesOption,
             allowDangerousFilesOption,
             minifyOption,
+            encodingOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -117,6 +124,18 @@ public static class Program
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
             var minify = parseResult.GetValue(minifyOption);
+            var encodingName = parseResult.GetValue(encodingOption)!;
+
+            Encoding targetEncoding;
+            try
+            {
+                targetEncoding = Encoding.GetEncoding(encodingName);
+            }
+            catch (ArgumentException)
+            {
+                Console.Error.WriteLine($"Error: Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
+                return 1;
+            }
 
             try
             {
@@ -135,6 +154,7 @@ public static class Program
                     IncludeDirPatterns = includeDirPatterns,
                     IncludeFilePatterns = includeFilePatterns,
                     Minify = minify,
+                    TargetEncoding = targetEncoding,
                 };
 
                 return await RunAppAsync(options);
@@ -152,8 +172,11 @@ public static class Program
 
     private static async Task<int> RunAppAsync(RunAppOptions options)
     {
+        Console.OutputEncoding = options.TargetEncoding;
+        Console.InputEncoding = options.TargetEncoding;
+
         var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options);
+        sc.AddInfrastructureServices(options.Minify, options.TargetEncoding);
         await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,
