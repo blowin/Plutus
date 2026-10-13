@@ -99,6 +99,43 @@ public class ProjectContextResolverTests
         await _mockRepo.Received(1).DownloadAsync(remoteUrl);
     }
 
+
+    [Fact]
+    public async Task ResolveContextAsync_WithRemoteBranchAndCommit_ShouldForwardRefOptions()
+    {
+        const string remoteUrl = "https://github.com/owner/repo";
+        _mockRepo.IsSupportedPath(remoteUrl).Returns(true);
+        _mockRepo.DownloadAsync(remoteUrl, "feature/test", null)
+            .Returns(ValueTask.FromResult("/tmp/DownloadedRepo"));
+
+        var remoteDir = Substitute.For<IFileInfo>();
+        remoteDir.Exists.Returns(true);
+        remoteDir.IsDirectory.Returns(true);
+        remoteDir.Name.Returns("repo");
+        var output = Substitute.For<IFileInfo>();
+        output.IsDirectory.Returns(false);
+        _mockProvider.CreateDirectory(Arg.Any<string>()).Returns(remoteDir);
+        _mockProvider.CreateFile(Arg.Any<string>()).Returns(output);
+
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
+
+        var result = await resolver.ResolveContextAsync([remoteUrl], "out.md", "md", "feature/test", null);
+
+        result.Should().NotBeNull();
+        await _mockRepo.Received(1).DownloadAsync(remoteUrl, "feature/test", null);
+    }
+
+    [Fact]
+    public async Task ResolveContextAsync_WithBranchForLocalPath_ShouldReturnNull()
+    {
+        var resolver = new ProjectContextResolver(_mockProvider, [_mockRepo], new IdentPathService());
+
+        var result = await resolver.ResolveContextAsync(["./local-project"], "out.md", "md", "main", null);
+
+        result.Should().BeNull();
+        _mockProvider.DidNotReceive().CreateDirectory(Arg.Any<string>());
+    }
+
     private sealed class IdentPathService : IPathService
     {
         public string GetExpandPath(string path) => path;

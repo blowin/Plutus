@@ -5,8 +5,9 @@ public sealed class GitLabRemoteRepository(HttpClient client) : BaseRemoteReposi
     protected override string PlatformPrefix => "gitlab";
 
     public override bool IsSupportedPath(string path) =>
-        path.StartsWith("http://gitlab.com", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("https://gitlab.com", StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+        uri.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase);
 
     protected override string BuildZipUrl(string path, string? branch, string? commit)
     {

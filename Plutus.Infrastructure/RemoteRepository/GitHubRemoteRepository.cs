@@ -5,8 +5,9 @@ public class GitHubRemoteRepository(HttpClient client) : BaseRemoteRepository(cl
     protected override string PlatformPrefix => "github";
 
     public override bool IsSupportedPath(string path) =>
-        path.StartsWith("http://github.com", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("https://github.com", StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+        uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
 
     protected override string BuildZipUrl(string path, string? branch, string? commit)
     {

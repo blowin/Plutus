@@ -5,8 +5,9 @@ public sealed class BitbucketRemoteRepository(HttpClient client) : BaseRemoteRep
     protected override string PlatformPrefix => "bitbucket";
 
     public override bool IsSupportedPath(string path) =>
-        path.StartsWith("http://bitbucket.org", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith("https://bitbucket.org", StringComparison.OrdinalIgnoreCase);
+        Uri.TryCreate(path, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+        uri.Host.Equals("bitbucket.org", StringComparison.OrdinalIgnoreCase);
 
     protected override string BuildZipUrl(string path, string? branch, string? commit)
     {

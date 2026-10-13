@@ -77,7 +77,7 @@ public class ProjectContextResolver(
 
             if (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit))
             {
-                Console.Error.WriteLine("Error: branch and commit can only be used with remote repository URLs.");
+                throw new ArgumentException("Branch and commit can only be used with remote repository URLs.", nameof(projectPaths));
             }
 
             return null;
