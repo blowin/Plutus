@@ -5,7 +5,7 @@ namespace Plutus.Test;
 
 public class GitHubRemoteRepositoryTests
 {
-    private class TestGitHubRepository : GitHubRemoteRepository
+    private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client)
     {
         public string ExposeBuildZipUrl(string path) => BuildZipUrl(path);
     }
@@ -18,7 +18,8 @@ public class GitHubRemoteRepositoryTests
     public void IsSupportedPath_ShouldEvaluateCorrectly(string path, bool expected)
     {
         // Arrange
-        using var repo = new GitHubRemoteRepository();
+        using var client = new HttpClient();
+        using var repo = new GitHubRemoteRepository(client);
 
         // Act
         var result = repo.IsSupportedPath(path);
@@ -31,7 +32,8 @@ public class GitHubRemoteRepositoryTests
     public void BuildZipUrl_ShouldFormCorrectGitHubZipEndpoint()
     {
         // Arrange
-        using var repo = new TestGitHubRepository();
+        using var client = new HttpClient();
+        using var repo = new TestGitHubRepository(client);
         var repoUrl = "https://github.com";
 
         // Act

@@ -11,5 +11,5 @@ public sealed class HtmlLanguageMinifier : BaseLanguageMinifier
     // Matches standard HTML comment blocks safely across single or multiple lines.
     protected override Regex CommentReplacePattern { get; } = new Regex(
         @"(""[^""]*""|'[^']*')|(<!--[\s\S]*?-->)",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

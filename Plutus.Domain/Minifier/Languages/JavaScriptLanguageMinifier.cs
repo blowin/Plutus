@@ -12,5 +12,5 @@ public sealed class JavaScriptLanguageMinifier : BaseLanguageMinifier
     // Group 2/3 captures and destroys block and single-line comments.
     protected override Regex CommentReplacePattern { get; } = new Regex(
         @"(`[\s\S]*?`|""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

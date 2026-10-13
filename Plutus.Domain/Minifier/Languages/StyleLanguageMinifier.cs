@@ -13,5 +13,5 @@ public sealed class StyleLanguageMinifier : BaseLanguageMinifier
     // Group 3: Identifies and strips modern preprocessor inline comments // ...
     protected override Regex CommentReplacePattern { get; } = new Regex(
         @"(""[^""]*""|'[^']*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

@@ -1,6 +1,6 @@
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public sealed class BitbucketRemoteRepository : BaseRemoteRepository
+public sealed class BitbucketRemoteRepository(HttpClient client) : BaseRemoteRepository(client)
 {
     protected override string PlatformPrefix => "bitbucket";
 

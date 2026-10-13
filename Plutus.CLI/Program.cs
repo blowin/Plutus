@@ -1,15 +1,8 @@
 using System.CommandLine;
-using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
-using MAB.DotIgnore;
-using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
-using Plutus.Domain.IgnoreMatcher;
-using Plutus.Domain.Minifier;
 using Plutus.Infrastructure;
-using Plutus.Infrastructure.IgnoreMatcher;
-using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.CLI;
 
@@ -94,6 +87,12 @@ public static class Program
         };
         minifyOption.Aliases.Add("-m");
 
+        var encodingOption = new Option<string>("--encoding")
+        {
+            Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
+            DefaultValueFactory = _ => "utf-8"
+        };
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -108,6 +107,7 @@ public static class Program
             useDefaultExcludesOption,
             allowDangerousFilesOption,
             minifyOption,
+            encodingOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -124,6 +124,18 @@ public static class Program
             var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
             var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
             var minify = parseResult.GetValue(minifyOption);
+            var encodingName = parseResult.GetValue(encodingOption)!;
+
+            Encoding targetEncoding;
+            try
+            {
+                targetEncoding = Encoding.GetEncoding(encodingName);
+            }
+            catch (ArgumentException)
+            {
+                Console.Error.WriteLine($"Error: Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
+                return 1;
+            }
 
             try
             {
@@ -142,6 +154,7 @@ public static class Program
                     IncludeDirPatterns = includeDirPatterns,
                     IncludeFilePatterns = includeFilePatterns,
                     Minify = minify,
+                    TargetEncoding = targetEncoding,
                 };
 
                 return await RunAppAsync(options);
@@ -159,78 +172,19 @@ public static class Program
 
     private static async Task<int> RunAppAsync(RunAppOptions options)
     {
-        using var githubRemoteRepository = new GitHubRemoteRepository();
-        using var gitlabRemoteRepository = new GitLabRemoteRepository();
-        using var bitbucketRemoteRepository = new BitbucketRemoteRepository();
-        IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
-        var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
-        var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
-        var details = await projectContextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
-        if (details is null)
+        Console.OutputEncoding = options.TargetEncoding;
+        Console.InputEncoding = options.TargetEncoding;
+
+        var sc = new ServiceCollection();
+        sc.AddInfrastructureServices(options);
+        await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
-            return 1;
-        }
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+        await using var scope = serviceProvider.CreateAsyncScope();
 
-        var (roots, output) = details;
-        var additionalIgnoreMatchers = CreateAdditionalIgnoreMatchers(
-            roots.ConvertAll(physicianPlutusFileInfo.CreateFileProvider),
-            options).ToList();
-        var ignoreMatcherFactory = new IgnoreMatcherFactory(additionalIgnoreMatchers);
-        var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
-        var markdownLanguageProvider = new MarkdownLanguageProvider();
-        var minifier = options.Minify
-            ? CompositeCodeMinifier.CreateFull()
-            : IdentityCodeMinifier.Instance;
-
-        var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider, minifier);
-        return await app.RunBundleAsync(roots, output, options.MaxFileSize);
-    }
-
-    private static IEnumerable<IIgnoreMatcher> CreateAdditionalIgnoreMatchers(List<IFileProvider> roots, RunAppOptions options)
-    {
-        if (options.UseGitignore)
-        {
-            yield return GitIgnoreMatcher.FromFolders(roots, options.ExcludePatterns);
-        }
-        else
-        {
-            yield return GitIgnoreMatcher.FromLines(options.ExcludePatterns);
-        }
-
-        if (options.ExcludeFilePatterns.Count > 0)
-        {
-            yield return GitIgnoreMatcher.FromExcludeFiles(options.ExcludeFilePatterns);
-        }
-
-        if (options.ExcludeDirPatterns.Count > 0)
-        {
-            yield return GitIgnoreMatcher.FromExcludeDirs(options.ExcludeDirPatterns);
-        }
-
-        if (options.IncludeFilePatterns.Count > 0)
-        {
-            yield return GitIgnoreMatcher.FromIncludeFiles(options.IncludeFilePatterns);
-        }
-
-        if (options.IncludeDirPatterns.Count > 0)
-        {
-            yield return GitIgnoreMatcher.FromIncludeDirs(options.IncludeDirPatterns);
-        }
-    }
-
-    private record RunAppOptions
-    {
-        public required List<string> ProjectPath { get; init; }
-        public required string? OutputPath { get; init; }
-        public required bool UseGitignore { get; init; }
-        public required List<string> ExcludePatterns { get; init; }
-        public required bool UseDefaultExcludes { get; init; }
-        public required bool AllowDangerous { get; init; }
-        public required FileSize MaxFileSize { get; init; }
-        public required List<string> ExcludeDirPatterns { get; init; }
-        public required List<string> ExcludeFilePatterns { get; init; }
-        public required List<string> IncludeDirPatterns { get; init; }
-        public required List<string> IncludeFilePatterns { get; init; }
-        public bool Minify { get; init; }
+        var runner = scope.ServiceProvider.GetRequiredService<BundleAppRunner>();
+        return await runner.RunAsync(options);
     }
 }

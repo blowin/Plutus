@@ -5,7 +5,11 @@ using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 
-public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkdownLanguageProvider markdownLanguageProvider, ICodeMinifier codeMinifier)
+public class BundleWriter(
+    IFileInfoDetailProvider fileInfoDetailProvider,
+    IMarkdownLanguageProvider markdownLanguageProvider,
+    ICodeMinifier codeMinifier,
+    Encoding encoding)
 {
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
@@ -19,7 +23,7 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkd
 
         var totalSize = entries.Sum(x => x.File.Length);
 
-        await using var writer = fileInfoDetailProvider.CreateWriterForFile(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        await using var writer = fileInfoDetailProvider.CreateWriterForFile(output, encoding);
 
         writer.WriteLine("# Project Bundle");
         writer.WriteLine();
@@ -104,7 +108,7 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkd
         return entries;
     }
 
-    private static async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)
+    private async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)
     {
         try
         {
@@ -139,29 +143,7 @@ public class BundleWriter(IFileInfoDetailProvider fileInfoDetailProvider, IMarkd
                 return (string.Empty, null);
             }
 
-            // try UTF-8
-            try
-            {
-                var strictUtf8 = new UTF8Encoding(false, throwOnInvalidBytes: true);
-                return (strictUtf8.GetString(bytes), null);
-            }
-            catch
-            {
-                // Ignore use fallback
-            }
-
-            // try Windows-1251
-            try
-            {
-                var windows1251 = Encoding.GetEncoding(1251);
-                return (windows1251.GetString(bytes), null);
-            }
-            catch
-            {
-                // Ignore use fallback
-            }
-
-            return (Encoding.UTF8.GetString(bytes), null);
+            return (encoding.GetString(bytes), null);
         }
         catch (Exception ex)
         {

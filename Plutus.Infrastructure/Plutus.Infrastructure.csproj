@@ -12,7 +12,9 @@
 
     <ItemGroup>
       <PackageReference Include="MAB.DotIgnore" Version="3.0.2" />
+      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
       <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="10.0.12" />
+      <PackageReference Include="Scrutor" Version="7.0.0" />
     </ItemGroup>
 
 </Project>

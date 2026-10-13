@@ -24,7 +24,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new BundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance);
+        var writer = new BundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8);
 
         var fileInfoOutput = new TestFileInfo
         {

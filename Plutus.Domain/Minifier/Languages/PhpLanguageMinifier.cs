@@ -14,5 +14,5 @@ public sealed class PhpLanguageMinifier : BaseLanguageMinifier
             | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / ) # Block comments
             | ( // [^\r\n]* )                            # Line comments type 1
             | ( \# [^\r\n]* )                            # Line comments type 2 (#)",
-        RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }

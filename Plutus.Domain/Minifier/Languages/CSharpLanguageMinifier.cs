@@ -16,9 +16,9 @@ public sealed class CSharpLanguageMinifier : BaseLanguageMinifier
             | "" (?: [^""\\] | \\. )* ""       # 3. Regular strings
             | ' (?: [^'\\] | \\. )* '          # 4. Character literals
         )
-        | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / ) # Multi-line comments
+        | (/\*[\s\S]*?\*/) # Multi-line comments
         | ( // [^\r\n]* )                            # Single-line comments",
-        RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 
 
     private static readonly Regex RegionReplacePattern = new(@"^[ \t]*\#(?:region|endregion).*", RegexOptions.Compiled | RegexOptions.Multiline);

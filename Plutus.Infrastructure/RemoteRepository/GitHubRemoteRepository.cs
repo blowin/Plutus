@@ -1,6 +1,6 @@
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public class GitHubRemoteRepository : BaseRemoteRepository
+public class GitHubRemoteRepository(HttpClient client) : BaseRemoteRepository(client)
 {
     protected override string PlatformPrefix => "github";
 

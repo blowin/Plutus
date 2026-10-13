@@ -2,7 +2,7 @@ using System.Web;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public sealed class GitLabRemoteRepository : BaseRemoteRepository
+public sealed class GitLabRemoteRepository(HttpClient client) : BaseRemoteRepository(client)
 {
     protected override string PlatformPrefix => "gitlab";
 

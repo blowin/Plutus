@@ -13,5 +13,5 @@ public sealed class RustLanguageMinifier : BaseLanguageMinifier
             | ' (?: [^'\\] | \\. )* ' )                     # 2. Character literals / Lifetimes protection boundary
             | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / )    # Block comments
             | ( // [^\r\n]* )                               # Line and Doc comments",
-        RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
 }
