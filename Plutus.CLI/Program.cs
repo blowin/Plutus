@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using MAB.DotIgnore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
 using Plutus.Domain.IgnoreMatcher;
@@ -160,21 +161,16 @@ public static class Program
 
     private static async Task<int> RunAppAsync(RunAppOptions options)
     {
-        var handler = new HttpClientHandler
+        var sc = new ServiceCollection();
+        sc.AddInfrastructureServices(options.Minify);
+        await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
-            AllowAutoRedirect = true,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-        };
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+        await using var scope = serviceProvider.CreateAsyncScope();
 
-        using var client = new HttpClient(handler);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-        using var githubRemoteRepository = new GitHubRemoteRepository(client);
-        using var gitlabRemoteRepository = new GitLabRemoteRepository(client);
-        using var bitbucketRemoteRepository = new BitbucketRemoteRepository(client);
-        IRemoteRepository[] remoteRepositoryProviders = [githubRemoteRepository, gitlabRemoteRepository, bitbucketRemoteRepository];
-
-        var physicianPlutusFileInfo = new PhysicianPlutusFileInfo();
-        var projectContextResolver = new ProjectContextResolver(physicianPlutusFileInfo, remoteRepositoryProviders, new FileSystemPathService());
+        var projectContextResolver = scope.ServiceProvider.GetRequiredService<IProjectContextResolver>();
         var details = await projectContextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath);
         if (details is null)
         {
@@ -182,17 +178,14 @@ public static class Program
         }
 
         var (roots, output) = details;
+        var physicianPlutusFileInfo = scope.ServiceProvider.GetRequiredService<IFileInfoDetailProvider>();
         var additionalIgnoreMatchers = CreateAdditionalIgnoreMatchers(
             roots.ConvertAll(physicianPlutusFileInfo.CreateFileProvider),
             options).ToList();
         var ignoreMatcherFactory = new IgnoreMatcherFactory(additionalIgnoreMatchers);
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
-        var markdownLanguageProvider = new MarkdownLanguageProvider();
-        var minifier = options.Minify
-            ? CompositeCodeMinifier.CreateFull()
-            : IdentityCodeMinifier.Instance;
 
-        var app = new PlutusBundler(physicianPlutusFileInfo, ignoreMatcher, markdownLanguageProvider, minifier);
+        var app = ActivatorUtilities.CreateInstance<PlutusBundler>(scope.ServiceProvider, ignoreMatcher);
         return await app.RunBundleAsync(roots, output, options.MaxFileSize);
     }
 
