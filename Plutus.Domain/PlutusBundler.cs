@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.BundleWriters;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 
-public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, BundleWriter bundleWriter)
+public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, MarkdownBundleWriter markdownBundleWriter)
 {
     public async Task<int> RunBundleAsync(
         ProjectScanner projectScanner,
@@ -37,7 +38,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, Bundl
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
-        var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
+        var allEntries = await markdownBundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
         stopwatch.Stop();
 

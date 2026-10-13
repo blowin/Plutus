@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.BundleWriters;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Infrastructure.RemoteRepository;
@@ -32,9 +33,9 @@ public static class ServiceCollectionExt
 
         services.AddScoped<BundleAppRunner>();
         services.AddScoped<PlutusBundler>();
-        services.AddScoped<BundleWriter>(e =>
+        services.AddScoped<MarkdownBundleWriter>(e =>
         {
-            var writer = ActivatorUtilities.CreateInstance<BundleWriter>(e);
+            var writer = ActivatorUtilities.CreateInstance<MarkdownBundleWriter>(e);
             writer.MaxConcurrentFileReads = options.MaxConcurrency;
             return writer;
         });

@@ -3,17 +3,18 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
+using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
 
 namespace Plutus.Test;
 
-public class BundleWriterTests
+public class MarkdownBundleWriterTests
 {
     private readonly IFileInfoDetailProvider _mockDetail = Substitute.For<IFileInfoDetailProvider>();
     private readonly IMarkdownLanguageProvider _mockLangProvider = Substitute.For<IMarkdownLanguageProvider>();
     private readonly TestFileInfo _outputFile = new() { PhysicalPath = "out.md", Name = "out.md" };
 
-    public BundleWriterTests()
+    public MarkdownBundleWriterTests()
     {
         _mockDetail.CreateWriterForFile(_outputFile, Arg.Any<Encoding?>())
             .Returns(_ => new StreamWriter(_outputFile.Stream, leaveOpen: true));
@@ -39,7 +40,7 @@ public class BundleWriterTests
             .Returns(_ => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
 
         // Важно: BundleWriter сам определит язык "markdown" для расширения .md
-        var writer = new BundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
@@ -67,7 +68,7 @@ public class BundleWriterTests
         mockFile.CreateReadStream().Returns(e => new MemoryStream(stream.ToArray()));
         mockFile.Length.Returns(stream.Length);
 
-        var writer = new BundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.GetEncoding(1251));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.GetEncoding(1251));
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
@@ -86,7 +87,7 @@ public class BundleWriterTests
         mockFile.Name.Returns("big_file.txt");
         mockFile.Length.Returns(5000); // Размер 5000 байт
 
-        var writer = new BundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
         var roots = CreateSingleFileRoot("big_file.txt", mockFile);
 
         // Act
