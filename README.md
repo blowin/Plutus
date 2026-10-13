@@ -43,12 +43,29 @@ Plutus contains a multi-tiered, highly flexible filtering system designed to eit
 plutus <project-path-or-url> [options]
 ```
 
+### Targeting a remote branch, tag, or commit
+
+```bash
+# Download a non-default branch (branch names may contain slashes)
+plutus "https://github.com/owner/repo" --branch "feature/new-parser"
+
+# Download a tag
+plutus "https://gitlab.com/group/subgroup/repo" --branch "v2.1.0"
+
+# Download a specific commit
+plutus "https://bitbucket.org/workspace/repo" --commit "a1b2c3d4e5f6789012345678901234567890abcd"
+```
+
+`--branch` and `--commit` are mutually exclusive. For remote URLs containing browser navigation paths such as `/tree/<branch>` or `/-/tree/<branch>`, Plutus resolves the repository root before constructing the archive URL; use `--branch` to explicitly select the desired ref.
+
 ### Options
 
 * `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
 * `--format <type>`: Target serialization configuration format strategy (`md`, `json`, `xml`). Defaults to `md`.
 * `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
 * `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
+* `--branch <name>`: Downloads the specified remote branch or tag. Cannot be combined with `--commit`.
+* `--commit <hash>`: Downloads a specific commit by its 7–40 character hexadecimal hash. Cannot be combined with `--branch`.
 * `--exclude-files <mask|`| `List<string>` | Gitignore-style wildcard patterns targeting strictly **FILES** for exclusion. |
 * `--exclude-dirs <mask|` | `List<string>` | Gitignore-style wildcard patterns targeting strictly **DIRECTORIES** for exclusion. |
 * `--include-files <mask|`| `List<string>` | Inverted filter: explicitly isolates processing strictly to matching **FILES**. |

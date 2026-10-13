@@ -10,7 +10,7 @@ public class BundleAppRunner(
 {
     public async Task<int> RunAsync(RunAppOptions options)
     {
-        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath, options.Format);
+        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath, options.Format, options.Branch, options.Commit);
         if (details is null)
         {
             return 1;

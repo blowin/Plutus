@@ -8,7 +8,7 @@ public class ProjectContextResolver(
     IReadOnlyCollection<IRemoteRepository> remoteRepositories,
     IPathService pathService) : IProjectContextResolver
 {
-    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format)
+    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format, string? branch, string? commit)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
@@ -16,7 +16,7 @@ public class ProjectContextResolver(
             return null;
         }
 
-        var processedPaths = await GetPathForProcessAsync(projectPaths);
+        var processedPaths = await GetPathForProcessAsync(projectPaths, branch, commit);
         var roots = processedPaths?.Select(ResolveDirectory).ToList();
         if (roots is null)
         {
@@ -36,7 +36,7 @@ public class ProjectContextResolver(
         return new(roots, output);
     }
 
-    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths)
+    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, string? branch, string? commit)
     {
         var processedPaths = new List<string>();
         foreach (var path in projectPaths)
@@ -66,13 +66,18 @@ public class ProjectContextResolver(
                 Console.WriteLine($"Downloading remote repository: {path}...");
                 try
                 {
-                    return await remoteRepositoryProvider.DownloadAsync(path);
+                    return await remoteRepositoryProvider.DownloadAsync(path, branch, commit);
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error downloading repository {path}: {ex.Message}");
                     throw;
                 }
+            }
+
+            if (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit))
+            {
+                throw new ArgumentException("Branch and commit can only be used with remote repository URLs.", nameof(projectPaths));
             }
 
             return null;

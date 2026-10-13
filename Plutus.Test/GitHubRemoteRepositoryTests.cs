@@ -7,7 +7,7 @@ public class GitHubRemoteRepositoryTests
 {
     private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client)
     {
-        public string ExposeBuildZipUrl(string path) => BuildZipUrl(path);
+        public string ExposeBuildZipUrl(string path) => BuildZipUrl(path, null, null);
     }
 
     [Theory]
@@ -34,12 +34,12 @@ public class GitHubRemoteRepositoryTests
         // Arrange
         using var client = new HttpClient();
         using var repo = new TestGitHubRepository(client);
-        var repoUrl = "https://github.com";
+        var repoUrl = "https://github.com/user/project";
 
         // Act
         var zipUrl = repo.ExposeBuildZipUrl(repoUrl);
 
         // Assert
-        zipUrl.Should().Be("https://github.com/archive/refs/heads/master.zip");
+        zipUrl.Should().Be("https://github.com/user/project/archive/master.zip");
     }
 }
