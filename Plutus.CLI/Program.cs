@@ -153,8 +153,7 @@ public static class Program
     private static async Task<int> RunAppAsync(RunAppOptions options)
     {
         var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options.Minify);
-        sc.AddScoped<BundleAppRunner>();
+        sc.AddInfrastructureServices(options);
         await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

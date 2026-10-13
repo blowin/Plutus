@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Infrastructure.RemoteRepository;
 
@@ -7,7 +8,7 @@ namespace Plutus.Infrastructure;
 
 public static class ServiceCollectionExt
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, bool minify)
+    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, RunAppOptions options)
     {
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
@@ -28,12 +29,17 @@ public static class ServiceCollectionExt
 
         services.AddScoped<IReadOnlyCollection<IRemoteRepository>>(sp => sp.GetRequiredService<IEnumerable<IRemoteRepository>>().ToList());
 
+        services.AddScoped<BundleAppRunner>();
+        services.AddScoped<PlutusBundler>();
+        services.AddScoped<BundleWriter>();
         services.AddScoped<IProjectContextResolver, ProjectContextResolver>();
         services.AddSingleton<IFileInfoDetailProvider, PhysicianPlutusFileInfo>();
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
+        services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
 
-        services.AddSingleton<ICodeMinifier>(minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance);
+        services.AddSingleton(options);
+        services.AddSingleton<ICodeMinifier>(_ => options.Minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance);
 
         return services;
     }

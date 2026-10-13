@@ -4,13 +4,10 @@ using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 
-public class PlutusBundler(
-    IFileInfoDetailProvider fileInfoDetailProvider,
-    IIgnoreMatcher ignoreMatcher,
-    IMarkdownLanguageProvider markdownLanguageProvider,
-    ICodeMinifier codeMinifier)
+public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, BundleWriter bundleWriter)
 {
     public async Task<int> RunBundleAsync(
+        ProjectScanner projectScanner,
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
         FileSize maxFileSize)
@@ -28,7 +25,6 @@ public class PlutusBundler(
             return 1;
         }
 
-        var projectScanner = new ProjectScanner(fileInfoDetailProvider, ignoreMatcher);
         var bundleWriterEntries = new List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)>(roots.Count);
         foreach (var root in roots)
         {
@@ -36,8 +32,6 @@ public class PlutusBundler(
             var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, maxFileSize);
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
-
-        var bundleWriter = new BundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier);
 
         var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, maxFileSize).ConfigureAwait(false);
 
