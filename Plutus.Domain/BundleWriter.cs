@@ -11,6 +11,8 @@ public class BundleWriter(
     ICodeMinifier codeMinifier,
     Encoding encoding)
 {
+    public int MaxConcurrentFileReads { get; init; } = 8;
+
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
@@ -63,49 +65,67 @@ public class BundleWriter(
             writer.WriteLine("```");
         }
 
-        foreach (var entry in entries)
+        using var semaphore = new SemaphoreSlim(MaxConcurrentFileReads);
+
+        // ReSharper disable once AccessToDisposedClosure
+        var processingTasks = entries.Select(e => ReadTextSafeAsync(semaphore, e, maxFileSize));
+        ProcessedFileBlock[] processedBlocks = await Task.WhenAll(processingTasks).ConfigureAwait(false);
+        foreach (var block in processedBlocks)
         {
-            writer.WriteLine();
-            writer.WriteLine("---");
-            writer.WriteLine();
-            writer.WriteLine($"## FILE: `{entry.RelativePath}`");
-            writer.WriteLine();
-
-            if (entry.File.Length > maxFileSize)
-            {
-                writer.WriteLine("```text");
-                writer.WriteLine($"[skipped: file is larger than max-file-size ({entry.File.Length.HumanSize()} > {maxFileSize})]");
-                writer.WriteLine("```");
-                continue;
-            }
-
-            var (content, reason) = await ReadTextSafeAsync(entry.File).ConfigureAwait(false);
-
-            if (content is null)
-            {
-                writer.WriteLine("```text");
-                writer.WriteLine($"[skipped: {reason}]");
-                writer.WriteLine("```");
-                continue;
-            }
-
-            var fence = ChooseFence(content);
-
-            var language = markdownLanguageProvider.GetLanguage(entry.File.Name);
-            content = codeMinifier.Minify(content, language);
-
-            writer.WriteLine($"{fence}{language}");
-            await writer.WriteAsync(content).ConfigureAwait(false); ;
-
-            if (content.Length == 0 || content[^1] != '\n')
-            {
-                writer.WriteLine();
-            }
-
-            writer.WriteLine(fence);
+            await writer.WriteAsync(block.ContentBlock).ConfigureAwait(false);
         }
 
         return entries;
+    }
+
+    private async Task<ProcessedFileBlock> ReadTextSafeAsync(SemaphoreSlim semaphore, BundleEntry entry, FileSize maxFileSize)
+    {
+        await semaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var sb = new StringBuilder(1024);
+            sb.AppendLine();
+            sb.AppendLine("---");
+            sb.AppendLine();
+            sb.AppendLine($"## FILE: `{entry.RelativePath}`");
+            sb.AppendLine();
+
+            if (entry.File.Length > maxFileSize)
+            {
+                sb.AppendLine("```text");
+                sb.AppendLine($"[skipped: file is larger than max-file-size ({entry.File.Length.HumanSize()} > {maxFileSize})]");
+                sb.AppendLine("```");
+                return new ProcessedFileBlock(entry, sb.ToString());
+            }
+
+            var (content, reason) = await ReadTextSafeAsync(entry.File).ConfigureAwait(false);
+            if (content is null)
+            {
+                sb.AppendLine("```text");
+                sb.AppendLine($"[skipped: {reason}]");
+                sb.AppendLine("```");
+                return new ProcessedFileBlock(entry, sb.ToString());
+            }
+
+            var fence = ChooseFence(content);
+            var language = markdownLanguageProvider.GetLanguage(entry.File.Name);
+            content = codeMinifier.Minify(content, language);
+
+            sb.AppendLine($"{fence}{language}");
+            sb.Append(content);
+
+            if (content.Length == 0 || content[^1] != '\n')
+            {
+                sb.AppendLine();
+            }
+            sb.AppendLine(fence);
+
+            return new ProcessedFileBlock(entry, sb.ToString());
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     private async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)
@@ -162,4 +182,6 @@ public class BundleWriter(
 
         return new string('`', Math.Max(4, maxRun + 1));
     }
+
+    private record ProcessedFileBlock(BundleEntry Entry, string ContentBlock);
 }

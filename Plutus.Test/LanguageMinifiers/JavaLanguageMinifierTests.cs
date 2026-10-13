@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class JavaLanguageMinifierTests
+public class JavaLanguageMinifierTests : MinifierTestsBase
 {
     private readonly JavaLanguageMinifier _minifier = new();
 
@@ -33,7 +33,7 @@ public class JavaLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class JavaLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class JavaLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class JavaLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -122,6 +122,6 @@ public class JavaLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }

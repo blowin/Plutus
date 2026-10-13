@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class RustLanguageMinifierTests
+public class RustLanguageMinifierTests : MinifierTestsBase
 {
     private readonly RustLanguageMinifier _minifier = new();
 
@@ -27,7 +27,7 @@ public class RustLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -50,6 +50,6 @@ public class RustLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }

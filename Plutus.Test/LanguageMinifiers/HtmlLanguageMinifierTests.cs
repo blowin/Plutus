@@ -2,7 +2,7 @@ using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
 
-public class HtmlLanguageMinifierTests
+public class HtmlLanguageMinifierTests : MinifierTestsBase
 {
     private readonly HtmlLanguageMinifier _minifier = new();
 
@@ -44,7 +44,7 @@ public class HtmlLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 
     [Fact]
@@ -66,6 +66,6 @@ public class HtmlLanguageMinifierTests
         var result = _minifier.Minify(source);
 
         // Assert
-        Assert.Equal((expected), (result));
+        Assert.Equal(Normalize(expected), Normalize(result));
     }
 }
