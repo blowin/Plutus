@@ -112,10 +112,10 @@ public abstract class BaseBundleWriter(
     }
 
     protected record ProcessedFileContext(
-        BundleEntry Entry, 
-        string Language, 
-        string? Content, 
-        bool IsSkipped, 
+        BundleEntry Entry,
+        string Language,
+        string? Content,
+        bool IsSkipped,
         string? SkipReason)
     {
         public static ProcessedFileContext CreateSuccess(BundleEntry entry, string lang, string content) =>

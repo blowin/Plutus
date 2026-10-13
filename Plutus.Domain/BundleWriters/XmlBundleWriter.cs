@@ -9,7 +9,7 @@ public class XmlBundleWriter(
     IFileInfoDetailProvider fileInfoDetailProvider,
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
-    Encoding encoding) 
+    Encoding encoding)
     : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding)
 {
     public override string FormatExtension => "xml";
@@ -20,11 +20,11 @@ public class XmlBundleWriter(
         List<ProcessedFileContext> files,
         FileSize maxFileSize)
     {
-        var xmlSettings = new XmlWriterSettings 
-        { 
-            Async = true, 
-            Indent = true, 
-            Encoding = Encoding 
+        var xmlSettings = new XmlWriterSettings
+        {
+            Async = true,
+            Indent = true,
+            Encoding = Encoding
         };
 
         await using var streamWriter = FileInfoDetailProvider.CreateWriterForFile(output, Encoding);
