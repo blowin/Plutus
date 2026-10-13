@@ -1,5 +1,3 @@
-using System.Web;
-
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public sealed class GitLabRemoteRepository(HttpClient client) : BaseRemoteRepository(client)
@@ -10,19 +8,18 @@ public sealed class GitLabRemoteRepository(HttpClient client) : BaseRemoteReposi
         path.StartsWith("http://gitlab.com", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("https://gitlab.com", StringComparison.OrdinalIgnoreCase);
 
-    protected override string BuildZipUrl(string path)
+    protected override string BuildZipUrl(string path, string? branch, string? commit)
     {
-        // Example path input: https://gitlab.com
-        var cleanUrl = path.TrimEnd('/');
-        var uri = new Uri(cleanUrl);
+        var uri = ParseRepositoryUri(path);
+        var segments = GetRepositoryPathSegments(uri);
+        if (segments.Length < 2)
+        {
+            throw new ArgumentException($"Invalid GitLab project URL: {path}", nameof(path));
+        }
 
-        // Extract "edu_yndx_mag/dz-catalog-analysis-karasev-m26-555"
-        var projectPath = uri.AbsolutePath.TrimStart('/');
-
-        // GitLab API requires the project path string to be URL-encoded (e.g., slashes become %2F)
-        var encodedProjectPath = HttpUtility.UrlEncode(projectPath);
-
-        // This endpoint automatically redirects and resolves the default branch archive stream
-        return $"https://gitlab.com/api/v4/projects/{encodedProjectPath}/repository/archive.zip";
+        var projectPath = string.Join("/", segments);
+        var target = !string.IsNullOrWhiteSpace(commit) ? commit.Trim() : branch?.Trim();
+        var url = $"https://gitlab.com/api/v4/projects/{Uri.EscapeDataString(projectPath)}/repository/archive.zip";
+        return string.IsNullOrWhiteSpace(target) ? url : $"{url}?sha={Uri.EscapeDataString(target)}";
     }
 }

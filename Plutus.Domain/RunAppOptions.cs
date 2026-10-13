@@ -19,4 +19,6 @@ public record RunAppOptions
     public required Encoding TargetEncoding { get; init; }
     public required int MaxConcurrency { get; init; }
     public required string Format { get; init; }
+    public required string? Branch { get; init; }
+    public required string? Commit { get; init; }
 }

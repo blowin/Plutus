@@ -8,7 +8,7 @@ public sealed class BitbucketRemoteRepository(HttpClient client) : BaseRemoteRep
         path.StartsWith("http://bitbucket.org", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("https://bitbucket.org", StringComparison.OrdinalIgnoreCase);
 
-    protected override string BuildZipUrl(string path)
+    protected override string BuildZipUrl(string path, string? branch, string? commit)
     {
         // 1. Convert to an indexable absolute path URI
         var uri = new Uri(path.TrimEnd('/'));
@@ -18,7 +18,7 @@ public sealed class BitbucketRemoteRepository(HttpClient client) : BaseRemoteRep
 
         if (segments.Length < 2)
         {
-            throw new ArgumentException($"Invalid Bitbucket repository URL layout: {path}");
+            throw new ArgumentException($"Invalid Bitbucket repository URL: {path}", nameof(path));
         }
 
         // 3. Extract only the workspace (owner) and repository name segments
@@ -26,6 +26,9 @@ public sealed class BitbucketRemoteRepository(HttpClient client) : BaseRemoteRep
         var repoName = segments[1];
 
         // 4. Construct the clean public zip archive download endpoint
-        return $"https://bitbucket.org/{workspace}/{repoName}/get/master.zip";
+        var target = !string.IsNullOrWhiteSpace(commit)
+            ? commit.Trim()
+            : !string.IsNullOrWhiteSpace(branch) ? branch.Trim() : "master";
+        return $"https://bitbucket.org/{workspace}/{repoName}/get/{EscapeRef(target)}.zip";
     }
 }

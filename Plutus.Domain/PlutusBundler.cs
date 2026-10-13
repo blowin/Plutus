@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
-using Plutus.Domain.IgnoreMatcher;
-using Plutus.Domain.Minifier;
 
 namespace Plutus.Domain;
 

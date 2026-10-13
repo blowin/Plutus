@@ -34,6 +34,27 @@ public static class Program
             DefaultValueFactory = _ => "1M"
         };
 
+        var branchOption = new Option<string?>("--branch")
+        {
+            Description = "Remote branch or tag to download. Cannot be used together with --commit."
+        };
+
+        var commitOption = new Option<string?>("--commit")
+        {
+            Description = "Specific remote commit hash to download. Cannot be used together with --branch.",
+            Validators =
+            {
+                result =>
+                {
+                    var commit = result.GetValueOrDefault<string?>() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(commit) && !System.Text.RegularExpressions.Regex.IsMatch(commit, "^(?:[0-9a-fA-F]{7,40})$"))
+                    {
+                        result.AddError("Error: --commit must be a hexadecimal Git commit hash (7–40 characters).");
+                    }
+                }
+            }
+        };
+
         var noGitignoreOption = new Option<bool>("--no-gitignore")
         {
             Description = "Do not read root .gitignore"
@@ -120,6 +141,8 @@ public static class Program
             outputOption,
             maxSizeOption,
             noGitignoreOption,
+            branchOption,
+            commitOption,
             excludeOption,
             excludeFilesOption,
             excludeDirsOption,
@@ -139,6 +162,9 @@ public static class Program
             var outputPath = parseResult.GetValue(outputOption);
             var maxSizeStr = parseResult.GetValue(maxSizeOption)!;
             var noGitignore = parseResult.GetValue(noGitignoreOption);
+            var branch = parseResult.GetValue(branchOption);
+            var commit = parseResult.GetValue(commitOption);
+
             var excludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>();
             var excludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>();
             var excludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>();
@@ -150,6 +176,12 @@ public static class Program
             var encodingName = parseResult.GetValue(encodingOption)!;
             var maxConcurrency = parseResult.GetValue(maxConcurrencyOption);
             var format = parseResult.GetValue(formatOption)!;
+
+            if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
+            {
+                Console.Error.WriteLine("Error: --branch and --commit cannot be used together.");
+                return 1;
+            }
 
             Encoding targetEncoding;
             try
@@ -182,6 +214,8 @@ public static class Program
                     TargetEncoding = targetEncoding,
                     MaxConcurrency = maxConcurrency,
                     Format = format,
+                    Branch = branch,
+                    Commit = commit,
                 };
 
                 return await RunAppAsync(options);
