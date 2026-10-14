@@ -34,11 +34,22 @@ public abstract class BaseBundleWriter(
             .ToList();
 
         using var semaphore = new SemaphoreSlim(MaxConcurrentFileReads);
+
         // ReSharper disable once AccessToDisposedClosure
         var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e, maxFileSize));
         var processedFiles = (await Task.WhenAll(processingTasks).ConfigureAwait(false)).ToList();
 
         var tokenBudgetResult = tokenBudgetApplier.Apply(processedFiles);
+        var skippedPaths = tokenBudgetResult.Files
+            .Where(f => f.IsSkipped && f.Entry.File.Length <= maxFileSize)
+            .Select(f => f.Entry.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var root in roots)
+        {
+            ApplyTokenBudgetStatuses(root.ProjectNode, skippedPaths);
+        }
+
         await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary).ConfigureAwait(false);
         return entries;
     }
@@ -48,6 +59,24 @@ public abstract class BaseBundleWriter(
         List<ProcessedFileContext> files,
         FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary);
+
+    private void ApplyTokenBudgetStatuses(ProjectNode node, HashSet<string> skippedPaths)
+    {
+        if (!node.IsDirectory)
+        {
+            if (node.Status == NodeStatus.Included && skippedPaths.Contains(node.RelativePath))
+            {
+                node.Status = NodeStatus.TokenBudgetOmitted;
+            }
+        }
+        else
+        {
+            foreach (var child in node.Children)
+            {
+                ApplyTokenBudgetStatuses(child, skippedPaths);
+            }
+        }
+    }
 
     private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry, FileSize maxFileSize)
     {

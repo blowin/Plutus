@@ -72,27 +72,17 @@ public class MarkdownBundleWriter(
 
         foreach (var entry in files)
         {
+            if (entry.Entry.File.Length > maxFileSize || entry.IsSkipped)
+            {
+                continue;
+            }
+
+
             writer.WriteLine();
             writer.WriteLine("---");
             writer.WriteLine();
             writer.WriteLine($"## FILE: `{entry.Entry.RelativePath}`");
             writer.WriteLine();
-
-            if (entry.Entry.File.Length > maxFileSize)
-            {
-                writer.WriteLine("```text");
-                writer.WriteLine($"[skipped: file is larger than max-file-size ({entry.Entry.File.Length.HumanSize()} > {maxFileSize})]");
-                writer.WriteLine("```");
-                continue;
-            }
-
-            if (entry.IsSkipped)
-            {
-                writer.WriteLine("```text");
-                writer.WriteLine($"[skipped: {entry.SkipReason}]");
-                writer.WriteLine("```");
-                continue;
-            }
 
             var content = entry.Content ?? string.Empty;
             var fence = ChooseFence(content);

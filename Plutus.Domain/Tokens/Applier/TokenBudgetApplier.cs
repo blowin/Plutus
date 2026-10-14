@@ -57,9 +57,9 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
                 }
             }
 
-            selected = files.Select(file => !file.IsSkipped && !selectedEntries.Contains(file.Entry)
-                ? file with { Content = null, IsSkipped = true, SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy.ToCliValue()})" }
-                : file).ToList();
+            selected = files.ConvertAll(file => !file.IsSkipped && !selectedEntries.Contains(file.Entry)
+                ? file with { Content = null, IsSkipped = true, SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy.ToCliValue()})", }
+                : file);
         }
 
         PrintTokenReport(files, candidateTokens, selectedTokens);

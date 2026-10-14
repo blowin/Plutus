@@ -90,7 +90,8 @@ public enum NodeStatus
     Included,
     IgnoredDirectory,
     IgnoredFile,
-    OversizedFile
+    OversizedFile,
+    TokenBudgetOmitted
 }
 
 public class ProjectNode
@@ -98,7 +99,7 @@ public class ProjectNode
     public required string Name { get; init; }
     public required string RelativePath { get; init; }
     public required bool IsDirectory { get; init; }
-    public required NodeStatus Status { get; init; }
+    public required NodeStatus Status { get; set; }
     public IFileInfo? FileInfo { get; init; } // NULL for directory
     public List<ProjectNode> Children { get; } = [];
 

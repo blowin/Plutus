@@ -40,7 +40,7 @@ public class BundleWriterBinaryTests
             (new NullFileProvider(), string.Empty, string.Empty, new ProjectNode
             {
                 Name = "image.png",
-                RelativePath = "",
+                RelativePath = "image.png",
                 IsDirectory = false,
                 Status = NodeStatus.Included,
                 FileInfo = mockFile
@@ -56,7 +56,8 @@ public class BundleWriterBinaryTests
         await using var stream = fileInfoOutput.CreateReadStream();
         using var reader = new StreamReader(stream);
         var resultText = await reader.ReadToEndAsync();
-        resultText.Should().Contain("[skipped: binary file]");
+        resultText.Should().Contain("image.png [20 B; n/a (skipped before reading)] [SKIPPED]");
+        resultText.Should().NotContain("## FILE: `image.png`");
     }
 
     private sealed class TestFileInfo : IFileInfo

@@ -55,7 +55,8 @@ public class TokenBudgetTests
         var text = Encoding.UTF8.GetString(output.Stream.ToArray());
         text.Should().Contain("Token estimate method:").And.Contain("a.txt").And.Contain("b.txt");
         text.Should().Contain("AAAA");
-        text.Should().Contain("omitted by token budget");
+        text.Should().Contain("b.txt [4 B; ~1 tokens] [SKIPPED]");
+        text.Should().Contain("b.txt [OMITTED BY BUDGET]");
         text.Should().NotContain("BBBB");
     }
 

@@ -97,7 +97,9 @@ public class MarkdownBundleWriterTests
 
         // Assert
         var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());
-        resultText.Should().Contain("[skipped: file is larger than max-file-size");
+        resultText.Should().Contain("big_file.txt [4.9 KB; n/a (skipped before reading)] [SKIPPED]");
+        resultText.Should().Contain("└── big_file.txt [LARGE 4.9 KB]");
+        resultText.Should().NotContain("## FILE: `big_file.txt`");
         mockFile.DidNotReceive().CreateReadStream(); // Контент вообще не должен считываться
     }
 

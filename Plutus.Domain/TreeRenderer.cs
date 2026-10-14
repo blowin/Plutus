@@ -23,12 +23,13 @@ public class TreeRenderer
                 NodeStatus.IgnoredDirectory => " [IGNORED DIR]/",
                 NodeStatus.IgnoredFile => " [IGNORED FILE]",
                 NodeStatus.OversizedFile => $" [LARGE {child.FileInfo!.Length.HumanSize()}]",
+                NodeStatus.TokenBudgetOmitted => " [OMITTED BY BUDGET]",
                 _ => child.IsDirectory ? "/" : $" [{child.FileInfo!.Length.HumanSize()}]"
             };
 
             lines.Add($"{prefix}{branch}{child.Name}{marker}");
 
-            if (child.IsDirectory && child.Status == NodeStatus.Included)
+            if (child is { IsDirectory: true, Status: NodeStatus.Included })
             {
                 WalkNodes(child, nextPrefix, lines);
             }
