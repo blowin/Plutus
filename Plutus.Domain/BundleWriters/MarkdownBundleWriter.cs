@@ -16,7 +16,7 @@ public class MarkdownBundleWriter(
     protected override async Task WriteContentAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        List<ProcessedFileContext> files,
+        IReadOnlyCollection<ProcessedFileContext> files,
         FileSize maxFileSize)
     {
         var totalSize = files.Sum(x => x.Entry.File.Length);
@@ -35,6 +35,11 @@ public class MarkdownBundleWriter(
         writer.WriteLine($"- Files included: `{files.Count}`");
         writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
         writer.WriteLine($"- Max file size: `{maxFileSize}`");
+        if (TokenBudgetSummary is { } tokenSummary)
+        {
+            writer.WriteLine($"- Token estimate method: `{tokenSummary.EstimatorMethod}`");
+            writer.WriteLine($"- Estimated source tokens: `{tokenSummary.CandidateTokens}`; selected: `{tokenSummary.SelectedTokens}`; budget: `{tokenSummary.MaxTokens}`; policy: `{tokenSummary.OverflowPolicy}`; strategy: `{tokenSummary.SelectionStrategy}`");
+        }
         writer.WriteLine();
 
         writer.WriteLine("## File List");
@@ -42,7 +47,8 @@ public class MarkdownBundleWriter(
         writer.WriteLine("```text");
         foreach (var entry in files)
         {
-            writer.WriteLine($"{entry.Entry.RelativePath} [{entry.Entry.File.Length.HumanSize()}]");
+            var tokenSuffix = entry.EstimatedTokens.HasValue ? $"; ~{entry.EstimatedTokens.Value} tokens" : string.Empty;
+            writer.WriteLine($"{entry.Entry.RelativePath} [{entry.Entry.File.Length.HumanSize()}{tokenSuffix}]");
         }
         writer.WriteLine("```");
 

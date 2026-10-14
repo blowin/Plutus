@@ -17,7 +17,7 @@ public class JsonBundleWriter(
     protected override async Task WriteContentAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        List<ProcessedFileContext> files,
+        IReadOnlyCollection<ProcessedFileContext> files,
         FileSize maxFileSize)
     {
         var jsonModel = new JsonBundleModel
@@ -26,7 +26,13 @@ public class JsonBundleWriter(
             {
                 TotalFiles = files.Count,
                 TotalSizeInBytes = files.Sum(x => x.Entry.File.Length),
-                MaxFileSizeLimit = maxFileSize
+                MaxFileSizeLimit = maxFileSize,
+                TokenEstimateMethod = TokenBudgetSummary?.EstimatorMethod,
+                EstimatedSourceTokens = TokenBudgetSummary?.CandidateTokens,
+                SelectedSourceTokens = TokenBudgetSummary?.SelectedTokens,
+                MaxTokens = TokenBudgetSummary?.MaxTokens,
+                TokenOverflowPolicy = TokenBudgetSummary?.OverflowPolicy,
+                TokenSelectionStrategy = TokenBudgetSummary?.SelectionStrategy
             },
             Roots = roots.Select(r => MapDirectoryTree(r.ProjectNode)).ToList(),
             Files = files.Select(f => new JsonFileModel
@@ -36,7 +42,8 @@ public class JsonBundleWriter(
                 Language = f.Language,
                 IsSkipped = f.IsSkipped,
                 SkipReason = f.SkipReason,
-                Content = f.Content
+                Content = f.Content,
+                EstimatedTokens = f.EstimatedTokens
             }).ToList()
         };
 
@@ -81,6 +88,12 @@ public class JsonBundleWriter(
         public int TotalFiles { get; set; }
         public long TotalSizeInBytes { get; set; }
         public long MaxFileSizeLimit { get; set; }
+        public string? TokenEstimateMethod { get; set; }
+        public int? EstimatedSourceTokens { get; set; }
+        public int? SelectedSourceTokens { get; set; }
+        public int? MaxTokens { get; set; }
+        public string? TokenOverflowPolicy { get; set; }
+        public string? TokenSelectionStrategy { get; set; }
     }
 
     private class JsonFolderNode
@@ -100,5 +113,6 @@ public class JsonBundleWriter(
         public bool IsSkipped { get; set; }
         public string? SkipReason { get; set; }
         public string? Content { get; set; }
+        public int? EstimatedTokens { get; set; }
     }
 }

@@ -44,7 +44,7 @@ public class MarkdownBundleWriterTests
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
-        await writer.WriteAsync(roots, fileInfoOutput, FileSize.FromBytes(1024));
+        await writer.WriteAsync(roots, fileInfoOutput, RunAppOptionsFactory.Create(FileSize.FromBytes(1024)));
 
         // Assert
         var resultText = Encoding.UTF8.GetString(fileInfoOutput.Stream.ToArray());
@@ -72,7 +72,7 @@ public class MarkdownBundleWriterTests
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
-        await writer.WriteAsync(roots, _outputFile, FileSize.FromBytes(1024));
+        await writer.WriteAsync(roots, _outputFile, RunAppOptionsFactory.Create(FileSize.FromBytes(1024)));
 
         // Assert
         var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());
@@ -92,7 +92,7 @@ public class MarkdownBundleWriterTests
 
         // Act
         // Ограничение всего 1000 байт
-        await writer.WriteAsync(roots, _outputFile, FileSize.FromBytes(1000));
+        await writer.WriteAsync(roots, _outputFile, RunAppOptionsFactory.Create(FileSize.FromBytes(1000)));
 
         // Assert
         var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());

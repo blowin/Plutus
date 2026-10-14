@@ -129,6 +129,41 @@ public static class Program
                 }
             }
         };
+        var maxTokensOption = new Option<int?>("--max-tokens")
+        {
+            Description = "Target source-token budget using an offline heuristic."
+        };
+        maxTokensOption.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<int?>();
+            if (value is <= 0)
+                result.AddError("--max-tokens must be greater than zero.");
+        });
+
+        var tokenOverflowPolicyOption = new Option<string>("--token-overflow-policy")
+        {
+            Description = "Budget overflow behavior: fail, warn, or select.",
+            DefaultValueFactory = _ => "fail"
+        };
+        tokenOverflowPolicyOption.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>() ?? "fail";
+            if (!new[] { "fail", "warn", "select" }.Contains(value, StringComparer.OrdinalIgnoreCase))
+                result.AddError("--token-overflow-policy must be one of: fail, warn, select.");
+        });
+
+        var tokenSelectionStrategyOption = new Option<string>("--token-selection-strategy")
+        {
+            Description = "Deterministic file selection strategy for policy 'select': path-order or largest-first.",
+            DefaultValueFactory = _ => "path-order"
+        };
+        tokenSelectionStrategyOption.Validators.Add(result =>
+        {
+            var value = result.GetValueOrDefault<string>() ?? "path-order";
+            if (!new[] { "path-order", "largest-first" }.Contains(value, StringComparer.OrdinalIgnoreCase))
+                result.AddError("--token-selection-strategy must be one of: path-order, largest-first.");
+        });
+
         var formatOption = new Option<string>("--format")
         {
             Description = "Target serialization configuration format architecture (md, json, xml).",
@@ -154,6 +189,9 @@ public static class Program
             encodingOption,
             maxConcurrencyOption,
             formatOption,
+            maxTokensOption,
+            tokenOverflowPolicyOption,
+            tokenSelectionStrategyOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -176,6 +214,9 @@ public static class Program
             var encodingName = parseResult.GetValue(encodingOption)!;
             var maxConcurrency = parseResult.GetValue(maxConcurrencyOption);
             var format = parseResult.GetValue(formatOption)!;
+            var maxTokens = parseResult.GetValue(maxTokensOption);
+            var tokenOverflowPolicy = parseResult.GetValue(tokenOverflowPolicyOption)!;
+            var tokenSelectionStrategy = parseResult.GetValue(tokenSelectionStrategyOption)!;
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
@@ -216,6 +257,9 @@ public static class Program
                     Format = format,
                     Branch = branch,
                     Commit = commit,
+                    MaxTokens = maxTokens,
+                    TokenOverflowPolicy = tokenOverflowPolicy,
+                    TokenSelectionStrategy = tokenSelectionStrategy,
                 };
 
                 return await RunAppAsync(options);

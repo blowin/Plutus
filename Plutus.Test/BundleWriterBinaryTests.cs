@@ -47,7 +47,7 @@ public class BundleWriterBinaryTests
         };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: FileSize.FromBytes(1024));
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, RunAppOptionsFactory.Create(FileSize.FromBytes(1024)));
 
         // Assert
         await action.Should().NotThrowAsync();

@@ -17,7 +17,7 @@ public class XmlBundleWriter(
     protected override async Task WriteContentAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        List<ProcessedFileContext> files,
+        IReadOnlyCollection<ProcessedFileContext> files,
         FileSize maxFileSize)
     {
         var xmlSettings = new XmlWriterSettings
@@ -38,6 +38,15 @@ public class XmlBundleWriter(
         await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, files.Count.ToString());
         await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, files.Sum(x => x.Entry.File.Length).ToString());
         await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, maxFileSize.ToString());
+        if (TokenBudgetSummary is { } tokenSummary)
+        {
+            await xmlWriter.WriteElementStringAsync(null, "TokenEstimateMethod", null, tokenSummary.EstimatorMethod);
+            await xmlWriter.WriteElementStringAsync(null, "EstimatedSourceTokens", null, tokenSummary.CandidateTokens.ToString());
+            await xmlWriter.WriteElementStringAsync(null, "SelectedSourceTokens", null, tokenSummary.SelectedTokens.ToString());
+            await xmlWriter.WriteElementStringAsync(null, "MaxTokens", null, tokenSummary.MaxTokens.ToString());
+            await xmlWriter.WriteElementStringAsync(null, "TokenOverflowPolicy", null, tokenSummary.OverflowPolicy);
+            await xmlWriter.WriteElementStringAsync(null, "TokenSelectionStrategy", null, tokenSummary.SelectionStrategy);
+        }
         await xmlWriter.WriteEndElementAsync();
 
         // Directory Mapping Structure
@@ -56,6 +65,8 @@ public class XmlBundleWriter(
             await xmlWriter.WriteAttributeStringAsync(null, "path", null, file.Entry.RelativePath);
             await xmlWriter.WriteAttributeStringAsync(null, "size", null, file.Entry.File.Length.ToString());
             await xmlWriter.WriteAttributeStringAsync(null, "language", null, file.Language);
+            if (file.EstimatedTokens.HasValue)
+                await xmlWriter.WriteAttributeStringAsync(null, "estimatedTokens", null, file.EstimatedTokens.Value.ToString());
 
             if (file.IsSkipped)
             {

@@ -13,3 +13,5 @@ riderModule.iml
 changes.txt
 changes.diff
 detail.md
+
+*.patch

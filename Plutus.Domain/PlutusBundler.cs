@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
 
@@ -44,7 +45,17 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
-        var allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize).ConfigureAwait(false);
+        List<BundleEntry> allEntries;
+        try
+        {
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options).ConfigureAwait(false);
+        }
+        catch (TokenBudgetExceededException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
+
 
         stopwatch.Stop();
 

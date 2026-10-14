@@ -21,4 +21,7 @@ public record RunAppOptions
     public required string Format { get; init; }
     public required string? Branch { get; init; }
     public required string? Commit { get; init; }
+    public int? MaxTokens { get; init; }
+    public string TokenOverflowPolicy { get; init; } = "fail";
+    public string TokenSelectionStrategy { get; init; } = "path-order";
 }
