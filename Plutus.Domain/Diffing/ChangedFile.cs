@@ -12,6 +12,7 @@ public enum ChangeKind
 
 /// <summary>
 /// A single path reported by a git diff, expressed with forward slashes and relative to a bundle root.
-/// Deleted files are reported with the revision being compared against, so every path still exists on disk.
+/// A deleted file is reported under the revision being compared against, so its path still exists there
+/// even though the working tree no longer has it.
 /// </summary>
 public sealed record ChangedFile(string Path, ChangeKind Kind);

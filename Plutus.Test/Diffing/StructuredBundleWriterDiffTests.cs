@@ -9,35 +9,21 @@ using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens.Applier;
-using Plutus.Infrastructure;
 
 namespace Plutus.Test.Diffing;
 
-/// <summary>
-/// Covers the structured diff section, which writes to a real file because the JSON and XML writers accept
-/// any <see cref="IFileInfo"/>. Each test removes the file it created.
-/// </summary>
-public class StructuredBundleWriterDiffTests : IDisposable
+public class StructuredBundleWriterDiffTests
 {
     private const string RawDiff = "diff --git a/src/Core.cs b/src/Core.cs\n@@ -1 +1 @@\n-old\n+new";
 
-    private static readonly string OutputPath = Path.Combine(Path.GetTempPath(), $"plutus-diff-{Guid.NewGuid():N}.out");
-
-    private readonly IFileInfoDetailProvider _detail = new PhysicianPlutusFileInfo();
-    private readonly IMarkdownLanguageProvider _languageProvider = new MarkdownLanguageProvider();
-    private readonly IFileInfo _output;
+    private readonly IFileInfoDetailProvider _detail = Substitute.For<IFileInfoDetailProvider>();
+    private readonly IMarkdownLanguageProvider _languageProvider = Substitute.For<IMarkdownLanguageProvider>();
+    private readonly TestFileInfo _output = new() { PhysicalPath = "out.bundle", Name = "out.bundle" };
 
     public StructuredBundleWriterDiffTests()
     {
-        _output = _detail.CreateFile(OutputPath);
-    }
-
-    public void Dispose()
-    {
-        if (File.Exists(OutputPath))
-        {
-            File.Delete(OutputPath);
-        }
+        _detail.CreateWriterForFile(_output, Arg.Any<Encoding?>())
+            .Returns(_ => new StreamWriter(_output.Stream, leaveOpen: true));
     }
 
     [Fact]
@@ -47,8 +33,7 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
 
-        using var document = JsonDocument.Parse(File.ReadAllText(OutputPath));
-        var root = document.RootElement;
+        var root = ParseJson().RootElement;
 
         root.GetProperty("Metadata").GetProperty("DiffScoped").GetBoolean().Should().BeTrue();
         root.GetProperty("Metadata").GetProperty("DiffComparisonBase").GetString().Should().Be("basesha");
@@ -74,8 +59,7 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), context);
 
-        using var document = JsonDocument.Parse(File.ReadAllText(OutputPath));
-        var diff = document.RootElement.GetProperty("Diff");
+        var diff = ParseJson().RootElement.GetProperty("Diff");
 
         diff.GetProperty("UntrackedFiles").EnumerateArray().Select(item => item.GetString()).Should().Equal("src/New.cs");
         diff.GetProperty("UntrackedDiff").GetString().Should().Contain("new file mode 100644");
@@ -89,11 +73,25 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096));
 
-        using var document = JsonDocument.Parse(File.ReadAllText(OutputPath));
-        var root = document.RootElement;
+        var root = ParseJson().RootElement;
 
         root.GetProperty("Metadata").GetProperty("DiffScoped").GetBoolean().Should().BeFalse();
         root.TryGetProperty("Diff", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task JsonWriter_WithFileContentsDisabled_ShouldOmitContentButKeepTheDiff()
+    {
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier())
+        {
+            IncludeFileContents = false
+        };
+
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
+
+        var root = ParseJson().RootElement;
+        root.GetProperty("Files").EnumerateArray().Single().TryGetProperty("Content", out _).Should().BeFalse();
+        root.GetProperty("Diff").GetProperty("RawDiff").GetString().Should().Be(RawDiff);
     }
 
     [Fact]
@@ -103,7 +101,7 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
 
-        var document = XDocument.Load(OutputPath);
+        var document = ParseXml();
         var metadata = document.Root!.Element("Metadata")!;
 
         metadata.Element("DiffScoped")!.Value.Should().Be("true");
@@ -130,7 +128,7 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), context);
 
-        var diff = XDocument.Load(OutputPath).Root!.Element("Diff")!;
+        var diff = ParseXml().Root!.Element("Diff")!;
 
         diff.Elements("UntrackedFile").Should().ContainSingle()
             .Which.Attribute("path")!.Value.Should().Be("src/New.cs");
@@ -146,25 +144,7 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(hostileDiff));
 
-        var document = XDocument.Load(OutputPath);
-        document.Root!.Element("Diff")!.Element("RawDiff")!.Value.Should().Be(hostileDiff);
-    }
-
-    [Fact]
-    public async Task JsonWriter_WithFileContentsDisabled_ShouldOmitContentButKeepTheDiff()
-    {
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier())
-        {
-            IncludeFileContents = false
-        };
-
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
-
-        using var document = JsonDocument.Parse(File.ReadAllText(OutputPath));
-        var file = document.RootElement.GetProperty("Files").EnumerateArray().Single();
-
-        file.TryGetProperty("Content", out _).Should().BeFalse();
-        document.RootElement.GetProperty("Diff").GetProperty("RawDiff").GetString().Should().Be(RawDiff);
+        ParseXml().Root!.Element("Diff")!.Element("RawDiff")!.Value.Should().Be(hostileDiff);
     }
 
     [Fact]
@@ -177,10 +157,16 @@ public class StructuredBundleWriterDiffTests : IDisposable
 
         await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
 
-        var document = XDocument.Load(OutputPath);
+        var document = ParseXml();
         document.Root!.Element("Files")!.Elements("File").Single().Element("Content").Should().BeNull();
         document.Root!.Element("Diff")!.Element("RawDiff")!.Value.Should().Be(RawDiff);
     }
+
+    private JsonDocument ParseJson() => JsonDocument.Parse(ReadOutput());
+
+    private XDocument ParseXml() => XDocument.Parse(ReadOutput());
+
+    private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 
     private static GitDiffContext CreateContext(string rawDiff = RawDiff) =>
         new("basesha", [new ChangedFile("src/Core.cs", ChangeKind.Added)], rawDiff);

@@ -39,7 +39,7 @@ public class BundleDiffTests
     }
 
     [Fact]
-    public void RenderSection_WhenDiffTextIsOnlyWhitespace_ShouldOmitTheRawDiffBlock()
+    public void RenderSection_WhenDiffTextIsWhitespaceOnly_ShouldOmitTheRawDiffBlock()
     {
         var diff = CreateContext("abc123", "   \n  ", File("src/A.cs"));
 
@@ -80,7 +80,6 @@ public class BundleDiffTests
             UntrackedFiles = ["src/New.cs"],
             UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
         };
-
         var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
 
         markdown.Should().Contain("New files git does not track yet (1), generated diffs below:");
@@ -90,7 +89,7 @@ public class BundleDiffTests
     }
 
     [Fact]
-    public void RenderSection_WithOnlyUntrackedFiles_ShouldStillShowTheirDiff()
+    public void RenderSection_WhenOnlyUntrackedFilesChanged_ShouldStillShowTheirDiff()
     {
         var diff = CreateContext("abc123", string.Empty) with
         {
@@ -106,7 +105,7 @@ public class BundleDiffTests
     }
 
     [Fact]
-    public void RenderSection_WithNeitherTrackedNorUntrackedChanges_ShouldSaySo()
+    public void RenderSection_WhenNothingChanged_ShouldExplainTheEmptyScope()
     {
         var markdown = BundleDiff.RenderSection(CreateContext("abc123", string.Empty), "Bundle scope is limited to");
 

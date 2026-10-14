@@ -8,7 +8,6 @@ namespace Plutus.Domain.Diffing;
 public static class GitDiffParser
 {
     private const string GitHeaderPrefix = "diff --git ";
-    private const string NoNewlineMarker = "\\ No newline at end of file";
 
     public static IReadOnlyList<ChangedFile> ParseChangedFiles(string diffText)
     {
