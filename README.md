@@ -1,158 +1,153 @@
+<div align="center">
+
 # Plutus
-Plutus is a high-performance, architecturally pure .NET 10 command-line interface (CLI) utility designed to scan local directories or remote repositories and consolidate source files into a single structured Markdown document.
 
-Optimized for **Large Language Models (LLMs)** context window injection, project auditing, and offline code reviews, Plutus generates an integrated project capsule containing visual directory hierarchies, complete file lists, and accurately syntax-highlighted code fences.
+**Turn a local project or a remote Git repository into a structured, AI-ready code bundle.**
 
----
+Plutus collects project files, applies configurable filters, and writes a single Markdown, JSON, or XML artifact for LLM-assisted development, code review, debugging, and offline analysis.
 
-## Technical Highlights & Architecture
-
-1. **Plutus.CLI**: Handles command-line invocation arguments, input normalization, and overall workflow orchestration via `App.cs`.
-2. **Plutus.Domain**: Contains the invariant business rules, the unified `ProjectScanner` graph engine, text encoding detectors, and formatting logic. It operates purely on Microsoft's `IFileProvider` and `IFileInfo` abstractions.
-3. **Plutus.Infrastructure**: Implements concrete structural bridges. It wraps physical platform disk drivers via specialized file providers and translates public cloud repository URLs into automated download workflows.
+</div>
 
 ---
 
-## Core Features
+## Why Plutus?
 
-* **Polymorphic Format Serialization**: Generates output variations tailored beyond standard text. It maps project assets cleanly into standard Markdown documentation (`md`), structured data schemas (`json`), or entities isolation markup hierarchies (`xml`) embedded inside strict character data bounds (`CDATA`).
-* **Multi-Platform Remote Ingestion**: Pass raw repository links from **GitHub**, **GitLab**, or **Bitbucket**. The infrastructure automatically maps branches, sanitizes URL paths, follows web redirects, handles nested source segments, and extracts the code into sandboxed execution containers.
-* **Unified Single-Pass Scanning**: Replaced redundant multi-run tree traversals with a single-pass hierarchical execution tree (`ProjectScanner`). It populates an immutable in-memory graph (`ProjectNode`) that feeds both the code compiler and the visual layout renderer simultaneously.
-* **High-Fidelity Virtualization**: Completely isolated from the `System.IO` footprint. It executes interchangeably against physical hard drives or in-memory virtual arrays, facilitating fully non-destructive isolated unit testing.
-* **Smart Text/Binary Demuxing**: Inspects the preliminary byte arrays of file streams dynamically. It handles complex character maps (UTF-8, Windows-1251) seamlessly while flagging and isolating corrupted nodes or binary objects (images, compiled artifacts) to protect LLM token budget capacities.
+- **One artifact, whole context** — combine a project's file inventory, directory tree, and readable source files into a portable bundle.
+- **Local and remote inputs** — process local directories or repositories hosted on GitHub, GitLab, and Bitbucket.
+- **Control what goes in** — use `.gitignore`, built-in exclusions, and include/exclude patterns to focus on the relevant code.
+- **Keep bundles manageable** — set a maximum file size and an optional estimated source-token budget; select whole files deterministically when needed.
+- **Choose a format** — emit Markdown for people and LLMs, or JSON/XML for downstream tools.
+- **Optional source minification** — remove comments and extra whitespace for supported languages before bundling.
+- **Testable architecture** — scanning and bundling are built around file-provider abstractions, with a separate CLI, domain, and infrastructure layer.
 
----
+## Quick start
 
-## Smart Filtering Engine (Git-Style)
+### Requirements
 
-Plutus contains a multi-tiered, highly flexible filtering system designed to either restrict or expand your target codebase context window using native Git wildcard syntax:
+- **.NET 10 SDK** to build and run from source.
+- A local project directory, or a supported remote repository URL.
 
-###  Exclusions (Black-lists)
-* **Built-in Junk Exclusions**: Automatically cuts out transient build files, operational runtimes, package trees, and storage logs (`node_modules`, `bin`, `obj`, `.git`, `venv`, `.vs`).
-* **Leak Protection**: Actively blocks localized credentials, token configuration stores, and encryption files (`.env`, `credentials.json`, `secrets.json`, `id_rsa`, `*.pem`, `*.key`).
-* **Custom Targets**: Exclude generic patterns, strict files, or strict directory trees via CLI flags.
-
-### Inverted Inclusions (White-lists)
-* **Strict Targeting**: Force the compiler to completely drop everything *unless* it matches specific files or directory module pathways. Ideal for omitting heavy client-side assets when auditing backend source patterns.
-
----
-
-## Usage
+### Build and run from source
 
 ```bash
-plutus <project-path-or-url> [options]
+git clone https://github.com/<OWNER>/<REPOSITORY>.git
+cd <REPOSITORY>
+dotnet restore Plutus.sln
+dotnet build Plutus.sln -c Release
+dotnet run --project Plutus.CLI -- ./path/to/project
 ```
 
-### Targeting a remote branch, tag, or commit
+Replace `<OWNER>/<REPOSITORY>` with the actual GitHub repository path. The command writes a Markdown bundle to the current working directory by default. For a more predictable output path, specify `-o`:
 
 ```bash
-# Download a non-default branch (branch names may contain slashes)
-plutus "https://github.com/owner/repo" --branch "feature/new-parser"
-
-# Download a tag
-plutus "https://gitlab.com/group/subgroup/repo" --branch "v2.1.0"
-
-# Download a specific commit
-plutus "https://bitbucket.org/workspace/repo" --commit "a1b2c3d4e5f6789012345678901234567890abcd"
+dotnet run --project Plutus.CLI -- ./path/to/project -o ./artifacts/project-context.md
 ```
 
-`--branch` and `--commit` are mutually exclusive. For remote URLs containing browser navigation paths such as `/tree/<branch>` or `/-/tree/<branch>`, Plutus resolves the repository root before constructing the archive URL; use `--branch` to explicitly select the desired ref.
+### Run the published executable
 
-### Token budget
+When a GitHub Release has been published, download the asset matching your platform from the repository's **Releases** page. The release workflow is configured to produce self-contained single-file assets for Windows x64, Linux x64, and macOS x64. Then run the executable with the same CLI options shown below.
 
-```bash
-plutus ./src --max-tokens 100000
-plutus ./src --max-tokens 100000 --token-overflow-policy Select --token-selection-strategy LargestFirst
-```
+## Examples
 
-`--max-tokens` is independent of `--max-file-size`. The default overflow policy is `fail`; `warn` writes all eligible files and reports overflow; `select` includes only whole files that fit. Selection is deterministic: `path-order` greedily considers paths in ordinal order, while `largest-first` considers larger estimated files first and breaks ties by path. Files are never truncated.
-
-The offline estimator is `chars/4-v1`: it counts Unicode scalar values in each readable file after comment stripping/minification options and rounds up per file. This is a rough heuristic, not a model-specific tokenizer. Per-file estimates exclude files skipped before reading (for example, `--max-file-size`) and the estimate does not include bundle headings, directory-tree/file-list metadata, or tokenizer-specific overhead.
-
-### Options
-
-* `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
-* `--format <type>`: Target serialization configuration format strategy (`md`, `json`, `xml`). Defaults to `md`.
-* `--max-tokens <count>`: Optional source-content token budget (offline estimate).
-* `--token-overflow-policy <Fail|Warn|Select>`: Action when the token budget is exceeded; defaults to `Fail`.
-* `--token-selection-strategy <PathOrder|LargestFirst>`: Deterministic whole-file selection strategy used with `Select`.
-* `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
-* `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
-* `--branch <name>`: Downloads the specified remote branch or tag. Cannot be combined with `--commit`.
-* `--commit <hash>`: Downloads a specific commit by its 7–40 character hexadecimal hash. Cannot be combined with `--branch`.
-* `--exclude-files <mask|`| `List<string>` | Gitignore-style wildcard patterns targeting strictly **FILES** for exclusion. |
-* `--exclude-dirs <mask|` | `List<string>` | Gitignore-style wildcard patterns targeting strictly **DIRECTORIES** for exclusion. |
-* `--include-files <mask|`| `List<string>` | Inverted filter: explicitly isolates processing strictly to matching **FILES**. |
-* `--include-dirs <mask|` | `List<string>` | Inverted filter: explicitly restricts scanning paths strictly to matching **DIRECTORIES**. |
-* `--no-default-excludes`: Disables built-in automated junk directory tracking filters.
-* `--allow-dangerous-files`: Overrides the security matching protocols to force ingestion of secure asset blocks (`.env`, private identities).
-*  `--exclude <mask>`: **Exclude directories by name or wildcard mask (e.g., `frontend`, `build_*`, `*test*`). Matches the directory name at any nesting level.**
-* `-m, --minify`: Minifies source code before bundling by completely removing all single-line, block, and documentation comments, stripping out region directives, and collapsing all blank or whitespace-only lines. This optimizes the layout into a tight, high-density structural format, saving 20% to 40% of the token budget when injecting code into Large Language Models (LLMs). It features safe multi-language support for C#, Java, Go, JavaScript, TypeScript, PHP, Rust, SQL, CSS/SCSS, and HTML/XML, ensuring embedded string literals, URLs, and Data-URIs remain fully preserved.
-* `--encoding <name>`: Sets the target text encoding used across the entire execution graph for reading source sheets, resolving `.gitignore` files, logging console indicators, and writing the final compiled document (e.g., `utf-8`, `windows-1251`, `koi8-r`). Defaults to `utf-8`.
-* `--max-concurrency <number>`: Limit maximum concurrent file processing I/O tasks managed by the in-memory processing semaphore. Defaults to `8`.
-
-### Operational Examples
-
-**Compile local working environments with standard configurations:**
+### Bundle the current directory
 
 ```bash
 plutus .
 ```
 
-**Compile local projects into structured JSON data models for automated AI workflow agents:**
+### Bundle selected source files and omit test directories
+
 ```bash
-plutus . --format json -o context_capsule.json
+plutus ./src --include-files "*.cs" --exclude-dirs "*Test*"
 ```
 
-**Run high-speed bundling across large mono-repos with increased I/O concurrency:**
+### Write JSON instead of Markdown
+
 ```bash
-plutus . --max-concurrency 16
+plutus ./src --format json --output ./artifacts/context.json
 ```
 
-**Isolate processing strictly to C# code sheets while ignoring Test projects:**
+### Bundle a specific branch or commit
+
 ```bash
-plutus . --include-files "*.cs" --exclude-dirs "*Test*"
+plutus "https://github.com/owner/repository" --branch "feature/new-parser"
+plutus "https://github.com/owner/repository" --commit "a1b2c3d4e5f6789012345678901234567890abcd"
 ```
 
-**Ingest a public remote GitHub repository and bundle only the documentation folder:**
+`--branch` and `--commit` are mutually exclusive. Commit hashes must contain 7–40 hexadecimal characters. Remote URLs should point to a supported repository; for a non-default branch or tag, pass `--branch` explicitly.
+
+### Keep the estimated source-token count within a budget
+
 ```bash
-plutus "https://github.com" --include-dirs "docs/"
+plutus ./src --max-tokens 100000 --token-overflow-policy select
+plutus ./src --max-tokens 100000 --token-overflow-policy Select --token-selection-strategy LargestFirst
 ```
 
-**Ingest a nested GitLab group architecture down to a 250K threshold map:**
+The default overflow policy is `fail`: if eligible source content exceeds the budget, Plutus reports the estimate and does not write the bundle. `warn` writes all eligible files and reports the overflow. `select` includes only whole files that fit. See the [token-budget guide](docs/TOKEN_BUDGET.md) for details and limitations.
+
+## CLI reference
+
+The full option reference, defaults, and filtering examples live in **[docs/CLI.md](docs/CLI.md)**. Useful options include:
+
+| Option | Purpose |
+|---|---|
+| `-o`, `--output <path>` | Set the output file path. |
+| `--format <md\|json\|xml>` | Select output format; default is `md`. |
+| `--max-file-size <size>` | Skip files larger than the configured size; default is `1M`. |
+| `--max-tokens <count>` | Enable the offline source-token estimate and budget policy. |
+| `--token-overflow-policy <fail\|warn\|select>` | Decide what happens when the budget is exceeded. |
+| `--token-selection-strategy <path-order\|largest-first>` | Choose deterministic whole-file selection for `select`. |
+| `--exclude`, `--exclude-files`, `--exclude-dirs` | Exclude matching files and/or directories. |
+| `--include-files`, `--include-dirs` | Restrict the bundle to matching paths. |
+| `--no-gitignore` | Do not read the root `.gitignore`. |
+| `--allow-dangerous-files` | Allow normally excluded sensitive-looking files. Use with care. |
+| `-m`, `--minify` | Apply supported source minification before bundling. |
+
+## Output formats
+
+- **Markdown (`md`)** — human-readable project metadata, file list, directory tree, and file contents in fenced code blocks. This is the default and the best starting point for LLM context sharing.
+- **JSON (`json`)** — structured metadata, roots/tree nodes, and file records, including skipped-file status and token-estimate fields where applicable.
+- **XML (`xml`)** — structured metadata, tree nodes, and file content elements. Content is represented using CDATA sections.
+
+For format details and guidance on consuming the output programmatically, see [docs/OUTPUT_FORMATS.md](docs/OUTPUT_FORMATS.md).
+
+## How it works
+
+1. **Resolve input** — local paths are expanded; supported remote repository URLs are downloaded and extracted.
+2. **Build the project tree** — scan entries through file-provider abstractions and create a tree used by both the renderer and bundle writers.
+3. **Filter paths** — apply default junk exclusions, `.gitignore` (unless disabled), and user include/exclude patterns.
+4. **Read and process files** — skip oversized files, detect obvious binary content, decode text using the selected encoding, and optionally minify supported source languages.
+5. **Apply token policy** — if `--max-tokens` is configured, estimate eligible source content and apply `fail`, `warn`, or deterministic `select` behavior.
+6. **Serialize the bundle** — write Markdown, JSON, or XML.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component responsibilities and the processing pipeline.
+
+## Security and privacy
+
+A bundle may contain source code, configuration, internal URLs, or secrets if those files are included. Plutus has built-in exclusions for sensitive-looking files, but **filters are not a substitute for reviewing the bundle before sharing it**. Avoid `--allow-dangerous-files` unless you deliberately need those files, and inspect the generated artifact before uploading it to an LLM or publishing it.
+
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities and [docs/CLI.md](docs/CLI.md#sensitive-files) for the sensitive-file option.
+
+## Development
+
 ```bash
-plutus "https://gitlab.com" --max-file-size 250K
+dotnet restore Plutus.sln
+dotnet format Plutus.sln --verify-no-changes --no-restore
+dotnet build Plutus.sln -c Debug
+dotnet test Plutus.sln -c Debug
 ```
 
----
+The repository's GitHub Actions workflow runs restore, formatting verification, build, and tests on pushes and pull requests targeting `master`. Contributions should include focused tests for behavior changes; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Extending the Engine: Custom Remote Cloud Providers
+## Documentation
 
-Due to the Strategy Pattern decoupling layout, adding new remote Git platforms requires zero modification to the core engine. Simply inherit from `BaseRemoteRepository` inside the Infrastructure project layer:
-
-```csharp
-public sealed class GiteaRemoteRepository : BaseRemoteRepository
-{
-    protected override string PlatformPrefix => "gitea";
-
-    public override bool IsSupportedPath(string path) =>
-        path.StartsWith("https://gitea.com", StringComparison.OrdinalIgnoreCase);
-
-    protected override string BuildZipUrl(string path) =>
-        path.TrimEnd('/') + "/archive/master.zip";
-}
-```
-
----
+- [CLI reference](docs/CLI.md)
+- [Token budget behavior and estimator limitations](docs/TOKEN_BUDGET.md)
+- [Output formats](docs/OUTPUT_FORMATS.md)
+- [Architecture and pipeline](docs/ARCHITECTURE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## License
 
-## License
-
-Copyright (c) 2026 blowin
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Plutus is distributed under the MIT License. See [LICENSE](LICENSE).

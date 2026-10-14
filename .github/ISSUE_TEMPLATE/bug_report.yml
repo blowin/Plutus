@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible problem in Plutus
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please redact private source code, local usernames, credentials, tokens, and internal URLs before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Plutus version or commit
+      placeholder: e.g. v1.0.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and .NET version
+      placeholder: e.g. Windows 11, .NET 10 SDK
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and options
+      description: Include the command, replacing private paths and values with placeholders.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+      description: Remove secrets and proprietary source before posting.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Steps or a small synthetic example that reproduces the issue.
+    validations:
+      required: false
