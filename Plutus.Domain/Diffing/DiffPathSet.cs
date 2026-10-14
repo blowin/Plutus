@@ -18,11 +18,11 @@ public sealed class DiffPathSet
 
     public int Count => _filePaths.Count;
 
-    public static DiffPathSet Create(IEnumerable<string> paths, StringComparer comparison)
+    public static DiffPathSet Create(IEnumerable<string> paths)
     {
         ArgumentNullException.ThrowIfNull(paths);
-        ArgumentNullException.ThrowIfNull(comparison);
 
+        StringComparer comparison = StringComparer.OrdinalIgnoreCase;
         var filePaths = new HashSet<string>(comparison);
         var directoryPaths = new HashSet<string>(comparison);
 

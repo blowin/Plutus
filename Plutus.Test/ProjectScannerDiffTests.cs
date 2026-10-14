@@ -26,7 +26,7 @@ public class ProjectScannerDiffTests
 
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["src/Core.cs"], StringComparer.Ordinal));
+        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["src/Core.cs"]));
 
         result.Children.Should().HaveCount(3);
 
@@ -46,7 +46,7 @@ public class ProjectScannerDiffTests
     {
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create([], StringComparer.Ordinal));
+        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create([]));
 
         result.Status.Should().Be(NodeStatus.IgnoredDirectory);
         result.Children.Should().BeEmpty();
@@ -76,7 +76,7 @@ public class ProjectScannerDiffTests
 
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["secret.env"], StringComparer.Ordinal));
+        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["secret.env"]));
 
         result.Children.Single().Status.Should().Be(NodeStatus.IgnoredFile);
     }
@@ -88,7 +88,7 @@ public class ProjectScannerDiffTests
 
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["src/Core.cs"], StringComparer.Ordinal));
+        scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create(["src/Core.cs"]));
 
         _fileProvider.DidNotReceive().GetDirectoryContents("docs");
     }
@@ -100,7 +100,7 @@ public class ProjectScannerDiffTests
 
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1000), DiffPathSet.Create(["Core.cs"], StringComparer.Ordinal));
+        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1000), DiffPathSet.Create(["Core.cs"]));
 
         result.Children.Single().Status.Should().Be(NodeStatus.OversizedFile);
     }

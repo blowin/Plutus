@@ -13,7 +13,7 @@ namespace Plutus.Infrastructure;
 /// </summary>
 public sealed class GitDiffContextProvider(
     IGitCommandExecutor gitCommandExecutor,
-    bool ignorePathCase = false,
+    bool ignorePathCase = true,
     long maxUntrackedFileDiffBytes = GitDiffContextProvider.DefaultMaxUntrackedFileDiffBytes) : IGitDiffContextProvider
 {
     private const string Head = "HEAD";

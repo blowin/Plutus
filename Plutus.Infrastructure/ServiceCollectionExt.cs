@@ -58,9 +58,7 @@ public static class ServiceCollectionExt
         services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
         services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
             ? new NullGitDiffContextProvider()
-            : new GitDiffContextProvider(
-                provider.GetRequiredService<IGitCommandExecutor>(),
-                VcsPathComparer.IgnoreCase));
+            : ActivatorUtilities.CreateInstance<GitDiffContextProvider>(provider));
         services.AddSingleton(options);
         services.AddSingleton<ITokenBudgetApplier>(_ => options.TokenBudget is null
             ? new NoOpTokenBudgetApplier()

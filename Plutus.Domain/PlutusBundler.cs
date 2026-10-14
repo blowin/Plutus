@@ -83,6 +83,6 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
 
         var rootPath = root.PhysicalPath ?? root.Name;
         var paths = gitDiff.PathsFor(rootPath).Concat(gitDiff.UntrackedPathsFor(rootPath));
-        return DiffPathSet.Create(paths, VcsPathComparer.Comparer);
+        return DiffPathSet.Create(paths);
     }
 }
