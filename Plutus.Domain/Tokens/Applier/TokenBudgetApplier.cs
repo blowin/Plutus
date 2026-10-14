@@ -69,7 +69,7 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
                     Content = null,
                     IsSkipped = true,
                     IsTokenBudgetOmitted = true,
-                    SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy.ToCliValue()})"
+                    SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy})"
                 }
                 : file);
         }
@@ -112,7 +112,7 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
             Console.WriteLine($"{estimate,-28} {decision,-28} {file.Entry.RelativePath}");
         }
 
-        Console.WriteLine($"Estimated source tokens: {candidateTokens:N0}; selected: {selectedTokens:N0}; budget: {budget.MaxTokens:N0}; policy: {budget.OverflowPolicy.ToString().ToLowerInvariant()}; strategy: {budget.SelectionStrategy.ToCliValue()}.");
+        Console.WriteLine($"Estimated source tokens: {candidateTokens:N0}; selected: {selectedTokens:N0}; budget: {budget.MaxTokens:N0}; policy: {budget.OverflowPolicy.ToString().ToLowerInvariant()}; strategy: {budget.SelectionStrategy}.");
         Console.WriteLine("Estimates cover readable source content after optional minification, not bundle metadata or tokenizer-specific overhead.");
     }
 }

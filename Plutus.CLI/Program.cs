@@ -156,7 +156,9 @@ public static class Program
         {
             var value = result.GetValueOrDefault<int?>();
             if (value is <= 0)
+            {
                 result.AddError("--max-tokens must be greater than zero.");
+            }
         });
 
         var tokenOverflowPolicyOption = new Option<TokenOverflowPolicy>("--token-overflow-policy")

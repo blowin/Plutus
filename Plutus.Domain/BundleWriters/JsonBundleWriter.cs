@@ -36,7 +36,7 @@ public class JsonBundleWriter(
                 SelectedSourceTokens = tokenBudgetSummary?.SelectedTokens,
                 MaxTokens = tokenBudgetSummary?.MaxTokens,
                 TokenOverflowPolicy = tokenBudgetSummary?.OverflowPolicy.ToString().ToLowerInvariant(),
-                TokenSelectionStrategy = tokenBudgetSummary?.SelectionStrategy.ToCliValue()
+                TokenSelectionStrategy = tokenBudgetSummary?.SelectionStrategy.ToString()
             },
             Roots = roots.Select(r => MapDirectoryTree(r.ProjectNode)).ToList(),
             Files = files.Select(f => new JsonFileModel

@@ -76,7 +76,10 @@ public class TokenBudgetTests
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
         {
-            Name = "root", RelativePath = "", IsDirectory = true, Status = NodeStatus.Included,
+            Name = "root",
+            RelativePath = "",
+            IsDirectory = true,
+            Status = NodeStatus.Included,
             Children =
             {
                 new ProjectNode { Name = "a.txt", RelativePath = "a.txt", IsDirectory = false, Status = NodeStatus.Included, FileInfo = a },
@@ -107,7 +110,10 @@ public class TokenBudgetTests
         var file = CreateFile("a.txt", "AAAAA");
         var root = new ProjectNode
         {
-            Name = "root", RelativePath = "", IsDirectory = true, Status = NodeStatus.Included,
+            Name = "root",
+            RelativePath = "",
+            IsDirectory = true,
+            Status = NodeStatus.Included,
             Children = { new ProjectNode { Name = "a.txt", RelativePath = "a.txt", IsDirectory = false, Status = NodeStatus.Included, FileInfo = file } }
         };
 

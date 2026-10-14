@@ -49,7 +49,7 @@ public class XmlBundleWriter(
             await xmlWriter.WriteElementStringAsync(null, "SelectedSourceTokens", null, tokenSummary.SelectedTokens.ToString());
             await xmlWriter.WriteElementStringAsync(null, "MaxTokens", null, tokenSummary.MaxTokens.ToString());
             await xmlWriter.WriteElementStringAsync(null, "TokenOverflowPolicy", null, tokenSummary.OverflowPolicy.ToString().ToLowerInvariant());
-            await xmlWriter.WriteElementStringAsync(null, "TokenSelectionStrategy", null, tokenSummary.SelectionStrategy.ToCliValue());
+            await xmlWriter.WriteElementStringAsync(null, "TokenSelectionStrategy", null, tokenSummary.SelectionStrategy.ToString());
         }
         await xmlWriter.WriteEndElementAsync();
 

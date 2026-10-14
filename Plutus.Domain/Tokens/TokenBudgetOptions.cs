@@ -19,16 +19,6 @@ public enum TokenSelectionStrategy
     LargestFirst
 }
 
-public static class TokenSelectionStrategyExtensions
-{
-    public static string ToCliValue(this TokenSelectionStrategy strategy) => strategy switch
-    {
-        TokenSelectionStrategy.PathOrder => "path-order",
-        TokenSelectionStrategy.LargestFirst => "largest-first",
-        _ => strategy.ToString()
-    };
-}
-
 public sealed record TokenBudgetSummary(
     int MaxTokens,
     TokenOverflowPolicy OverflowPolicy,

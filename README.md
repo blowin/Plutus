@@ -62,7 +62,7 @@ plutus "https://bitbucket.org/workspace/repo" --commit "a1b2c3d4e5f6789012345678
 
 ```bash
 plutus ./src --max-tokens 100000
-plutus ./src --max-tokens 100000 --token-overflow-policy select --token-selection-strategy largest-first
+plutus ./src --max-tokens 100000 --token-overflow-policy Select --token-selection-strategy LargestFirst
 ```
 
 `--max-tokens` is independent of `--max-file-size`. The default overflow policy is `fail`; `warn` writes all eligible files and reports overflow; `select` includes only whole files that fit. Selection is deterministic: `path-order` greedily considers paths in ordinal order, while `largest-first` considers larger estimated files first and breaks ties by path. Files are never truncated.
@@ -74,8 +74,8 @@ The offline estimator is `chars/4-v1`: it counts Unicode scalar values in each r
 * `-o, --output <path>`: Explicit destination path for the compiled Markdown asset. Defaults to `<root-directory-name>_bundle.md` within the current folder.
 * `--format <type>`: Target serialization configuration format strategy (`md`, `json`, `xml`). Defaults to `md`.
 * `--max-tokens <count>`: Optional source-content token budget (offline estimate).
-* `--token-overflow-policy <fail|warn|select>`: Action when the token budget is exceeded; defaults to `fail`.
-* `--token-selection-strategy <path-order|largest-first>`: Deterministic whole-file selection strategy used with `select`.
+* `--token-overflow-policy <Fail|Warn|Select>`: Action when the token budget is exceeded; defaults to `Fail`.
+* `--token-selection-strategy <PathOrder|LargestFirst>`: Deterministic whole-file selection strategy used with `Select`.
 * `--max-file-size <size>`: Sets the boundary capacity threshold for code file aggregation (e.g., `512K`, `1M`, `4MB`). Defaults to `1M`.
 * `--no-gitignore`: Disables scanning and parsing local root-level `.gitignore` tracking files.
 * `--branch <name>`: Downloads the specified remote branch or tag. Cannot be combined with `--commit`.

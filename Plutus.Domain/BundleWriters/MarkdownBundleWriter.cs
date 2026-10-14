@@ -42,7 +42,7 @@ public class MarkdownBundleWriter(
         if (tokenBudgetSummary is { } tokenSummary)
         {
             writer.WriteLine($"- Token estimate method: `{tokenSummary.EstimatorMethod}`");
-            writer.WriteLine($"- Estimated source tokens: `{tokenSummary.CandidateTokens}`; selected: `{tokenSummary.SelectedTokens}`; budget: `{tokenSummary.MaxTokens}`; policy: `{tokenSummary.OverflowPolicy.ToString().ToLowerInvariant()}`; strategy: `{tokenSummary.SelectionStrategy.ToCliValue()}`");
+            writer.WriteLine($"- Estimated source tokens: `{tokenSummary.CandidateTokens}`; selected: `{tokenSummary.SelectedTokens}`; budget: `{tokenSummary.MaxTokens}`; policy: `{tokenSummary.OverflowPolicy.ToString().ToLowerInvariant()}`; strategy: `{tokenSummary.SelectionStrategy}`");
         }
         writer.WriteLine();
 
