@@ -6,6 +6,7 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 
@@ -31,7 +32,9 @@ public class TokenBudgetTests
         var languages = Substitute.For<IMarkdownLanguageProvider>();
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
 
-        var writer = new MarkdownBundleWriter(detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(
+            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -47,7 +50,7 @@ public class TokenBudgetTests
         await writer.WriteAsync(
             [(new NullFileProvider(), "root", "root", root)],
             output,
-            RunAppOptionsFactory.Create(FileSize.FromBytes(1024),1, "select", "path-order"));
+            FileSize.FromBytes(1024));
 
         var text = Encoding.UTF8.GetString(output.Stream.ToArray());
         text.Should().Contain("Token estimate method:").And.Contain("a.txt").And.Contain("b.txt");
@@ -65,7 +68,9 @@ public class TokenBudgetTests
             .Returns(_ => new StreamWriter(output.Stream, leaveOpen: true));
         var languages = Substitute.For<IMarkdownLanguageProvider>();
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
-        var writer = new MarkdownBundleWriter(detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(
+            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -79,8 +84,7 @@ public class TokenBudgetTests
         };
 
         await writer.WriteAsync(
-            [(new NullFileProvider(), "root", "root", root)], output,
-            RunAppOptionsFactory.Create(FileSize.FromBytes(1024), 1, "warn", "path-order"));
+            [(new NullFileProvider(), "root", "root", root)], output, FileSize.FromBytes(1024));
 
         var text = Encoding.UTF8.GetString(output.Stream.ToArray());
         text.Should().Contain("AAAA").And.Contain("BBBB");
@@ -96,7 +100,9 @@ public class TokenBudgetTests
             .Returns(_ => new StreamWriter(output.Stream, leaveOpen: true));
         var languages = Substitute.For<IMarkdownLanguageProvider>();
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
-        var writer = new MarkdownBundleWriter(detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(
+            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)));
         var file = CreateFile("a.txt", "AAAAA");
         var root = new ProjectNode
         {
@@ -105,8 +111,7 @@ public class TokenBudgetTests
         };
 
         var act = async () => await writer.WriteAsync(
-            [(new NullFileProvider(), "root", "root", root)], output,
-            RunAppOptionsFactory.Create(FileSize.FromBytes(1024), 1, "fail", "path-order"));
+            [(new NullFileProvider(), "root", "root", root)], output, FileSize.FromBytes(1024));
 
         await act.Should().ThrowAsync<TokenBudgetExceededException>();
         output.Stream.Length.Should().Be(0);

@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Domain.BundleWriters;
 
@@ -9,16 +11,17 @@ public class JsonBundleWriter(
     IFileInfoDetailProvider fileInfoDetailProvider,
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
-    System.Text.Encoding encoding)
-    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding)
+    System.Text.Encoding encoding,
+    ITokenBudgetApplier tokenBudgetApplier)
+    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
 {
     public override string FormatExtension => "json";
 
-    protected override async Task WriteContentAsync(
-        List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
+    protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        IReadOnlyCollection<ProcessedFileContext> files,
-        FileSize maxFileSize)
+        List<ProcessedFileContext> files,
+        FileSize maxFileSize,
+        TokenBudgetSummary? tokenBudgetSummary)
     {
         var jsonModel = new JsonBundleModel
         {
@@ -27,12 +30,12 @@ public class JsonBundleWriter(
                 TotalFiles = files.Count,
                 TotalSizeInBytes = files.Sum(x => x.Entry.File.Length),
                 MaxFileSizeLimit = maxFileSize,
-                TokenEstimateMethod = TokenBudgetSummary?.EstimatorMethod,
-                EstimatedSourceTokens = TokenBudgetSummary?.CandidateTokens,
-                SelectedSourceTokens = TokenBudgetSummary?.SelectedTokens,
-                MaxTokens = TokenBudgetSummary?.MaxTokens,
-                TokenOverflowPolicy = TokenBudgetSummary?.OverflowPolicy,
-                TokenSelectionStrategy = TokenBudgetSummary?.SelectionStrategy
+                TokenEstimateMethod = tokenBudgetSummary?.EstimatorMethod,
+                EstimatedSourceTokens = tokenBudgetSummary?.CandidateTokens,
+                SelectedSourceTokens = tokenBudgetSummary?.SelectedTokens,
+                MaxTokens = tokenBudgetSummary?.MaxTokens,
+                TokenOverflowPolicy = tokenBudgetSummary?.OverflowPolicy.ToString().ToLowerInvariant(),
+                TokenSelectionStrategy = tokenBudgetSummary?.SelectionStrategy.ToCliValue()
             },
             Roots = roots.Select(r => MapDirectoryTree(r.ProjectNode)).ToList(),
             Files = files.Select(f => new JsonFileModel

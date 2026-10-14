@@ -48,7 +48,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         List<BundleEntry> allEntries;
         try
         {
-            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options).ConfigureAwait(false);
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
         {

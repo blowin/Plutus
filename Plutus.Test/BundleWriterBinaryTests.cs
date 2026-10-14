@@ -5,6 +5,7 @@ using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 
@@ -25,7 +26,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
 
         var fileInfoOutput = new TestFileInfo
         {
@@ -47,7 +48,7 @@ public class BundleWriterBinaryTests
         };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, RunAppOptionsFactory.Create(FileSize.FromBytes(1024)));
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, FileSize.FromBytes(1024));
 
         // Assert
         await action.Should().NotThrowAsync();

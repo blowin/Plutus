@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Domain.BundleWriters;
 
@@ -9,15 +11,16 @@ public class MarkdownBundleWriter(
     IFileInfoDetailProvider fileInfoDetailProvider,
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
-    Encoding encoding) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding)
+    Encoding encoding,
+    ITokenBudgetApplier tokenBudgetApplier) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
 {
     public override string FormatExtension => "md";
 
-    protected override async Task WriteContentAsync(
-        List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
+    protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        IReadOnlyCollection<ProcessedFileContext> files,
-        FileSize maxFileSize)
+        List<ProcessedFileContext> files,
+        FileSize maxFileSize,
+        TokenBudgetSummary? tokenBudgetSummary)
     {
         var totalSize = files.Sum(x => x.Entry.File.Length);
 
@@ -35,10 +38,10 @@ public class MarkdownBundleWriter(
         writer.WriteLine($"- Files included: `{files.Count}`");
         writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
         writer.WriteLine($"- Max file size: `{maxFileSize}`");
-        if (TokenBudgetSummary is { } tokenSummary)
+        if (tokenBudgetSummary is { } tokenSummary)
         {
             writer.WriteLine($"- Token estimate method: `{tokenSummary.EstimatorMethod}`");
-            writer.WriteLine($"- Estimated source tokens: `{tokenSummary.CandidateTokens}`; selected: `{tokenSummary.SelectedTokens}`; budget: `{tokenSummary.MaxTokens}`; policy: `{tokenSummary.OverflowPolicy}`; strategy: `{tokenSummary.SelectionStrategy}`");
+            writer.WriteLine($"- Estimated source tokens: `{tokenSummary.CandidateTokens}`; selected: `{tokenSummary.SelectedTokens}`; budget: `{tokenSummary.MaxTokens}`; policy: `{tokenSummary.OverflowPolicy.ToString().ToLowerInvariant()}`; strategy: `{tokenSummary.SelectionStrategy.ToCliValue()}`");
         }
         writer.WriteLine();
 

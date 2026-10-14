@@ -11,5 +11,5 @@ public interface IBundleWriter
     ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        RunAppOptions options);
+        FileSize maxFileSize);
 }

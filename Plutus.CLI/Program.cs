@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
 
 namespace Plutus.CLI;
@@ -28,10 +29,28 @@ public static class Program
         };
         outputOption.Aliases.Add("-o");
 
-        var maxSizeOption = new Option<string>("--max-file-size")
+        var maxSizeOption = new Option<FileSize>("--max-file-size")
         {
             Description = "Max file size to include (e.g., 512K, 1M, 2MB).",
-            DefaultValueFactory = _ => "1M"
+            DefaultValueFactory = _ => FileSize.Parse("1M"),
+            CustomParser = r =>
+            {
+                if (r.Tokens.Count != 1)
+                {
+                    r.AddError($"{r.Argument.Name} should have 1 file size");
+                    return default;
+                }
+
+                try
+                {
+                    return FileSize.Parse(r.Tokens.First().Value);
+                }
+                catch (Exception e)
+                {
+                    r.AddError(e.Message);
+                    return default;
+                }
+            }
         };
 
         var branchOption = new Option<string?>("--branch")
@@ -140,29 +159,17 @@ public static class Program
                 result.AddError("--max-tokens must be greater than zero.");
         });
 
-        var tokenOverflowPolicyOption = new Option<string>("--token-overflow-policy")
+        var tokenOverflowPolicyOption = new Option<TokenOverflowPolicy>("--token-overflow-policy")
         {
             Description = "Budget overflow behavior: fail, warn, or select.",
-            DefaultValueFactory = _ => "fail"
+            DefaultValueFactory = _ => TokenOverflowPolicy.Fail
         };
-        tokenOverflowPolicyOption.Validators.Add(result =>
-        {
-            var value = result.GetValueOrDefault<string>() ?? "fail";
-            if (!new[] { "fail", "warn", "select" }.Contains(value, StringComparer.OrdinalIgnoreCase))
-                result.AddError("--token-overflow-policy must be one of: fail, warn, select.");
-        });
 
-        var tokenSelectionStrategyOption = new Option<string>("--token-selection-strategy")
+        var tokenSelectionStrategyOption = new Option<TokenSelectionStrategy>("--token-selection-strategy")
         {
             Description = "Deterministic file selection strategy for policy 'select': path-order or largest-first.",
-            DefaultValueFactory = _ => "path-order"
+            DefaultValueFactory = _ => TokenSelectionStrategy.PathOrder,
         };
-        tokenSelectionStrategyOption.Validators.Add(result =>
-        {
-            var value = result.GetValueOrDefault<string>() ?? "path-order";
-            if (!new[] { "path-order", "largest-first" }.Contains(value, StringComparer.OrdinalIgnoreCase))
-                result.AddError("--token-selection-strategy must be one of: path-order, largest-first.");
-        });
 
         var formatOption = new Option<string>("--format")
         {
@@ -196,31 +203,14 @@ public static class Program
 
         rootCommand.SetAction(async parseResult =>
         {
-            var projectPath = parseResult.GetValue(projectPathsArgument)!;
-            var outputPath = parseResult.GetValue(outputOption);
-            var maxSizeStr = parseResult.GetValue(maxSizeOption)!;
-            var noGitignore = parseResult.GetValue(noGitignoreOption);
             var branch = parseResult.GetValue(branchOption);
             var commit = parseResult.GetValue(commitOption);
-
-            var excludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>();
-            var excludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>();
-            var excludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>();
-            var includeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>();
-            var includeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>();
-            var useDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption);
-            var allowDangerous = parseResult.GetValue(allowDangerousFilesOption);
-            var minify = parseResult.GetValue(minifyOption);
             var encodingName = parseResult.GetValue(encodingOption)!;
-            var maxConcurrency = parseResult.GetValue(maxConcurrencyOption);
-            var format = parseResult.GetValue(formatOption)!;
             var maxTokens = parseResult.GetValue(maxTokensOption);
-            var tokenOverflowPolicy = parseResult.GetValue(tokenOverflowPolicyOption)!;
-            var tokenSelectionStrategy = parseResult.GetValue(tokenSelectionStrategyOption)!;
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
-                Console.Error.WriteLine("Error: --branch and --commit cannot be used together.");
+                Console.Error.WriteLine("Error: branch and commit cannot be used together.");
                 return 1;
             }
 
@@ -235,33 +225,35 @@ public static class Program
                 return 1;
             }
 
+            var options = new RunAppOptions
+            {
+                ProjectPath = parseResult.GetValue(projectPathsArgument)!,
+                OutputPath = parseResult.GetValue(outputOption),
+                UseGitignore = !parseResult.GetValue(noGitignoreOption),
+                ExcludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>(),
+                UseDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption),
+                AllowDangerous = parseResult.GetValue(allowDangerousFilesOption),
+                MaxFileSize = parseResult.GetValue(maxSizeOption)!,
+                ExcludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>(),
+                ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
+                IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
+                IncludeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>(),
+                Minify = parseResult.GetValue(minifyOption),
+                TargetEncoding = targetEncoding,
+                MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
+                Format = parseResult.GetValue(formatOption)!,
+                Branch = branch,
+                Commit = commit,
+                TokenBudget = maxTokens is { } tokenLimit
+                    ? new TokenBudgetOptions(
+                        tokenLimit,
+                        parseResult.GetValue(tokenOverflowPolicyOption)!,
+                        parseResult.GetValue(tokenSelectionStrategyOption)!)
+                    : null,
+            };
+
             try
             {
-                var maxFileSize = FileSize.Parse(maxSizeStr);
-                var options = new RunAppOptions
-                {
-                    ProjectPath = projectPath,
-                    OutputPath = outputPath,
-                    UseGitignore = !noGitignore,
-                    ExcludePatterns = excludePatterns,
-                    UseDefaultExcludes = useDefaultExcludes,
-                    AllowDangerous = allowDangerous,
-                    MaxFileSize = maxFileSize,
-                    ExcludeDirPatterns = excludeDirPatterns,
-                    ExcludeFilePatterns = excludeFilePatterns,
-                    IncludeDirPatterns = includeDirPatterns,
-                    IncludeFilePatterns = includeFilePatterns,
-                    Minify = minify,
-                    TargetEncoding = targetEncoding,
-                    MaxConcurrency = maxConcurrency,
-                    Format = format,
-                    Branch = branch,
-                    Commit = commit,
-                    MaxTokens = maxTokens,
-                    TokenOverflowPolicy = tokenOverflowPolicy,
-                    TokenSelectionStrategy = tokenSelectionStrategy,
-                };
-
                 return await RunAppAsync(options);
             }
             catch (Exception ex)
