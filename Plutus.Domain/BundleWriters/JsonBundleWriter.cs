@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -21,7 +22,8 @@ public class JsonBundleWriter(
         IFileInfo output,
         List<ProcessedFileContext> files,
         FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary)
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff)
     {
         var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
         var jsonModel = new JsonBundleModel
@@ -31,6 +33,8 @@ public class JsonBundleWriter(
                 TotalFiles = includedFiles.Count,
                 TotalSizeInBytes = includedFiles.Sum(x => x.Entry.File.Length),
                 MaxFileSizeLimit = maxFileSize,
+                DiffScoped = gitDiff is not null,
+                DiffComparisonBase = gitDiff?.ComparisonBase,
                 TokenEstimateMethod = tokenBudgetSummary?.EstimatorMethod,
                 EstimatedSourceTokens = tokenBudgetSummary?.CandidateTokens,
                 SelectedSourceTokens = tokenBudgetSummary?.SelectedTokens,
@@ -48,7 +52,19 @@ public class JsonBundleWriter(
                 SkipReason = f.SkipReason,
                 Content = f.Content,
                 EstimatedTokens = f.EstimatedTokens
-            }).ToList()
+            }).ToList(),
+            Diff = gitDiff is null
+                ? null
+                : new JsonDiffModel
+                {
+                    ComparisonBase = gitDiff.ComparisonBase,
+                    RawDiff = gitDiff.RawText,
+                    Files = gitDiff.Files.Select(f => new JsonChangedFileModel
+                    {
+                        RelativePath = f.Path,
+                        ChangeKind = f.Kind.ToString().ToLowerInvariant()
+                    }).ToList()
+                }
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -85,6 +101,7 @@ public class JsonBundleWriter(
         public BundleMetadata Metadata { get; set; } = new();
         public List<JsonFolderNode> Roots { get; set; } = [];
         public List<JsonFileModel> Files { get; set; } = [];
+        public JsonDiffModel? Diff { get; set; }
     }
 
     private class BundleMetadata
@@ -92,12 +109,27 @@ public class JsonBundleWriter(
         public int TotalFiles { get; set; }
         public long TotalSizeInBytes { get; set; }
         public long MaxFileSizeLimit { get; set; }
+        public bool DiffScoped { get; set; }
+        public string? DiffComparisonBase { get; set; }
         public string? TokenEstimateMethod { get; set; }
         public long? EstimatedSourceTokens { get; set; }
         public long? SelectedSourceTokens { get; set; }
         public int? MaxTokens { get; set; }
         public string? TokenOverflowPolicy { get; set; }
         public string? TokenSelectionStrategy { get; set; }
+    }
+
+    private class JsonDiffModel
+    {
+        public string ComparisonBase { get; set; } = string.Empty;
+        public List<JsonChangedFileModel> Files { get; set; } = [];
+        public string RawDiff { get; set; } = string.Empty;
+    }
+
+    private class JsonChangedFileModel
+    {
+        public string RelativePath { get; set; } = string.Empty;
+        public string ChangeKind { get; set; } = string.Empty;
     }
 
     private class JsonFolderNode

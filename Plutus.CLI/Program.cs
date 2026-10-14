@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
 
@@ -179,6 +180,27 @@ public static class Program
             DefaultValueFactory = _ => "md"
         };
 
+        var diffOnlyOption = new Option<bool>("--diff-only")
+        {
+            Description = "Bundle only the files that changed between distinct commits: the working tree is compared with HEAD, or with --diff-from when that is given. A raw .diff section is appended."
+        };
+
+        var diffFromOption = new Option<string?>("--diff-from")
+        {
+            Description = "Bundle only the files changed relative to this branch, tag, or commit, using merge-base semantics (<target>...), so uncommitted work is included. Implies --diff-only. Cannot be combined with --branch or --commit.",
+            Validators =
+            {
+                result =>
+                {
+                    var target = result.GetValueOrDefault<string?>();
+                    if (target is not null && string.IsNullOrWhiteSpace(target))
+                    {
+                        result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
+                    }
+                }
+            }
+        };
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -201,6 +223,8 @@ public static class Program
             maxTokensOption,
             tokenOverflowPolicyOption,
             tokenSelectionStrategyOption,
+            diffOnlyOption,
+            diffFromOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -209,10 +233,18 @@ public static class Program
             var commit = parseResult.GetValue(commitOption);
             var encodingName = parseResult.GetValue(encodingOption)!;
             var maxTokens = parseResult.GetValue(maxTokensOption);
+            var diffOnly = parseResult.GetValue(diffOnlyOption);
+            var diffFrom = parseResult.GetValue(diffFromOption);
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
                 Console.Error.WriteLine("Error: branch and commit cannot be used together.");
+                return 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(diffFrom) && (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit)))
+            {
+                Console.Error.WriteLine("Error: --diff-from cannot be used together with --branch or --commit.");
                 return 1;
             }
 
@@ -251,6 +283,9 @@ public static class Program
                         tokenLimit,
                         parseResult.GetValue(tokenOverflowPolicyOption)!,
                         parseResult.GetValue(tokenSelectionStrategyOption)!)
+                    : null,
+                Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
+                    ? new GitDiffOptions { Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom }
                     : null,
             };
 

@@ -76,6 +76,15 @@ plutus "https://github.com/owner/repository" --commit "a1b2c3d4e5f67890123456789
 
 `--branch` and `--commit` are mutually exclusive. Commit hashes must contain 7–40 hexadecimal characters. Remote URLs should point to a supported repository; for a non-default branch or tag, pass `--branch` explicitly.
 
+### Bundle only what changed
+
+```bash
+plutus . --diff-only
+plutus . --diff-from main -o ./review.md
+```
+
+`--diff-only` isolates the bundle to files changed in the working tree, while `--diff-from <ref>` compares the merge base of that ref with the working tree. Both append a section with the raw `.diff` text for structural insight into the change. See the [CLI reference](docs/CLI.md#bundle-only-what-changed).
+
 ### Keep the estimated source-token count within a budget
 
 ```bash
@@ -99,6 +108,7 @@ The full option reference, defaults, and filtering examples live in **[docs/CLI.
 | `--token-selection-strategy <path-order\|largest-first>` | Choose deterministic whole-file selection for `select`. |
 | `--exclude`, `--exclude-files`, `--exclude-dirs` | Exclude matching files and/or directories. |
 | `--include-files`, `--include-dirs` | Restrict the bundle to matching paths. |
+| `--diff-only`, `--diff-from <ref>` | Bundle only what changed, and append the raw diff. |
 | `--no-gitignore` | Do not read the root `.gitignore`. |
 | `--allow-dangerous-files` | Allow normally excluded sensitive-looking files. Use with care. |
 | `-m`, `--minify` | Apply supported source minification before bundling. |

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 
 namespace Plutus.Domain.BundleWriters;
 
@@ -11,5 +12,6 @@ public interface IBundleWriter
     ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        FileSize maxFileSize);
+        FileSize maxFileSize,
+        GitDiffContext? gitDiff = null);
 }

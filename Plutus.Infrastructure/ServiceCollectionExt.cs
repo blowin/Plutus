@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens.Applier;
+using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.Infrastructure;
@@ -53,6 +55,12 @@ public static class ServiceCollectionExt
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
+        services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
+        services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
+            ? new NullGitDiffContextProvider()
+            : new GitDiffContextProvider(
+                provider.GetRequiredService<IGitCommandExecutor>(),
+                VcsPathComparer.IgnoreCase));
         services.AddSingleton(options);
         services.AddSingleton<ITokenBudgetApplier>(_ => options.TokenBudget is null
             ? new NoOpTokenBudgetApplier()

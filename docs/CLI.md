@@ -29,6 +29,8 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | `--include-files <pattern...>` | None | Inverted filter: when set, only files matching the include patterns are retained. |
 | `--include-dirs <pattern...>` | None | Inverted filter for directory/module paths. |
 | `--allow-dangerous-files` | Off | Allow files normally excluded because their names/extensions look sensitive, such as `.env` or private-key files. Use only when intentional. |
+| `--diff-only` | Off | Restrict the bundle to files changed between distinct commits. The working tree is compared with `HEAD`, or with `--diff-from` when that is given. A raw `.diff` section is appended. |
+| `--diff-from <ref>` | None | Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics so uncommitted work is included. Implies `--diff-only`. Cannot be combined with `--branch` or `--commit`. |
 | `--branch <name>` | Provider default | Remote branch or tag to download. Cannot be combined with `--commit`. |
 | `--commit <hash>` | Provider default | Specific remote commit hash, 7–40 hexadecimal characters. Cannot be combined with `--branch`. |
 
@@ -83,6 +85,18 @@ dotnet run --project Plutus.CLI -- ./src --max-file-size 512K --max-tokens 80000
 dotnet run --project Plutus.CLI -- ./src --format json -o ./artifacts/context.json
 dotnet run --project Plutus.CLI -- ./src --format xml -o ./artifacts/context.xml
 ```
+
+### Bundle only what changed
+
+```bash
+dotnet run --project Plutus.CLI -- . --diff-only -o ./artifacts/working-tree-review.md
+dotnet run --project Plutus.CLI -- . --diff-from main -o ./artifacts/branch-review.md
+dotnet run --project Plutus.CLI -- . --diff-only --format json -o ./artifacts/working-tree-review.json
+```
+
+`--diff-only` compares the working tree with `HEAD`, so uncommitted and staged work is included. `--diff-from <ref>` compares the merge base of `<ref>` and `HEAD` with the working tree, so both the commits made on the branch and any uncommitted work are included. Both flags require a local git repository, and every project path must live inside it.
+
+A diff scoped run keeps each changed file's contents and appends a `## Changes against <ref>` section containing the raw `.diff` text. Directories that contain no changed file are marked as ignored, so unchanged modules stay out of the file list. Files that are excluded for other reasons — `.gitignore` rules, sensitive-file protection, `--max-file-size`, or token-budget selection — remain excluded. Deleted files are listed in the raw diff but have no content to embed.
 
 ## Filtering notes
 

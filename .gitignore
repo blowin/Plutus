@@ -15,3 +15,4 @@ changes.diff
 detail.md
 
 *.patch
+.dsh-*

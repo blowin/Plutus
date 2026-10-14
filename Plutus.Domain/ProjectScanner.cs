@@ -1,11 +1,12 @@
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Domain;
 
 public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
 {
-    public ProjectNode Scan(IFileProvider fileProvider, string rootName, string outputPhysicalPath, FileSize maxFileSize)
+    public ProjectNode Scan(IFileProvider fileProvider, string rootName, string outputPhysicalPath, FileSize maxFileSize, DiffPathSet? diffPaths = null)
     {
         var rootNode = new ProjectNode
         {
@@ -15,11 +16,11 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
             Status = NodeStatus.Included
         };
 
-        BuildTree(fileProvider, "", rootNode, outputPhysicalPath, maxFileSize);
+        BuildTree(fileProvider, "", rootNode, outputPhysicalPath, maxFileSize, diffPaths);
         return rootNode;
     }
 
-    private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, FileSize maxFileSize)
+    private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, FileSize maxFileSize, DiffPathSet? diffPaths)
     {
         var contents = fileProvider.GetDirectoryContents(subPath);
         if (!contents.Exists)
@@ -42,7 +43,10 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
 
             if (child.IsDirectory)
             {
-                var isIgnored = ignoreMatcher.IsIgnoredDirectory(itemSubPath);
+                // A diff scoped run keeps only directories that still contain a changed file, so the tree
+                // shows the surrounding structure without dragging in untouched modules.
+                var isIgnored = ignoreMatcher.IsIgnoredDirectory(itemSubPath) ||
+                                diffPaths is not null && !diffPaths.ContainsDirectory(itemSubPath);
                 var childNode = new ProjectNode
                 {
                     Name = child.Name,
@@ -55,13 +59,13 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
 
                 if (!isIgnored)
                 {
-                    BuildTree(fileProvider, itemSubPath, childNode, outputPhysicalPath, maxFileSize);
+                    BuildTree(fileProvider, itemSubPath, childNode, outputPhysicalPath, maxFileSize, diffPaths);
                 }
             }
             else
             {
                 var fileStatus = NodeStatus.Included;
-                if (ignoreMatcher.IsIgnoredFile(itemSubPath))
+                if (ignoreMatcher.IsIgnoredFile(itemSubPath) || diffPaths is not null && !diffPaths.ContainsFile(itemSubPath))
                 {
                     fileStatus = NodeStatus.IgnoredFile;
                 }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -20,7 +21,8 @@ public class MarkdownBundleWriter(
         IFileInfo output,
         List<ProcessedFileContext> files,
         FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary)
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff)
     {
         var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
         var totalSize = includedFiles.Sum(x => x.Entry.File.Length);
@@ -96,6 +98,14 @@ public class MarkdownBundleWriter(
             }
 
             writer.WriteLine(fence);
+        }
+
+        if (gitDiff is not null)
+        {
+            writer.WriteLine();
+            writer.WriteLine("---");
+            writer.WriteLine();
+            writer.Write(BundleDiff.RenderSection(gitDiff, "Bundle scope is limited to"));
         }
     }
 

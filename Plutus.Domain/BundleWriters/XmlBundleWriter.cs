@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -21,7 +22,8 @@ public class XmlBundleWriter(
         IFileInfo output,
         List<ProcessedFileContext> files,
         FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary)
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff)
     {
         var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
         var xmlSettings = new XmlWriterSettings
@@ -42,6 +44,11 @@ public class XmlBundleWriter(
         await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, includedFiles.Count.ToString());
         await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, includedFiles.Sum(x => x.Entry.File.Length).ToString());
         await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, maxFileSize.ToString());
+        if (gitDiff is not null)
+        {
+            await xmlWriter.WriteElementStringAsync(null, "DiffScoped", null, "true");
+            await xmlWriter.WriteElementStringAsync(null, "DiffComparisonBase", null, gitDiff.ComparisonBase);
+        }
         if (tokenBudgetSummary is { } tokenSummary)
         {
             await xmlWriter.WriteElementStringAsync(null, "TokenEstimateMethod", null, tokenSummary.EstimatorMethod);
@@ -89,9 +96,35 @@ public class XmlBundleWriter(
         }
         await xmlWriter.WriteEndElementAsync();
 
+        if (gitDiff is not null)
+        {
+            await WriteDiffAsync(xmlWriter, gitDiff);
+        }
+
         await xmlWriter.WriteEndElementAsync(); // End Bundle
         await xmlWriter.WriteEndDocumentAsync();
         await xmlWriter.FlushAsync();
+    }
+
+    private static async Task WriteDiffAsync(XmlWriter writer, GitDiffContext gitDiff)
+    {
+        await writer.WriteStartElementAsync(null, "Diff", null);
+        await writer.WriteAttributeStringAsync(null, "comparisonBase", null, gitDiff.ComparisonBase);
+
+        foreach (var file in gitDiff.Files)
+        {
+            await writer.WriteStartElementAsync(null, "ChangedFile", null);
+            await writer.WriteAttributeStringAsync(null, "path", null, file.Path);
+            await writer.WriteAttributeStringAsync(null, "change", null, file.Kind.ToString().ToLowerInvariant());
+            await writer.WriteEndElementAsync();
+        }
+
+        // Escaped text rather than CDATA, because a diff payload may itself contain the CDATA terminator.
+        await writer.WriteStartElementAsync(null, "RawDiff", null);
+        await writer.WriteStringAsync(gitDiff.RawText);
+        await writer.WriteEndElementAsync();
+
+        await writer.WriteEndElementAsync();
     }
 
     private async Task WriteXmlNodeAsync(XmlWriter writer, ProjectNode node)

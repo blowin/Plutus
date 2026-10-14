@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -24,7 +25,8 @@ public abstract class BaseBundleWriter(
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        FileSize maxFileSize)
+        FileSize maxFileSize,
+        GitDiffContext? gitDiff = null)
     {
         FileInfoDetailProvider.CreateDirectoryForFile(output);
 
@@ -54,7 +56,7 @@ public abstract class BaseBundleWriter(
             ApplyFileStatuses(root.ProjectNode, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
         }
 
-        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary).ConfigureAwait(false);
+        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary, gitDiff).ConfigureAwait(false);
         return entries;
     }
 
@@ -62,7 +64,8 @@ public abstract class BaseBundleWriter(
         IFileInfo output,
         List<ProcessedFileContext> files,
         FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary);
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff);
 
     private static void ApplyFileStatuses(
         ProjectNode node,

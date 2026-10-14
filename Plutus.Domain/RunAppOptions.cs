@@ -1,4 +1,5 @@
 using System.Text;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
@@ -23,4 +24,7 @@ public record RunAppOptions
     public required string? Branch { get; init; }
     public required string? Commit { get; init; }
     public TokenBudgetOptions? TokenBudget { get; init; }
+
+    /// <summary>When set, the bundle is restricted to files changed relative to this diff scope.</summary>
+    public GitDiffOptions? Diff { get; init; }
 }

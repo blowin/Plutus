@@ -1,17 +1,20 @@
 using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
 
 public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IReadOnlyCollection<IBundleWriter> bundleWriters)
 {
-    public async Task<int> RunBundleAsync(
+    /// <summary>Scans the bundle roots and writes the requested format, restricted to the diff subset when one was resolved.</summary>
+    public virtual async Task<int> RunBundleAsync(
         ProjectScanner projectScanner,
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
-        RunAppOptions options)
+        RunAppOptions options,
+        GitDiffContext? gitDiff = null)
     {
         if (output.IsDirectory)
         {
@@ -41,14 +44,15 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         foreach (var root in roots)
         {
             var provider = fileInfoDetailProvider.CreateFileProvider(root);
-            var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize);
+            var diffPaths = gitDiff is null ? null : DiffPathSet.Create(gitDiff.PathsFor(root.PhysicalPath ?? root.Name), VcsPathComparer.Comparer);
+            var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize, diffPaths);
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
         List<BundleEntry> allEntries;
         try
         {
-            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize).ConfigureAwait(false);
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize, gitDiff).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
         {
