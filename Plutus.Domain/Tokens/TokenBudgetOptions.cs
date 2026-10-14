@@ -33,8 +33,8 @@ public sealed record TokenBudgetSummary(
     int MaxTokens,
     TokenOverflowPolicy OverflowPolicy,
     TokenSelectionStrategy SelectionStrategy,
-    int CandidateTokens,
-    int SelectedTokens,
+    long CandidateTokens,
+    long SelectedTokens,
     string EstimatorMethod);
 
 public sealed class TokenBudgetExceededException(string message) : Exception(message);

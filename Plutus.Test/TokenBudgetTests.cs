@@ -118,6 +118,29 @@ public class TokenBudgetTests
         output.Stream.Length.Should().Be(0);
     }
 
+    [Fact]
+    public void SelectPolicy_UsesLongTotalsAndMarksOnlyBudgetOmissions()
+    {
+        var firstEntry = new BundleEntry("a.txt", CreateFile("a.txt", "a"));
+        var secondEntry = new BundleEntry("b.txt", CreateFile("b.txt", "b"));
+        var unreadableEntry = new BundleEntry("secret.txt", CreateFile("secret.txt", "x"));
+        var files = new List<ProcessedFileContext>
+        {
+            ProcessedFileContext.CreateSuccess(firstEntry, "text", "a", int.MaxValue),
+            ProcessedFileContext.CreateSuccess(secondEntry, "text", "b", int.MaxValue),
+            ProcessedFileContext.CreateSkipped(unreadableEntry, "text", "binary file")
+        };
+        var applier = new TokenBudgetApplier(new TokenBudgetOptions(10, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder));
+
+        var result = applier.Apply(files);
+
+        result.Summary!.CandidateTokens.Should().Be((long)int.MaxValue * 2);
+        result.Summary.SelectedTokens.Should().Be(0);
+        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "a.txt" && f.IsTokenBudgetOmitted);
+        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "b.txt" && f.IsTokenBudgetOmitted);
+        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "secret.txt" && f.IsSkipped && !f.IsTokenBudgetOmitted && f.SkipReason == "binary file");
+    }
+
     private static IFileInfo CreateFile(string name, string content)
     {
         var bytes = Encoding.UTF8.GetBytes(content);

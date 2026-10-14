@@ -23,6 +23,7 @@ public class XmlBundleWriter(
         FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary)
     {
+        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
         var xmlSettings = new XmlWriterSettings
         {
             Async = true,
@@ -38,8 +39,8 @@ public class XmlBundleWriter(
 
         // Metadata Aggregate Node
         await xmlWriter.WriteStartElementAsync(null, "Metadata", null);
-        await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, files.Count.ToString());
-        await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, files.Sum(x => x.Entry.File.Length).ToString());
+        await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, includedFiles.Count.ToString());
+        await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, includedFiles.Sum(x => x.Entry.File.Length).ToString());
         await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, maxFileSize.ToString());
         if (tokenBudgetSummary is { } tokenSummary)
         {

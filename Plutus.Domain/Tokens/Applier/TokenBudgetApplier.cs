@@ -20,13 +20,19 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
             throw new ArgumentOutOfRangeException(nameof(budget), $"Unknown token selection strategy '{strategy}'.");
         }
 
-        var candidateTokens = files.Where(f => !f.IsSkipped).Sum(f => f.EstimatedTokens ?? 0);
+        if (!Enum.IsDefined(budget.OverflowPolicy))
+        {
+            throw new ArgumentOutOfRangeException(nameof(budget), $"Unknown token overflow policy '{budget.OverflowPolicy}'.");
+        }
+
+        // Sum as long: a large repository can exceed Int32 even though each file estimate is an int.
+        var candidateTokens = files.Where(f => !f.IsSkipped).Sum(f => (long)(f.EstimatedTokens ?? 0));
         var selected = files;
         var selectedTokens = candidateTokens;
 
         if (candidateTokens > budget.MaxTokens && budget.OverflowPolicy == TokenOverflowPolicy.Fail)
         {
-            PrintTokenReport(files, candidateTokens, 0);
+            PrintTokenReport(files, [], candidateTokens, 0, failPolicy: true);
             throw new TokenBudgetExceededException($"Estimated source usage ({candidateTokens:N0} tokens) exceeds --max-tokens {budget.MaxTokens:N0}; no bundle was written. Choose --token-overflow-policy warn or select to continue.");
         }
 
@@ -58,23 +64,55 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
             }
 
             selected = files.ConvertAll(file => !file.IsSkipped && !selectedEntries.Contains(file.Entry)
-                ? file with { Content = null, IsSkipped = true, SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy.ToCliValue()})", }
+                ? file with
+                {
+                    Content = null,
+                    IsSkipped = true,
+                    IsTokenBudgetOmitted = true,
+                    SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy.ToCliValue()})"
+                }
                 : file);
         }
 
-        PrintTokenReport(files, candidateTokens, selectedTokens);
+        if (candidateTokens > budget.MaxTokens)
+        {
+            PrintTokenReport(files, selected, candidateTokens, selectedTokens, failPolicy: false);
+        }
         return new TokenBudgetResult(selected, new TokenBudgetSummary(budget.MaxTokens, budget.OverflowPolicy, strategy, candidateTokens, selectedTokens, TokenEstimator.Method));
     }
 
-    private void PrintTokenReport(List<ProcessedFileContext> files, int candidateTokens, int selectedTokens)
+    private void PrintTokenReport(
+        IReadOnlyCollection<ProcessedFileContext> sourceFiles,
+        IReadOnlyCollection<ProcessedFileContext> selectedFiles,
+        long candidateTokens,
+        long selectedTokens,
+        bool failPolicy)
     {
+        var selectedPaths = selectedFiles
+            .Where(f => !f.IsSkipped)
+            .Select(f => f.Entry.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
+
         Console.WriteLine($"Token estimate method: {TokenEstimator.Method}");
-        foreach (var file in files.OrderBy(f => f.Entry.RelativePath, StringComparer.Ordinal))
+        foreach (var file in sourceFiles.OrderBy(f => f.Entry.RelativePath, StringComparer.Ordinal))
         {
-            var estimate = file.EstimatedTokens.HasValue ? $"{file.EstimatedTokens.Value:N0}" : "n/a (skipped before reading)";
-            Console.WriteLine($"Tokens: {estimate,-28} {file.Entry.RelativePath}");
+            var estimate = file.EstimatedTokens.HasValue
+                ? $"{file.EstimatedTokens.Value:N0}"
+                : "n/a (skipped before reading)";
+            var decision = file.IsTokenBudgetOmitted
+                ? "omitted by budget"
+                : file.IsSkipped
+                    ? $"skipped: {file.SkipReason ?? "unknown reason"}"
+                    : failPolicy
+                        ? "not written (fail policy)"
+                        : selectedPaths.Contains(file.Entry.RelativePath)
+                            ? "included"
+                            : "omitted";
+
+            Console.WriteLine($"{estimate,-28} {decision,-28} {file.Entry.RelativePath}");
         }
-        Console.WriteLine($"Estimated source tokens: {candidateTokens:N0}; selected: {selectedTokens:N0}; budget: {budget.MaxTokens:N0}; policy: {budget.OverflowPolicy}; strategy: {budget.SelectionStrategy.ToCliValue()}.");
-        Console.WriteLine("Note: estimates cover readable file contents after optional minification, not bundle headings, tree/list metadata, or tokenizer-specific overhead.");
+
+        Console.WriteLine($"Estimated source tokens: {candidateTokens:N0}; selected: {selectedTokens:N0}; budget: {budget.MaxTokens:N0}; policy: {budget.OverflowPolicy.ToString().ToLowerInvariant()}; strategy: {budget.SelectionStrategy.ToCliValue()}.");
+        Console.WriteLine("Estimates cover readable source content after optional minification, not bundle metadata or tokenizer-specific overhead.");
     }
 }

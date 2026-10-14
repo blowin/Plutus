@@ -40,14 +40,18 @@ public abstract class BaseBundleWriter(
         var processedFiles = (await Task.WhenAll(processingTasks).ConfigureAwait(false)).ToList();
 
         var tokenBudgetResult = tokenBudgetApplier.Apply(processedFiles);
+        var tokenBudgetOmittedPaths = tokenBudgetResult.Files
+            .Where(f => f.IsTokenBudgetOmitted)
+            .Select(f => f.Entry.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
         var skippedPaths = tokenBudgetResult.Files
-            .Where(f => f.IsSkipped && f.Entry.File.Length <= maxFileSize)
+            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && f.Entry.File.Length <= maxFileSize)
             .Select(f => f.Entry.RelativePath)
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var root in roots)
         {
-            ApplyTokenBudgetStatuses(root.ProjectNode, skippedPaths);
+            ApplyFileStatuses(root.ProjectNode, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
         }
 
         await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary).ConfigureAwait(false);
@@ -60,21 +64,38 @@ public abstract class BaseBundleWriter(
         FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary);
 
-    private void ApplyTokenBudgetStatuses(ProjectNode node, HashSet<string> skippedPaths)
+    private static void ApplyFileStatuses(
+        ProjectNode node,
+        FileSize maxFileSize,
+        HashSet<string> tokenBudgetOmittedPaths,
+        HashSet<string> skippedPaths)
     {
         if (!node.IsDirectory)
         {
-            if (node.Status == NodeStatus.Included && skippedPaths.Contains(node.RelativePath))
+            if (node.Status != NodeStatus.Included)
+            {
+                return;
+            }
+
+            if (node.FileInfo is { } file && file.Length > maxFileSize)
+            {
+                node.Status = NodeStatus.OversizedFile;
+            }
+            else if (tokenBudgetOmittedPaths.Contains(node.RelativePath))
             {
                 node.Status = NodeStatus.TokenBudgetOmitted;
             }
-        }
-        else
-        {
-            foreach (var child in node.Children)
+            else if (skippedPaths.Contains(node.RelativePath))
             {
-                ApplyTokenBudgetStatuses(child, skippedPaths);
+                node.Status = NodeStatus.SkippedFile;
             }
+
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            ApplyFileStatuses(child, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
         }
     }
 

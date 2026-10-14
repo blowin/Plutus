@@ -91,6 +91,7 @@ public enum NodeStatus
     IgnoredDirectory,
     IgnoredFile,
     OversizedFile,
+    SkippedFile,
     TokenBudgetOmitted
 }
 

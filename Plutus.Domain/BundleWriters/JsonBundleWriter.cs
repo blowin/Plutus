@@ -23,12 +23,13 @@ public class JsonBundleWriter(
         FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary)
     {
+        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
         var jsonModel = new JsonBundleModel
         {
             Metadata = new BundleMetadata
             {
-                TotalFiles = files.Count,
-                TotalSizeInBytes = files.Sum(x => x.Entry.File.Length),
+                TotalFiles = includedFiles.Count,
+                TotalSizeInBytes = includedFiles.Sum(x => x.Entry.File.Length),
                 MaxFileSizeLimit = maxFileSize,
                 TokenEstimateMethod = tokenBudgetSummary?.EstimatorMethod,
                 EstimatedSourceTokens = tokenBudgetSummary?.CandidateTokens,
@@ -92,8 +93,8 @@ public class JsonBundleWriter(
         public long TotalSizeInBytes { get; set; }
         public long MaxFileSizeLimit { get; set; }
         public string? TokenEstimateMethod { get; set; }
-        public int? EstimatedSourceTokens { get; set; }
-        public int? SelectedSourceTokens { get; set; }
+        public long? EstimatedSourceTokens { get; set; }
+        public long? SelectedSourceTokens { get; set; }
         public int? MaxTokens { get; set; }
         public string? TokenOverflowPolicy { get; set; }
         public string? TokenSelectionStrategy { get; set; }

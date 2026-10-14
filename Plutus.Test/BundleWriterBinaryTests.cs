@@ -57,7 +57,9 @@ public class BundleWriterBinaryTests
         using var reader = new StreamReader(stream);
         var resultText = await reader.ReadToEndAsync();
         resultText.Should().Contain("image.png [20 B]");
+        resultText.Should().Contain("image.png [SKIPPED]");
         resultText.Should().NotContain("## FILE: `image.png`");
+        roots[0].Item4.Status.Should().Be(NodeStatus.SkippedFile);
     }
 
     private sealed class TestFileInfo : IFileInfo

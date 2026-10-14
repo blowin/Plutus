@@ -81,7 +81,7 @@ public class MarkdownBundleWriterTests
     }
 
     [Fact]
-    public async Task WriteAsync_WhenFileIsOversized_ShouldWriteSkippedMarker()
+    public async Task WriteAsync_WhenFileIsOversized_ShouldMarkTreeAndOmitContent()
     {
         // Arrange
         var mockFile = Substitute.For<IFileInfo>();
@@ -98,8 +98,9 @@ public class MarkdownBundleWriterTests
         // Assert
         var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());
         resultText.Should().Contain("big_file.txt [4.9 KB]");
-        resultText.Should().Contain("└── big_file.txt [LARGE 4.9 KB]");
+        resultText.Should().Contain("big_file.txt [LARGE 4.9 KB]");
         resultText.Should().NotContain("## FILE: `big_file.txt`");
+        roots[0].Item4.Status.Should().Be(NodeStatus.OversizedFile);
         mockFile.DidNotReceive().CreateReadStream(); // Контент вообще не должен считываться
     }
 

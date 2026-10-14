@@ -22,7 +22,8 @@ public class MarkdownBundleWriter(
         FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary)
     {
-        var totalSize = files.Sum(x => x.Entry.File.Length);
+        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var totalSize = includedFiles.Sum(x => x.Entry.File.Length);
 
         await using var writer = FileInfoDetailProvider.CreateWriterForFile(output, Encoding);
 
@@ -35,7 +36,7 @@ public class MarkdownBundleWriter(
             writer.WriteLine($"\t `{root.OriginalPath}`");
         }
         writer.WriteLine($"- Output: `{output.PhysicalPath!}`");
-        writer.WriteLine($"- Files included: `{files.Count}`");
+        writer.WriteLine($"- Files included: `{includedFiles.Count}`");
         writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
         writer.WriteLine($"- Max file size: `{maxFileSize}`");
         if (tokenBudgetSummary is { } tokenSummary)
@@ -87,7 +88,7 @@ public class MarkdownBundleWriter(
             var content = entry.Content ?? string.Empty;
             var fence = ChooseFence(content);
             writer.WriteLine($"{fence}{entry.Language}");
-            await writer.WriteAsync(content).ConfigureAwait(false); ;
+            await writer.WriteAsync(content).ConfigureAwait(false);
 
             if (content.Length == 0 || content[^1] != '\n')
             {
