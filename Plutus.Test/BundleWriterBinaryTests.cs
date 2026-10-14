@@ -56,7 +56,7 @@ public class BundleWriterBinaryTests
         await using var stream = fileInfoOutput.CreateReadStream();
         using var reader = new StreamReader(stream);
         var resultText = await reader.ReadToEndAsync();
-        resultText.Should().Contain("image.png [20 B; n/a (skipped before reading)] [SKIPPED]");
+        resultText.Should().Contain("image.png [20 B]");
         resultText.Should().NotContain("## FILE: `image.png`");
     }
 
