@@ -59,14 +59,16 @@ public class DiffPathSetTests
     public void ContainsDirectory_ForRootPath_ShouldAlwaysBeTrue()
     {
         DiffPathSet.Create(["src/Core.cs"], Comparer).ContainsDirectory(string.Empty).Should().BeTrue();
-        DiffPathSet.Empty.ContainsDirectory(string.Empty).Should().BeTrue();
+        DiffPathSet.Create([], Comparer).ContainsDirectory(string.Empty).Should().BeTrue();
     }
 
     [Fact]
-    public void Empty_ShouldExcludeEveryFile()
+    public void Create_WithoutAnyPaths_ShouldExcludeEveryFile()
     {
-        DiffPathSet.Empty.ContainsFile("src/Core.cs").Should().BeFalse();
-        DiffPathSet.Empty.Count.Should().Be(0);
+        var set = DiffPathSet.Create([], Comparer);
+
+        set.Count.Should().Be(0);
+        set.ContainsFile("src/Core.cs").Should().BeFalse();
     }
 
     [Fact]

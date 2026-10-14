@@ -17,13 +17,14 @@ Plutus is organized as a .NET solution with separate CLI, domain, infrastructure
 flowchart TD
     A[CLI arguments] --> B[Resolve local paths or remote repositories]
     B --> C[Create file providers and project roots]
-    C --> D[Scan paths and build ProjectNode trees]
-    D --> E[Apply built-in, gitignore, include and exclude filters]
-    E --> F[Read eligible files with bounded concurrency]
-    F --> G[Detect binary/unreadable content and apply optional minification]
-    G --> H[Estimate source tokens when configured]
-    H --> I[Apply fail, warn, or select policy]
-    I --> J[Render Markdown, JSON, or XML]
+    C --> D[Resolve diff scope via git when requested]
+    D --> E[Scan paths and build ProjectNode trees]
+    E --> F[Apply diff scope, built-in, gitignore, include and exclude filters]
+    F --> G[Read eligible files with bounded concurrency]
+    G --> H[Detect binary/unreadable content and apply optional minification]
+    H --> I[Estimate source tokens when configured]
+    I --> J[Apply fail, warn, or select policy]
+    J --> K[Render Markdown, JSON, or XML]
 ```
 
 ## Design notes
@@ -33,6 +34,8 @@ flowchart TD
 - **Writer strategy:** `IBundleWriter` implementations own format-specific serialization while sharing common file reading, size checks, optional minification, token policy, and status propagation in `BaseBundleWriter`.
 - **Remote-provider strategy:** `IRemoteRepository` adapters encapsulate provider-specific URL recognition, ref selection, archive URL construction, download, and extraction for GitHub, GitLab, and Bitbucket.
 - **Token-budget strategy:** `ITokenBudgetApplier` isolates the optional budget policy. `NoOpTokenBudgetApplier` represents the disabled path; `TokenBudgetApplier` estimates and selects whole files when enabled.
+- **Diff-scope strategy:** `IGitDiffContextProvider` reports what changed and returns `null` when scoping does not apply. Parsing the diff text that is bundled anyway keeps path discovery and the reported `.diff` consistent. `ChangedFileMapper` is the single place that turns repository-relative git paths into root-relative paths, so a bundle rooted at a subdirectory reports only its own changes.
+- **Content mode:** `IBundleWriter.IncludeFileContents` separates "review the change" (`--diff-only`: paths plus raw diff) from "bundle the changed source" (`--diff-from`: contents plus diff). It is a writer concern, so the scanner, filters and token policy behave identically in both modes.
 - **Dependency injection:** `Plutus.Infrastructure` registers the concrete services consumed by the CLI runner.
 
 ## Error and omission semantics

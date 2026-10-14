@@ -79,11 +79,12 @@ plutus "https://github.com/owner/repository" --commit "a1b2c3d4e5f67890123456789
 ### Bundle only what changed
 
 ```bash
-plutus . --diff-only
-plutus . --diff-from main -o ./review.md
+plutus . --diff-only                                  # just the diff: no file contents
+plutus . --diff-only --diff-include-untracked          # also generate diffs for new files
+plutus . --diff-from main -o ./review.md               # changed files WITH their contents
 ```
 
-`--diff-only` isolates the bundle to files changed in the working tree, while `--diff-from <ref>` compares the merge base of that ref with the working tree. Both append a section with the raw `.diff` text for structural insight into the change. See the [CLI reference](docs/CLI.md#bundle-only-what-changed).
+`--diff-only` produces a review artifact rather than a source dump: the header, the list of changed paths and the raw `.diff` — file contents and the directory tree are omitted. `--diff-from <ref>` instead keeps the changed files' contents and narrows them relative to the merge base of that ref, which is what you want when handing a branch to a model. Because `git diff` only sees tracked content, add `--diff-include-untracked` to cover files that were never `git add`ed; a real new-file diff is generated for each. See the [CLI reference](docs/CLI.md#bundle-only-what-changed).
 
 ### Keep the estimated source-token count within a budget
 
@@ -108,7 +109,9 @@ The full option reference, defaults, and filtering examples live in **[docs/CLI.
 | `--token-selection-strategy <path-order\|largest-first>` | Choose deterministic whole-file selection for `select`. |
 | `--exclude`, `--exclude-files`, `--exclude-dirs` | Exclude matching files and/or directories. |
 | `--include-files`, `--include-dirs` | Restrict the bundle to matching paths. |
-| `--diff-only`, `--diff-from <ref>` | Bundle only what changed, and append the raw diff. |
+| `--diff-only` | Emit the change itself: changed paths and raw diff, no file contents. |
+| `--diff-from <ref>` | Bundle changed files **with** their contents, relative to a branch, tag, or commit. |
+| `--diff-include-untracked` | Also cover files git does not track yet, via generated new-file diffs. |
 | `--no-gitignore` | Do not read the root `.gitignore`. |
 | `--allow-dangerous-files` | Allow normally excluded sensitive-looking files. Use with care. |
 | `-m`, `--minify` | Apply supported source minification before bundling. |
@@ -124,11 +127,12 @@ For format details and guidance on consuming the output programmatically, see [d
 ## How it works
 
 1. **Resolve input** — local paths are expanded; supported remote repository URLs are downloaded and extracted.
-2. **Build the project tree** — scan entries through file-provider abstractions and create a tree used by both the renderer and bundle writers.
-3. **Filter paths** — apply default junk exclusions, `.gitignore` (unless disabled), and user include/exclude patterns.
-4. **Read and process files** — skip oversized files, detect obvious binary content, decode text using the selected encoding, and optionally minify supported source languages.
-5. **Apply token policy** — if `--max-tokens` is configured, estimate eligible source content and apply `fail`, `warn`, or deterministic `select` behavior.
-6. **Serialize the bundle** — write Markdown, JSON, or XML.
+2. **Resolve the diff scope** — with `--diff-only`/`--diff-from`, ask git for the changed paths (plus untracked files when requested) and limit every later step to them.
+3. **Build the project tree** — scan entries through file-provider abstractions and create a tree used by both the renderer and bundle writers.
+4. **Filter paths** — apply the diff scope, default junk exclusions, `.gitignore` (unless disabled), and user include/exclude patterns.
+5. **Read and process files** — skip oversized files, detect obvious binary content, decode text using the selected encoding, and optionally minify supported source languages.
+6. **Apply token policy** — if `--max-tokens` is configured, estimate eligible source content and apply `fail`, `warn`, or deterministic `select` behavior.
+7. **Serialize the bundle** — write Markdown, JSON, or XML; with `--diff-only`, omit file contents and emit the change itself.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component responsibilities and the processing pipeline.
 

@@ -42,18 +42,18 @@ public class ProjectScannerDiffTests
     }
 
     [Fact]
-    public void Scan_WithEmptyDiffPaths_ShouldExcludeEveryFile()
+    public void Scan_WithEmptyDiffPaths_ShouldExcludeEveryFileWithoutWalkingTheTree()
     {
-        var root = CreateMockFile("src", isDirectory: true);
-        SetDirectoryContents("", [root]);
-        SetDirectoryContents("src", [CreateMockFile("Core.cs", isDirectory: false)]);
-
         var scanner = new ProjectScanner(_detailProvider, _ignoreMatcher);
 
-        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Empty);
+        var result = scanner.Scan(_fileProvider, "Root", "out.md", FileSize.FromBytes(1024), DiffPathSet.Create([], StringComparer.Ordinal));
 
-        result.Children.Should().ContainSingle().Which.Status.Should().Be(NodeStatus.IgnoredDirectory);
+        result.Status.Should().Be(NodeStatus.IgnoredDirectory);
+        result.Children.Should().BeEmpty();
         result.ExtractBundleEntries().Should().BeEmpty();
+
+        // Nothing can match an empty selection, so the provider must not be consulted at all.
+        _fileProvider.DidNotReceive().GetDirectoryContents(Arg.Any<string>());
     }
 
     [Fact]

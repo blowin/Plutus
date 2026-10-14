@@ -73,6 +73,56 @@ public class BundleDiffTests
     }
 
     [Fact]
+    public void RenderSection_WithUntrackedFiles_ShouldListThemAndIncludeTheirGeneratedDiffs()
+    {
+        var diff = CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("A.cs")) with
+        {
+            UntrackedFiles = ["src/New.cs"],
+            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
+        };
+
+        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+
+        markdown.Should().Contain("New files git does not track yet (1), generated diffs below:");
+        markdown.Should().Contain("- `src/New.cs`");
+        markdown.Should().Contain("### Raw diff");
+        markdown.Should().Contain("new file mode 100644");
+    }
+
+    [Fact]
+    public void RenderSection_WithOnlyUntrackedFiles_ShouldStillShowTheirDiff()
+    {
+        var diff = CreateContext("abc123", string.Empty) with
+        {
+            UntrackedFiles = ["src/New.cs"],
+            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
+        };
+
+        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+
+        markdown.Should().Contain("- `src/New.cs`");
+        markdown.Should().Contain("new file mode 100644");
+        markdown.Should().NotContain("No changed files were reported");
+    }
+
+    [Fact]
+    public void RenderSection_WithNeitherTrackedNorUntrackedChanges_ShouldSaySo()
+    {
+        var markdown = BundleDiff.RenderSection(CreateContext("abc123", string.Empty), "Bundle scope is limited to");
+
+        markdown.Should().Contain("No changed files were reported for this scope.");
+        markdown.Should().NotContain("### Raw diff");
+    }
+
+    [Fact]
+    public void RenderSection_WithoutUntrackedFiles_ShouldNotMentionThem()
+    {
+        var markdown = BundleDiff.RenderSection(CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("A.cs")), "Bundle scope is limited to");
+
+        markdown.Should().NotContain("git does not track");
+    }
+
+    [Fact]
     public void RenderSection_WithNullContext_ShouldThrow()
     {
         var act = () => BundleDiff.RenderSection(null!, "Bundle scope is limited to");
@@ -140,6 +190,56 @@ public class MarkdownBundleWriterDiffTests
         var result = ReadOutput();
         result.Should().Contain("No changed files were reported for this scope.");
         result.Should().Contain("## FILE: `src/Core.cs`");
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithFileContentsDisabled_ShouldEmitOnlyTheChangeSummary()
+    {
+        var writer = CreateWriter();
+        writer.IncludeFileContents = false;
+        var diff = CreateContext("abc123", "diff --git a/src/Core.cs b/src/Core.cs\n-old\n+new", new ChangedFile("src/Core.cs", ChangeKind.Modified));
+
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
+
+        var result = ReadOutput();
+        result.Should().Contain("# Project Bundle");
+        result.Should().Contain("## Changed Files");
+        result.Should().Contain("src/Core.cs");
+        result.Should().Contain("## Changes against `abc123`");
+        result.Should().Contain("+new");
+
+        // The change itself is the artifact: no source, no directory tree, no per-file blocks.
+        result.Should().NotContain("## FILE:");
+        result.Should().NotContain("## Directory Tree");
+        result.Should().NotContain("sample content");
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithFileContentsDisabledAndNoDiff_ShouldNotClaimToBeADiffBundle()
+    {
+        var writer = CreateWriter();
+        writer.IncludeFileContents = false;
+
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096));
+
+        var result = ReadOutput();
+        result.Should().Contain("## Changed Files");
+        result.Should().NotContain("## FILE:");
+        result.Should().NotContain("## Changes against");
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithFileContentsEnabled_ShouldKeepTheFullBundle()
+    {
+        var writer = CreateWriter();
+
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096));
+
+        var result = ReadOutput();
+        result.Should().Contain("## File List");
+        result.Should().Contain("## Directory Tree");
+        result.Should().Contain("## FILE: `src/Core.cs`");
+        result.Should().Contain("sample content");
     }
 
     private MarkdownBundleWriter CreateWriter() =>

@@ -20,6 +20,28 @@ public class GitDiffContextProviderTests
         +new
         """;
 
+    private const string UntrackedDiffText =
+        """
+        diff --git a/src/New.cs b/src/New.cs
+        new file mode 100644
+        index 0000000..3333333
+        --- /dev/null
+        +++ b/src/New.cs
+        @@ -0,0 +1 @@
+        +public class New;
+        """;
+
+    private const string SecondUntrackedDiffText =
+        """
+        diff --git a/docs/Release Notes.md b/docs/Release Notes.md
+        new file mode 100644
+        index 0000000..4444444
+        --- /dev/null
+        +++ b/docs/Release Notes.md
+        @@ -0,0 +1 @@
+        +# Notes
+        """;
+
     [Fact]
     public async Task ResolveAsync_WhenNoTargetIsConfigured_ShouldCompareWorkingTreeWithResolvedHead()
     {
@@ -173,6 +195,85 @@ public class GitDiffContextProviderTests
         // Discovery runs at the project path, and no diff is attempted for a path outside the repository.
         executor.Calls.Should().ContainSingle();
         executor.Calls[0].WorkingDirectory.Should().Be("/elsewhere");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenUntrackedFilesAreRequested_ShouldListThemAndGenerateTheirDiffs()
+    {
+        var executor = StubGitCommandExecutor.Succeeding(
+            "/repo",
+            string.Empty,
+            "headsha",
+            DiffText,
+            "src/New.cs\0docs/Release Notes.md\0",
+            UntrackedDiffText,
+            SecondUntrackedDiffText);
+        var provider = new GitDiffContextProvider(executor);
+
+        var result = await provider.ResolveAsync(new GitDiffOptions { IncludeUntracked = true }, [Root("/repo")]);
+
+        result.Should().NotBeNull();
+        result!.UntrackedFiles.Should().Equal("src/New.cs", "docs/Release Notes.md");
+
+        // Tracked changes and generated diffs stay apart: Files describes only what git diff reported.
+        result.Files.Should().ContainSingle().Which.Path.Should().Be("src/Core.cs");
+        result.RawText.Should().Be(DiffText);
+        result.UntrackedRawText.Should().Contain(UntrackedDiffText).And.Contain(SecondUntrackedDiffText);
+
+        executor.Calls.Should().HaveCount(7);
+        executor.Calls[4].Arguments.Should().Equal("ls-files", "-z", "--others", "--exclude-standard");
+        executor.Calls[5].Arguments.Should().Equal("diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", "src/New.cs");
+        executor.Calls[6].Arguments.Should().Equal("diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", "docs/Release Notes.md");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenAnUntrackedFileDiffCannotBeGenerated_ShouldKeepTheRest()
+    {
+        var executor = StubGitCommandExecutor.Seeded(
+            StubGitCommandExecutor.Success("/repo"),
+            StubGitCommandExecutor.Failure(),
+            StubGitCommandExecutor.Success("headsha"),
+            StubGitCommandExecutor.Success(DiffText),
+            StubGitCommandExecutor.Success("src/New.cs\0"),
+            StubGitCommandExecutor.Failure("error: unable to read file"));
+        var provider = new GitDiffContextProvider(executor);
+
+        var result = await provider.ResolveAsync(new GitDiffOptions { IncludeUntracked = true }, [Root("/repo")]);
+
+        // A file that cannot be diffed is still listed, and the bundle is not lost.
+        result.Should().NotBeNull();
+        result!.UntrackedFiles.Should().Equal("src/New.cs");
+        result.RawText.Should().Be(DiffText);
+        result.UntrackedRawText.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WithoutTheUntrackedOption_ShouldNotQueryUntrackedFiles()
+    {
+        var executor = StubGitCommandExecutor.Succeeding("/repo", string.Empty, "headsha", DiffText);
+        var provider = new GitDiffContextProvider(executor);
+
+        var result = await provider.ResolveAsync(new GitDiffOptions(), [Root("/repo")]);
+
+        result.Should().NotBeNull();
+        result!.UntrackedFiles.Should().BeEmpty();
+        executor.Calls.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_WhenUntrackedListingFails_ShouldReturnNull()
+    {
+        var executor = StubGitCommandExecutor.Seeded(
+            StubGitCommandExecutor.Success("/repo"),
+            StubGitCommandExecutor.Failure(),
+            StubGitCommandExecutor.Success("headsha"),
+            StubGitCommandExecutor.Success(DiffText),
+            StubGitCommandExecutor.Failure("fatal: not a git repository"));
+        var provider = new GitDiffContextProvider(executor);
+
+        var result = await provider.ResolveAsync(new GitDiffOptions { IncludeUntracked = true }, [Root("/repo")]);
+
+        result.Should().BeNull();
     }
 
     [Fact]

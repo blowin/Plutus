@@ -92,6 +92,46 @@ public class ChangedFileMapperTests
         result.FileGroups.Should().HaveCount(2);
     }
 
+    [Fact]
+    public void Resolve_WithUntrackedFiles_ShouldMapThemToTheOwningRoot()
+    {
+        var diff = CreateContext(File("src/Core.cs")) with { UntrackedFiles = ["src/New.cs", "tests/NewTests.cs"] };
+
+        var result = new ChangedFileMapper(RepositoryRoot()).Resolve(diff, [Root("/repo/src")]);
+
+        result.UntrackedPathsFor("/repo/src").Should().Equal("New.cs");
+        result.UntrackedFiles.Should().Equal("New.cs");
+    }
+
+    [Fact]
+    public void Resolve_WhenAnUntrackedFileIsOutsideTheRoot_ShouldDropIt()
+    {
+        var diff = CreateContext() with { UntrackedFiles = ["docs/notes.md"] };
+
+        var result = new ChangedFileMapper(RepositoryRoot()).Resolve(diff, [Root("/repo/src")]);
+
+        result.UntrackedFiles.Should().BeEmpty();
+        result.UntrackedPathsFor("/repo/src").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Resolve_WithoutUntrackedFiles_ShouldLeaveTheUntrackedViewEmpty()
+    {
+        var result = Map(RepositoryRoot(), [Root("/repo")], File("src/Core.cs"));
+
+        result.UntrackedFiles.Should().BeEmpty();
+        result.UntrackedPathsFor("/repo").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Resolve_WhenRootIsUnknown_ShouldReportNoPathsForThatRoot()
+    {
+        var result = Map(RepositoryRoot(), [Root("/repo/src")], File("src/Core.cs"));
+
+        result.PathsFor("/repo/other").Should().BeEmpty();
+        result.UntrackedPathsFor("/repo/other").Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("/repo", true)]
     [InlineData("/repo/", true)]

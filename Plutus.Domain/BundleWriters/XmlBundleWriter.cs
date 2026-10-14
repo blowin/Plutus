@@ -86,7 +86,7 @@ public class XmlBundleWriter(
                 await xmlWriter.WriteAttributeStringAsync(null, "skipped", null, "true");
                 await xmlWriter.WriteAttributeStringAsync(null, "reason", null, file.SkipReason);
             }
-            else
+            else if (IncludeFileContents)
             {
                 await xmlWriter.WriteStartElementAsync(null, "Content", null);
                 await xmlWriter.WriteCDataAsync(file.Content ?? string.Empty);
@@ -119,10 +119,24 @@ public class XmlBundleWriter(
             await writer.WriteEndElementAsync();
         }
 
+        foreach (var path in gitDiff.UntrackedFiles)
+        {
+            await writer.WriteStartElementAsync(null, "UntrackedFile", null);
+            await writer.WriteAttributeStringAsync(null, "path", null, path);
+            await writer.WriteEndElementAsync();
+        }
+
         // Escaped text rather than CDATA, because a diff payload may itself contain the CDATA terminator.
         await writer.WriteStartElementAsync(null, "RawDiff", null);
         await writer.WriteStringAsync(gitDiff.RawText);
         await writer.WriteEndElementAsync();
+
+        if (!string.IsNullOrWhiteSpace(gitDiff.UntrackedRawText))
+        {
+            await writer.WriteStartElementAsync(null, "UntrackedDiff", null);
+            await writer.WriteStringAsync(gitDiff.UntrackedRawText);
+            await writer.WriteEndElementAsync();
+        }
 
         await writer.WriteEndElementAsync();
     }

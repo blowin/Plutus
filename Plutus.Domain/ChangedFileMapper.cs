@@ -23,13 +23,14 @@ public sealed class ChangedFileMapper(string repositoryRoot, bool ignorePathCase
         foreach (var root in roots)
         {
             var rootPath = string.IsNullOrEmpty(root.PhysicalPath) ? root.Name : root.PhysicalPath;
-            groups.Add(new DiffFileGroup(rootPath, Relativize(diff.Files, rootPath)));
+            groups.Add(new DiffFileGroup(rootPath, Relativize(diff.Files, rootPath), RelativizePaths(diff.UntrackedFiles, rootPath)));
         }
 
-        // The flat list is the union of the groups, so both views always agree.
+        // The flat lists are the union of the groups, so both views always agree.
         return diff with
         {
             Files = groups.SelectMany(group => group.Files).ToArray(),
+            UntrackedFiles = groups.SelectMany(group => group.UntrackedPaths).ToArray(),
             FileGroups = groups
         };
     }
@@ -47,26 +48,50 @@ public sealed class ChangedFileMapper(string repositoryRoot, bool ignorePathCase
     /// <summary>
     /// Git reports paths relative to the repository root, so each path is anchored there first and the root
     /// prefix is stripped. A root that is the repository itself keeps the path unchanged, a nested root
-    /// removes only its own prefix, and a file outside the root is dropped.
+    /// removes only its own prefix, and a path outside the root is dropped.
     /// </summary>
     private IReadOnlyList<ChangedFile> Relativize(IReadOnlyList<ChangedFile> files, string rootPath)
     {
-        var comparison = ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var rootPrefix = VcsPathNormalizer.RootPrefix(rootPath);
-
         var relative = new List<ChangedFile>(files.Count);
         foreach (var file in files)
         {
-            var anchored = VcsPathNormalizer.Anchor(repositoryRoot, file.Path);
-            if (!anchored.StartsWith(rootPrefix, comparison))
+            if (TryRelativize(file.Path, rootPath, out var relativePath))
             {
-                continue;
+                relative.Add(file with { Path = relativePath });
             }
-
-            // The prefix is used only for matching; slicing the original keeps the path casing intact.
-            relative.Add(file with { Path = anchored[rootPrefix.Length..] });
         }
 
         return relative;
+    }
+
+    private IReadOnlyList<string> RelativizePaths(IReadOnlyList<string> paths, string rootPath)
+    {
+        var relative = new List<string>(paths.Count);
+        foreach (var path in paths)
+        {
+            if (TryRelativize(path, rootPath, out var relativePath))
+            {
+                relative.Add(relativePath);
+            }
+        }
+
+        return relative;
+    }
+
+    private bool TryRelativize(string repositoryRelativePath, string rootPath, out string relativePath)
+    {
+        relativePath = string.Empty;
+
+        var comparison = ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var rootPrefix = VcsPathNormalizer.RootPrefix(rootPath);
+        var anchored = VcsPathNormalizer.Anchor(repositoryRoot, repositoryRelativePath);
+        if (!anchored.StartsWith(rootPrefix, comparison))
+        {
+            return false;
+        }
+
+        // The prefix is used only for matching; slicing the original keeps the path casing intact.
+        relativePath = anchored[rootPrefix.Length..];
+        return true;
     }
 }

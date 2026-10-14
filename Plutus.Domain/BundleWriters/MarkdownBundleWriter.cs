@@ -39,7 +39,11 @@ public class MarkdownBundleWriter(
         }
         writer.WriteLine($"- Output: `{output.PhysicalPath!}`");
         writer.WriteLine($"- Files included: `{includedFiles.Count}`");
-        writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
+        if (IncludeFileContents)
+        {
+            writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
+        }
+
         writer.WriteLine($"- Max file size: `{maxFileSize}`");
         if (tokenBudgetSummary is { } tokenSummary)
         {
@@ -48,16 +52,37 @@ public class MarkdownBundleWriter(
         }
         writer.WriteLine();
 
-        writer.WriteLine("## File List");
+        writer.WriteLine(IncludeFileContents ? "## File List" : "## Changed Files");
         writer.WriteLine();
         writer.WriteLine("```text");
         foreach (var entry in files)
         {
             var tokenSuffix = entry.EstimatedTokens.HasValue ? $"; ~{entry.EstimatedTokens.Value} tokens" : string.Empty;
-            writer.WriteLine($"{entry.Entry.RelativePath} [{entry.Entry.File.Length.HumanSize()}{tokenSuffix}]");
+            writer.WriteLine(IncludeFileContents
+                ? $"{entry.Entry.RelativePath} [{entry.Entry.File.Length.HumanSize()}{tokenSuffix}]"
+                : entry.Entry.RelativePath);
         }
         writer.WriteLine("```");
 
+        if (IncludeFileContents)
+        {
+            WriteDirectoryTree(writer, roots);
+            await WriteFileContentsAsync(writer, files, maxFileSize).ConfigureAwait(false);
+        }
+
+        if (gitDiff is not null)
+        {
+            writer.WriteLine();
+            writer.WriteLine("---");
+            writer.WriteLine();
+            writer.Write(BundleDiff.RenderSection(gitDiff, "Bundle scope is limited to"));
+        }
+    }
+
+    private static void WriteDirectoryTree(
+        TextWriter writer,
+        List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots)
+    {
         writer.WriteLine();
         writer.WriteLine("## Directory Tree");
 
@@ -72,14 +97,16 @@ public class MarkdownBundleWriter(
             }
             writer.WriteLine("```");
         }
+    }
 
+    private async Task WriteFileContentsAsync(TextWriter writer, List<ProcessedFileContext> files, FileSize maxFileSize)
+    {
         foreach (var entry in files)
         {
             if (entry.Entry.File.Length > maxFileSize || entry.IsSkipped)
             {
                 continue;
             }
-
 
             writer.WriteLine();
             writer.WriteLine("---");
@@ -98,14 +125,6 @@ public class MarkdownBundleWriter(
             }
 
             writer.WriteLine(fence);
-        }
-
-        if (gitDiff is not null)
-        {
-            writer.WriteLine();
-            writer.WriteLine("---");
-            writer.WriteLine();
-            writer.Write(BundleDiff.RenderSection(gitDiff, "Bundle scope is limited to"));
         }
     }
 

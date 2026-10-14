@@ -29,8 +29,9 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | `--include-files <pattern...>` | None | Inverted filter: when set, only files matching the include patterns are retained. |
 | `--include-dirs <pattern...>` | None | Inverted filter for directory/module paths. |
 | `--allow-dangerous-files` | Off | Allow files normally excluded because their names/extensions look sensitive, such as `.env` or private-key files. Use only when intentional. |
-| `--diff-only` | Off | Restrict the bundle to files changed between distinct commits. The working tree is compared with `HEAD`, or with `--diff-from` when that is given. A raw `.diff` section is appended. |
-| `--diff-from <ref>` | None | Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics so uncommitted work is included. Implies `--diff-only`. Cannot be combined with `--branch` or `--commit`. |
+| `--diff-only` | Off | Emit the change itself rather than the source. The bundle keeps its header, the list of changed paths and the raw `.diff`, and **omits all file contents** (and the directory tree). The working tree is compared with `HEAD`. |
+| `--diff-from <ref>` | None | Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and **keep their contents**. Cannot be combined with `--branch` or `--commit`. |
+| `--diff-include-untracked` | Off | With `--diff-only` or `--diff-from`, also cover files git does not track yet, excluding anything `.gitignore` already covers. A real new-file diff is generated for them. |
 | `--branch <name>` | Provider default | Remote branch or tag to download. Cannot be combined with `--commit`. |
 | `--commit <hash>` | Provider default | Specific remote commit hash, 7–40 hexadecimal characters. Cannot be combined with `--branch`. |
 
@@ -89,14 +90,28 @@ dotnet run --project Plutus.CLI -- ./src --format xml -o ./artifacts/context.xml
 ### Bundle only what changed
 
 ```bash
-dotnet run --project Plutus.CLI -- . --diff-only -o ./artifacts/working-tree-review.md
-dotnet run --project Plutus.CLI -- . --diff-from main -o ./artifacts/branch-review.md
-dotnet run --project Plutus.CLI -- . --diff-only --format json -o ./artifacts/working-tree-review.json
+dotnet run --project Plutus.CLI -- . --diff-only -o ./artifacts/change-review.md
+dotnet run --project Plutus.CLI -- . --diff-only --diff-include-untracked -o ./artifacts/change-review-full.md
+dotnet run --project Plutus.CLI -- . --diff-from main -o ./artifacts/branch-context.md
+dotnet run --project Plutus.CLI -- . --diff-only --format json -o ./artifacts/change-review.json
 ```
 
-`--diff-only` compares the working tree with `HEAD`, so uncommitted and staged work is included. `--diff-from <ref>` compares the merge base of `<ref>` and `HEAD` with the working tree, so both the commits made on the branch and any uncommitted work are included. Both flags require a local git repository, and every project path must live inside it.
+The two flags answer different questions:
 
-A diff scoped run keeps each changed file's contents and appends a `## Changes against <ref>` section containing the raw `.diff` text. Directories that contain no changed file are marked as ignored, so unchanged modules stay out of the file list. Files that are excluded for other reasons — `.gitignore` rules, sensitive-file protection, `--max-file-size`, or token-budget selection — remain excluded. Deleted files are listed in the raw diff but have no content to embed.
+| | Scope | File contents | Use when |
+|---|---|---|---|
+| `--diff-only` | working tree vs `HEAD` | **omitted** | You want to read the change itself: a diff to review, not the surrounding source. |
+| `--diff-from <ref>` | merge base of `<ref>` and `HEAD`, vs working tree | included | You want the changed files **with** their full contents as context, e.g. to hand a branch to a model. |
+
+Both require a local git repository, and every project path must live inside it. Directories that contain no changed file are marked as ignored, so unchanged modules stay out of the file list.
+
+A `--diff-only` bundle contains the header, a `## Changed Files` list of paths (no sizes, no per-file blocks) and a `## Changes against <ref>` section with the raw `.diff`. Nothing else — the artifact is the change.
+
+A `--diff-from` bundle additionally embeds the content of every changed file, plus the directory tree and the per-file blocks, and ends with the same `## Changes against <ref>` section.
+
+Only tracked content is visible to `git diff`, so by default a file that was never `git add`ed is **not** part of the diff scope. Add `--diff-include-untracked` to cover it: the paths are listed in a "New files git does not track yet" block and a real new-file diff is generated for each one (`git diff --no-index`), appended to the diff section. `.gitignore`d files are still excluded, and `--exclude`/`--include` filters, sensitive-file protection, `--max-file-size` and the token budget continue to apply.
+
+The raw diff always covers the whole repository, not just the bundle root, so it remains the complete narrative of the change — deletions included.
 
 ## Filtering notes
 

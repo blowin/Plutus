@@ -18,11 +18,6 @@ public sealed class DiffPathSet
 
     public int Count => _filePaths.Count;
 
-    /// <summary>An empty selection that excludes every path, used when a diff reported no changes.</summary>
-    public static DiffPathSet Empty { get; } = new(
-        new HashSet<string>(StringComparer.Ordinal),
-        new HashSet<string>(StringComparer.Ordinal));
-
     public static DiffPathSet Create(IEnumerable<string> paths, StringComparer comparison)
     {
         ArgumentNullException.ThrowIfNull(paths);

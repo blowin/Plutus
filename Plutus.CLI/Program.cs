@@ -182,12 +182,12 @@ public static class Program
 
         var diffOnlyOption = new Option<bool>("--diff-only")
         {
-            Description = "Bundle only the files that changed between distinct commits: the working tree is compared with HEAD, or with --diff-from when that is given. A raw .diff section is appended."
+            Description = "Emit the change itself instead of the source: the bundle keeps its header, the list of changed paths and the raw .diff, and omits all file contents. A raw .diff section is appended."
         };
 
         var diffFromOption = new Option<string?>("--diff-from")
         {
-            Description = "Bundle only the files changed relative to this branch, tag, or commit, using merge-base semantics (<target>...), so uncommitted work is included. Implies --diff-only. Cannot be combined with --branch or --commit.",
+            Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Cannot be combined with --branch or --commit.",
             Validators =
             {
                 result =>
@@ -199,6 +199,11 @@ public static class Program
                     }
                 }
             }
+        };
+
+        var diffIncludeUntrackedOption = new Option<bool>("--diff-include-untracked")
+        {
+            Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
         };
 
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
@@ -225,6 +230,7 @@ public static class Program
             tokenSelectionStrategyOption,
             diffOnlyOption,
             diffFromOption,
+            diffIncludeUntrackedOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -235,6 +241,7 @@ public static class Program
             var maxTokens = parseResult.GetValue(maxTokensOption);
             var diffOnly = parseResult.GetValue(diffOnlyOption);
             var diffFrom = parseResult.GetValue(diffFromOption);
+            var diffIncludeUntracked = parseResult.GetValue(diffIncludeUntrackedOption);
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
@@ -285,8 +292,13 @@ public static class Program
                         parseResult.GetValue(tokenSelectionStrategyOption)!)
                     : null,
                 Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
-                    ? new GitDiffOptions { Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom }
+                    ? new GitDiffOptions
+                    {
+                        Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom,
+                        IncludeUntracked = diffIncludeUntracked
+                    }
                     : null,
+                IncludeFileContents = !diffOnly,
             };
 
             try

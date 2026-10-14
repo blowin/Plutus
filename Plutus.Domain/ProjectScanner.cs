@@ -6,6 +6,10 @@ namespace Plutus.Domain;
 
 public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgnoreMatcher ignoreMatcher)
 {
+    /// <summary>
+    /// When <paramref name="diffPaths"/> is supplied, the scan is restricted to it. A supplied but empty
+    /// selection therefore includes nothing, which is what a diff with no changes has to mean.
+    /// </summary>
     public ProjectNode Scan(IFileProvider fileProvider, string rootName, string outputPhysicalPath, FileSize maxFileSize, DiffPathSet? diffPaths = null)
     {
         var rootNode = new ProjectNode
@@ -13,7 +17,7 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
             Name = rootName + "/",
             RelativePath = "",
             IsDirectory = true,
-            Status = NodeStatus.Included
+            Status = diffPaths is null || diffPaths.Count > 0 ? NodeStatus.Included : NodeStatus.IgnoredDirectory
         };
 
         BuildTree(fileProvider, "", rootNode, outputPhysicalPath, maxFileSize, diffPaths);
@@ -22,6 +26,12 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
 
     private void BuildTree(IFileProvider fileProvider, string subPath, ProjectNode parentNode, string outputPhysicalPath, FileSize maxFileSize, DiffPathSet? diffPaths)
     {
+        // An empty selection cannot admit anything, so the directory walk is skipped entirely.
+        if (diffPaths is { Count: 0 })
+        {
+            return;
+        }
+
         var contents = fileProvider.GetDirectoryContents(subPath);
         if (!contents.Exists)
         {

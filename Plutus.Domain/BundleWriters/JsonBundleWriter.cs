@@ -50,7 +50,7 @@ public class JsonBundleWriter(
                 Language = f.Language,
                 IsSkipped = f.IsSkipped,
                 SkipReason = f.SkipReason,
-                Content = f.Content,
+                Content = IncludeFileContents ? f.Content : null,
                 EstimatedTokens = f.EstimatedTokens
             }).ToList(),
             Diff = gitDiff is null
@@ -63,7 +63,9 @@ public class JsonBundleWriter(
                     {
                         RelativePath = f.Path,
                         ChangeKind = f.Kind.ToString().ToLowerInvariant()
-                    }).ToList()
+                    }).ToList(),
+                    UntrackedFiles = gitDiff.UntrackedFiles.ToList(),
+                    UntrackedDiff = gitDiff.UntrackedRawText
                 }
         };
 
@@ -123,7 +125,9 @@ public class JsonBundleWriter(
     {
         public string ComparisonBase { get; set; } = string.Empty;
         public List<JsonChangedFileModel> Files { get; set; } = [];
+        public List<string> UntrackedFiles { get; set; } = [];
         public string RawDiff { get; set; } = string.Empty;
+        public string UntrackedDiff { get; set; } = string.Empty;
     }
 
     private class JsonChangedFileModel

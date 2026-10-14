@@ -44,14 +44,14 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         foreach (var root in roots)
         {
             var provider = fileInfoDetailProvider.CreateFileProvider(root);
-            var diffPaths = gitDiff is null ? null : DiffPathSet.Create(gitDiff.PathsFor(root.PhysicalPath ?? root.Name), VcsPathComparer.Comparer);
-            var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize, diffPaths);
+            var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize, CreateDiffPaths(gitDiff, root));
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
         List<BundleEntry> allEntries;
         try
         {
+            bundleWriter.IncludeFileContents = options.IncludeFileContents;
             allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize, gitDiff).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
@@ -68,5 +68,21 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
         Console.WriteLine($"Elapsed time:   {stopwatch.Elapsed.TotalSeconds:F2}s ({stopwatch.ElapsedMilliseconds} ms)");
         return 0;
+    }
+
+    /// <summary>
+    /// Combines the diff scope and any requested untracked files into one selection, so both kinds of change
+    /// reach the bundle while everything else stays excluded.
+    /// </summary>
+    private static DiffPathSet? CreateDiffPaths(GitDiffContext? gitDiff, IFileInfo root)
+    {
+        if (gitDiff is null)
+        {
+            return null;
+        }
+
+        var rootPath = root.PhysicalPath ?? root.Name;
+        var paths = gitDiff.PathsFor(rootPath).Concat(gitDiff.UntrackedPathsFor(rootPath));
+        return DiffPathSet.Create(paths, VcsPathComparer.Comparer);
     }
 }

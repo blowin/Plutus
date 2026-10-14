@@ -37,4 +37,10 @@ public class GitDiffArgumentsTests
 
         arguments.Should().NotContain("--merge-base");
     }
+
+    [Fact]
+    public void ListUntrackedFiles_ShouldAskGitForNullSeparatedNonIgnoredFiles()
+    {
+        GitDiffArguments.ListUntrackedFiles.Should().Equal("ls-files", "-z", "--others", "--exclude-standard");
+    }
 }

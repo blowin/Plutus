@@ -56,6 +56,27 @@ public static class GitDiffParser
         return files;
     }
 
+    /// <summary>
+    /// Splits the null-terminated output of <c>git ls-files -z</c>. Null separation is used because a path
+    /// may contain spaces, quotes or newlines, and git would otherwise escape it.
+    /// </summary>
+    public static IReadOnlyList<string> ParseNullSeparatedPaths(string output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+
+        var paths = new List<string>();
+        foreach (var entry in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var path = DiffPathNormalizer.Normalize(entry);
+            if (path.Length > 0)
+            {
+                paths.Add(path);
+            }
+        }
+
+        return paths;
+    }
+
     private static void SetKind(List<ChangedFile> files, ChangeKind kind) =>
         files[^1] = files[^1] with { Kind = kind };
 

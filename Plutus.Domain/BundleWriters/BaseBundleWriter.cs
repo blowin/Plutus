@@ -16,6 +16,7 @@ public abstract class BaseBundleWriter(
 {
     public abstract string FormatExtension { get; }
     public int MaxConcurrentFileReads { get; set; } = 8;
+    public bool IncludeFileContents { get; set; } = true;
 
     protected readonly IFileInfoDetailProvider FileInfoDetailProvider = fileInfoDetailProvider;
     protected readonly IMarkdownLanguageProvider MarkdownLanguageProvider = markdownLanguageProvider;
