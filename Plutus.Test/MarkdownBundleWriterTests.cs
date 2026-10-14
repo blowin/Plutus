@@ -5,6 +5,7 @@ using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 
@@ -40,7 +41,7 @@ public class MarkdownBundleWriterTests
             .Returns(_ => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
 
         // Важно: BundleWriter сам определит язык "markdown" для расширения .md
-        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
@@ -68,7 +69,7 @@ public class MarkdownBundleWriterTests
         mockFile.CreateReadStream().Returns(e => new MemoryStream(stream.ToArray()));
         mockFile.Length.Returns(stream.Length);
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.GetEncoding(1251));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.GetEncoding(1251), new NoOpTokenBudgetApplier());
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
@@ -80,14 +81,14 @@ public class MarkdownBundleWriterTests
     }
 
     [Fact]
-    public async Task WriteAsync_WhenFileIsOversized_ShouldWriteSkippedMarker()
+    public async Task WriteAsync_WhenFileIsOversized_ShouldMarkTreeAndOmitContent()
     {
         // Arrange
         var mockFile = Substitute.For<IFileInfo>();
         mockFile.Name.Returns("big_file.txt");
         mockFile.Length.Returns(5000); // Размер 5000 байт
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
         var roots = CreateSingleFileRoot("big_file.txt", mockFile);
 
         // Act
@@ -96,7 +97,10 @@ public class MarkdownBundleWriterTests
 
         // Assert
         var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());
-        resultText.Should().Contain("[skipped: file is larger than max-file-size");
+        resultText.Should().Contain("big_file.txt [4.9 KB]");
+        resultText.Should().Contain("big_file.txt [LARGE 4.9 KB]");
+        resultText.Should().NotContain("## FILE: `big_file.txt`");
+        roots[0].Item4.Status.Should().Be(NodeStatus.OversizedFile);
         mockFile.DidNotReceive().CreateReadStream(); // Контент вообще не должен считываться
     }
 

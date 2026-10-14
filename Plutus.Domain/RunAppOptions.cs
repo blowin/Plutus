@@ -1,4 +1,5 @@
 using System.Text;
+using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
 
@@ -21,4 +22,5 @@ public record RunAppOptions
     public required string Format { get; init; }
     public required string? Branch { get; init; }
     public required string? Commit { get; init; }
+    public TokenBudgetOptions? TokenBudget { get; init; }
 }

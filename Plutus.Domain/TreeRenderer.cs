@@ -4,7 +4,8 @@ public class TreeRenderer
 {
     public List<string> RenderTree(ProjectNode rootNode)
     {
-        var lines = new List<string> { rootNode.Name };
+        var rootLabel = rootNode.IsDirectory ? rootNode.Name : rootNode.Name + GetNodeMarker(rootNode);
+        var lines = new List<string> { rootLabel };
         WalkNodes(rootNode, "", lines);
         return lines;
     }
@@ -18,21 +19,22 @@ public class TreeRenderer
             var branch = isLast ? "└── " : "├── ";
             var nextPrefix = prefix + (isLast ? "    " : "│   ");
 
-            var marker = child.Status switch
-            {
-                NodeStatus.IgnoredDirectory => " [IGNORED DIR]/",
-                NodeStatus.IgnoredFile => " [IGNORED FILE]",
-                NodeStatus.OversizedFile => $" [LARGE {child.FileInfo!.Length.HumanSize()}]",
-                _ => child.IsDirectory ? "/" : $" [{child.FileInfo!.Length.HumanSize()}]"
-            };
+            lines.Add($"{prefix}{branch}{child.Name}{GetNodeMarker(child)}");
 
-            lines.Add($"{prefix}{branch}{child.Name}{marker}");
-
-            if (child.IsDirectory && child.Status == NodeStatus.Included)
+            if (child is { IsDirectory: true, Status: NodeStatus.Included })
             {
                 WalkNodes(child, nextPrefix, lines);
             }
         }
     }
-}
 
+    private static string GetNodeMarker(ProjectNode node) => node.Status switch
+    {
+        NodeStatus.IgnoredDirectory => " [IGNORED DIR]/",
+        NodeStatus.IgnoredFile => " [IGNORED FILE]",
+        NodeStatus.OversizedFile => $" [LARGE {node.FileInfo!.Length.HumanSize()}]",
+        NodeStatus.SkippedFile => " [SKIPPED]",
+        NodeStatus.TokenBudgetOmitted => " [OMITTED BY BUDGET]",
+        _ => node.IsDirectory ? "/" : $" [{node.FileInfo!.Length.HumanSize()}]"
+    };
+}

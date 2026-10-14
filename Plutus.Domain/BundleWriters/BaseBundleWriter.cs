@@ -1,6 +1,8 @@
 using System.Text;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Domain.BundleWriters;
 
@@ -8,7 +10,8 @@ public abstract class BaseBundleWriter(
     IFileInfoDetailProvider fileInfoDetailProvider,
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
-    Encoding encoding) : IBundleWriter
+    Encoding encoding,
+    ITokenBudgetApplier tokenBudgetApplier) : IBundleWriter
 {
     public abstract string FormatExtension { get; }
     public int MaxConcurrentFileReads { get; set; } = 8;
@@ -25,24 +28,76 @@ public abstract class BaseBundleWriter(
     {
         FileInfoDetailProvider.CreateDirectoryForFile(output);
 
-        var entries = roots.SelectMany(e => e.ProjectNode.ExtractBundleEntries()).ToList();
-        entries.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
+        var entries = roots.SelectMany(e => e.ProjectNode.ExtractBundleEntries())
+            .OrderBy(e => e.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.RelativePath, StringComparer.Ordinal)
+            .ToList();
 
         using var semaphore = new SemaphoreSlim(MaxConcurrentFileReads);
+
         // ReSharper disable once AccessToDisposedClosure
         var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e, maxFileSize));
-        var processedFiles = await Task.WhenAll(processingTasks).ConfigureAwait(false);
+        var processedFiles = (await Task.WhenAll(processingTasks).ConfigureAwait(false)).ToList();
 
-        await WriteContentAsync(roots, output, processedFiles.ToList(), maxFileSize).ConfigureAwait(false);
+        var tokenBudgetResult = tokenBudgetApplier.Apply(processedFiles);
+        var tokenBudgetOmittedPaths = tokenBudgetResult.Files
+            .Where(f => f.IsTokenBudgetOmitted)
+            .Select(f => f.Entry.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
+        var skippedPaths = tokenBudgetResult.Files
+            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && f.Entry.File.Length <= maxFileSize)
+            .Select(f => f.Entry.RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
 
+        foreach (var root in roots)
+        {
+            ApplyFileStatuses(root.ProjectNode, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
+        }
+
+        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary).ConfigureAwait(false);
         return entries;
     }
 
-    protected abstract Task WriteContentAsync(
-        List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
+    protected abstract Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize);
+        FileSize maxFileSize,
+        TokenBudgetSummary? tokenBudgetSummary);
+
+    private static void ApplyFileStatuses(
+        ProjectNode node,
+        FileSize maxFileSize,
+        HashSet<string> tokenBudgetOmittedPaths,
+        HashSet<string> skippedPaths)
+    {
+        if (!node.IsDirectory)
+        {
+            if (node.Status != NodeStatus.Included)
+            {
+                return;
+            }
+
+            if (node.FileInfo is { } file && file.Length > maxFileSize)
+            {
+                node.Status = NodeStatus.OversizedFile;
+            }
+            else if (tokenBudgetOmittedPaths.Contains(node.RelativePath))
+            {
+                node.Status = NodeStatus.TokenBudgetOmitted;
+            }
+            else if (skippedPaths.Contains(node.RelativePath))
+            {
+                node.Status = NodeStatus.SkippedFile;
+            }
+
+            return;
+        }
+
+        foreach (var child in node.Children)
+        {
+            ApplyFileStatuses(child, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
+        }
+    }
 
     private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry, FileSize maxFileSize)
     {
@@ -63,7 +118,7 @@ public abstract class BaseBundleWriter(
             }
 
             var minifiedContent = CodeMinifier.Minify(content, language);
-            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent);
+            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, tokenBudgetApplier.IsEnabled ? TokenEstimator.Estimate(minifiedContent) : null);
         }
         finally
         {
@@ -111,17 +166,4 @@ public abstract class BaseBundleWriter(
         }
     }
 
-    protected record ProcessedFileContext(
-        BundleEntry Entry,
-        string Language,
-        string? Content,
-        bool IsSkipped,
-        string? SkipReason)
-    {
-        public static ProcessedFileContext CreateSuccess(BundleEntry entry, string lang, string content) =>
-            new(entry, lang, content, false, null);
-
-        public static ProcessedFileContext CreateSkipped(BundleEntry entry, string lang, string reason) =>
-            new(entry, lang, null, true, reason);
-    }
 }

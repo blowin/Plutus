@@ -5,6 +5,7 @@ using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 
@@ -25,7 +26,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8);
+        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
 
         var fileInfoOutput = new TestFileInfo
         {
@@ -39,7 +40,7 @@ public class BundleWriterBinaryTests
             (new NullFileProvider(), string.Empty, string.Empty, new ProjectNode
             {
                 Name = "image.png",
-                RelativePath = "",
+                RelativePath = "image.png",
                 IsDirectory = false,
                 Status = NodeStatus.Included,
                 FileInfo = mockFile
@@ -47,7 +48,7 @@ public class BundleWriterBinaryTests
         };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, maxFileSize: FileSize.FromBytes(1024));
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, FileSize.FromBytes(1024));
 
         // Assert
         await action.Should().NotThrowAsync();
@@ -55,7 +56,10 @@ public class BundleWriterBinaryTests
         await using var stream = fileInfoOutput.CreateReadStream();
         using var reader = new StreamReader(stream);
         var resultText = await reader.ReadToEndAsync();
-        resultText.Should().Contain("[skipped: binary file]");
+        resultText.Should().Contain("image.png [20 B]");
+        resultText.Should().Contain("image.png [SKIPPED]");
+        resultText.Should().NotContain("## FILE: `image.png`");
+        roots[0].Item4.Status.Should().Be(NodeStatus.SkippedFile);
     }
 
     private sealed class TestFileInfo : IFileInfo

@@ -3,6 +3,7 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Tokens.Applier;
 using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.Infrastructure;
@@ -53,6 +54,9 @@ public static class ServiceCollectionExt
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
         services.AddSingleton(options);
+        services.AddSingleton<ITokenBudgetApplier>(_ => options.TokenBudget is null
+            ? new NoOpTokenBudgetApplier()
+            : new TokenBudgetApplier(options.TokenBudget));
         services.AddSingleton(options.TargetEncoding);
 
         services.AddSingleton<ICodeMinifier>(provider =>
