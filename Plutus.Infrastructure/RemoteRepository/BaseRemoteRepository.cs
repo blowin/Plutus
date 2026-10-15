@@ -1,12 +1,43 @@
-using System.IO.Compression;
 using Plutus.Domain;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepository, IDisposable
+/// <summary>
+/// Shared behavior for the platform-specific remote repositories: it downloads the archive a platform builds for a
+/// branch or commit, and hands it to <see cref="SecureArchiveExtractor"/> rather than to the framework's
+/// <c>ZipFile.ExtractToDirectory</c>.
+/// <para>
+/// A remote archive is untrusted input: its entry names are attacker-controlled and its declared sizes are claims.
+/// Extraction therefore happens only through the hardened path, and every temporary file and directory this class
+/// creates is removed on success, on every failure, and on cancellation.
+/// </para>
+/// </summary>
+public abstract class BaseRemoteRepository : IRemoteRepository, IDisposable
 {
+    /// <summary>22 bytes is the smallest possible ZIP end-of-central-directory record.</summary>
+    private const int MinimumZipLength = 22;
+
+    /// <summary>Where the download is streamed before it is validated and extracted.</summary>
+    private const string TempFilePrefix = "plutus_remote_download_";
+
+    /// <summary>Where an archive is extracted.</summary>
+    internal const string TempDirectoryPrefix = "plutus_remote_";
+
     private readonly List<string> _tempDirectories = [];
-    protected readonly HttpClient HttpClient = client;
+    private readonly SecureArchiveExtractor _extractor;
+    private bool _disposed;
+
+    protected readonly HttpClient HttpClient;
+
+    /// <param name="client">The HTTP client archive downloads use.</param>
+    /// <param name="extractionLimits">The limits extraction enforces; defaults to <see cref="ArchiveExtractionLimits.Default"/>.</param>
+    protected BaseRemoteRepository(HttpClient client, ArchiveExtractionLimits? extractionLimits = null)
+    {
+        HttpClient = client;
+        _extractor = extractionLimits is null
+            ? SecureArchiveExtractor.Default
+            : new SecureArchiveExtractor(extractionLimits);
+    }
 
     public abstract bool IsSupportedPath(string path);
 
@@ -45,14 +76,7 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
 
         if (treeIndex >= 0)
         {
-            if (segments[treeIndex].Equals("-", StringComparison.OrdinalIgnoreCase))
-            {
-                segments = segments.Take(treeIndex).ToList();
-            }
-            else
-            {
-                segments = segments.Take(treeIndex).ToList();
-            }
+            segments = segments.Take(treeIndex).ToList();
         }
 
         if (segments.Count > 0 && segments[^1].EndsWith(".git", StringComparison.OrdinalIgnoreCase))
@@ -66,7 +90,11 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
     protected static string EscapeRef(string value) =>
         string.Join("/", value.Split('/').Select(Uri.EscapeDataString));
 
-    public async ValueTask<string> DownloadAsync(string path, string? branch = null, string? commit = null)
+    public async ValueTask<string> DownloadAsync(
+        string path,
+        string? branch = null,
+        string? commit = null,
+        CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
         {
@@ -75,39 +103,28 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
 
         string zipUrl = BuildZipUrl(path, branch, commit);
 
-        var tempZip = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
-        var targetDir = Path.Combine(Path.GetTempPath(), $"plutus_remote_{Guid.NewGuid()}");
+        var limits = _extractor.Limits;
+        var tempZip = Path.Combine(Path.GetTempPath(), $"{TempFilePrefix}{Guid.NewGuid():N}.zip");
+        var targetDir = Path.Combine(Path.GetTempPath(), $"{TempDirectoryPrefix}{Guid.NewGuid():N}");
 
         try
         {
-            using (var response = await HttpClient.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
-            {
-                response.EnsureSuccessStatusCode();
+            await DownloadToFileAsync(zipUrl, tempZip, limits, cancellationToken);
 
-                // CRITICAL SAFETY CHECK: If Content-Length is zero or the server didn't send zip headers
-                if (response.Content.Headers.ContentLength == 0)
-                {
-                    throw new InvalidOperationException("The remote repository returned an empty archive. It might be empty or private.");
-                }
-
-                await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fs);
-            }
-
-            // Secondary validation: Check file size on disk before extraction
-            if (new FileInfo(tempZip).Length < 22) // 22 bytes is the absolute minimum size for any valid empty ZIP
-            {
-                throw new InvalidDataException("Downloaded archive file is corrupted or empty. Verify branch name or repository access permissions.");
-            }
-
-            await ZipFile.ExtractToDirectoryAsync(tempZip, targetDir);
+            await _extractor.ExtractAsync(tempZip, targetDir, cancellationToken);
+        }
+        catch
+        {
+            // This failure path must not leave the extraction directory behind: a later run could otherwise treat a
+            // partial tree as a downloaded repository. The extractor has already removed its own partial output.
+            SecureArchiveExtractor.DeleteDirectoryIfExists(targetDir);
+            throw;
         }
         finally
         {
-            if (File.Exists(tempZip))
-            {
-                File.Delete(tempZip);
-            }
+            // Runs for success, failure and cancellation alike. The download is always ours, and is never the returned
+            // value, so it never outlives this call.
+            DeleteTempFile(tempZip);
         }
 
         _tempDirectories.Add(targetDir);
@@ -115,6 +132,66 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
         // Common logic for GitHub/GitLab: they archive the root into a subfolder like: "user-repo-hash"
         var subDirs = Directory.GetDirectories(targetDir);
         return subDirs.Length > 0 ? subDirs[0] : targetDir;
+    }
+
+    /// <summary>
+    /// Streams the archive to a file, refusing anything larger than the download limit. The limit is enforced while
+    /// copying rather than from <c>Content-Length</c>, because a server may understate it or send a chunked response.
+    /// </summary>
+    private async Task DownloadToFileAsync(
+        string zipUrl,
+        string tempZip,
+        ArchiveExtractionLimits limits,
+        CancellationToken cancellationToken)
+    {
+        using var response = await HttpClient.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        // A zero-length body is a definitive "nothing to extract", and saying so is more useful than a generic
+        // malformed-archive message.
+        if (response.Content.Headers.ContentLength == 0)
+        {
+            throw new InvalidOperationException("The remote repository returned an empty archive. It might be empty or private.");
+        }
+
+        if (response.Content.Headers.ContentLength is { } declaredLength && declaredLength > limits.MaxDownloadBytes)
+        {
+            throw new ArchiveRejectedException(
+                ArchiveRejectionReasons.DownloadSizeExceeded,
+                $"The remote archive declares {declaredLength.HumanSize()}, beyond the download limit of " +
+                $"{limits.MaxDownloadBytes.HumanSize()}.",
+                null);
+        }
+
+        await using (var file = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            var buffer = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                total += read;
+                if (total > limits.MaxDownloadBytes)
+                {
+                    throw new ArchiveRejectedException(
+                        ArchiveRejectionReasons.DownloadSizeExceeded,
+                        $"The remote archive is larger than the download limit of {limits.MaxDownloadBytes.HumanSize()}. " +
+                        "The download was stopped.",
+                        null);
+                }
+
+                await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+
+        var downloaded = new FileInfo(tempZip).Length;
+        if (downloaded < MinimumZipLength)
+        {
+            throw new InvalidDataException(
+                "Downloaded archive file is corrupted or empty. Verify branch name or repository access permissions.");
+        }
     }
 
     public string NormalizeOutputPath(string path)
@@ -135,16 +212,45 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
 
     public void Dispose()
     {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
         foreach (var dir in _tempDirectories)
         {
-            try
+            SecureArchiveExtractor.DeleteDirectoryIfExists(dir);
+        }
+
+        _tempDirectories.Clear();
+
+        if (disposing)
+        {
+            // The client is created per scope by the container and owned by it; a subclass that is handed a
+            // caller-owned client does not get to dispose it, matching the previous behavior.
+        }
+    }
+
+    private static void DeleteTempFile(string tempZip)
+    {
+        try
+        {
+            if (File.Exists(tempZip))
             {
-                Directory.Delete(dir, true);
+                File.Delete(tempZip);
             }
-            catch
-            {
-                /* ignore */
-            }
+        }
+        catch
+        {
+            // Best effort: a leftover temp file is preferable to masking the failure that caused it.
         }
     }
 }

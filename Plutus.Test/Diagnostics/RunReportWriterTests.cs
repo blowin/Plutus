@@ -227,16 +227,17 @@ public class RunReportWriterTests
     public void ConsoleRunOutput_FramesWarningsAndErrorsAndKeepsResultsOnStandardOutput()
     {
         var standard = new StringWriter();
+        var warn = new StringWriter();
         var error = new StringWriter();
-        var output = new ConsoleRunOutput(standard, error);
+        var output = new ConsoleRunOutput(standard, warn, error);
 
         output.Info("bundle written");
         output.Warning("something was skipped");
         output.Error("something failed");
 
         standard.ToString().Should().Be($"bundle written{Environment.NewLine}");
-        error.ToString().Should().Be(
-            $"Warning: something was skipped{Environment.NewLine}Error: something failed{Environment.NewLine}");
+        warn.ToString().Should().Be($"Warning: something was skipped{Environment.NewLine}");
+        error.ToString().Should().Be($"Error: something failed{Environment.NewLine}");
     }
 
     [Fact]
