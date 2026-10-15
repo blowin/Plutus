@@ -67,14 +67,15 @@ public static class BundleDiff
         builder.AppendLine();
         builder.Append("### Raw diff").AppendLine();
         builder.AppendLine();
-        builder.Append(BuildFence(combinedDiff)).Append("diff").AppendLine();
+        var fence = BuildFence(combinedDiff);
+        builder.Append(fence).Append("diff").AppendLine();
         builder.Append(combinedDiff);
-        if (!combinedDiff.EndsWith('\n'))
+        if (!combinedDiff.EndsWith(Environment.NewLine))
         {
             builder.AppendLine();
         }
 
-        builder.Append(BuildFence(combinedDiff)).AppendLine();
+        builder.Append(fence).AppendLine();
     }
 
     /// <summary>Joins the tracked diff and the generated untracked diffs into one block for a single fence.</summary>
@@ -90,7 +91,7 @@ public static class BundleDiff
             return trackedDiff;
         }
 
-        var separator = trackedDiff.EndsWith('\n') ? "\n" : "\n\n";
+        var separator = trackedDiff.EndsWith(Environment.NewLine) ? Environment.NewLine : Environment.NewLine + Environment.NewLine;
         return trackedDiff + separator + untrackedDiff;
     }
 
