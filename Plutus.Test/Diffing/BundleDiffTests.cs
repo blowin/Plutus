@@ -39,7 +39,7 @@ public class BundleDiffTests
     }
 
     [Fact]
-    public void WriteSection_WhenAChunkWasOmitted_ShouldReportTheReasonInPlace()
+    public void WriteSection_WhenAChunkWasOmitted_ShouldNotGiveItAnEmptyBlock()
     {
         var omitted = Chunk("src/Huge.cs") with { SkipReason = "omitted by token budget (10 tokens; strategy: PathOrder)" };
         var writer = CreateWriter();
@@ -47,10 +47,85 @@ public class BundleDiffTests
         BundleDiff.WriteSection(writer, Context(Chunk("src/A.cs"), omitted), "Bundle scope is limited to", includeFileContents: true);
 
         var markdown = writer.ToString();
-        markdown.Should().Contain("### DIFF: `src/Huge.cs`");
-        markdown.Should().Contain("Diff omitted: omitted by token budget (10 tokens; strategy: PathOrder)");
-        markdown.Should().NotContain("- Change: `modified`; lines: `+2/-1`; tokens: `~7`\n\n```diff\ndiff --git a/src/Huge.cs");
+
+        // An omitted change carries no diff, so it gets no block; the tree and the path list mark it instead.
+        markdown.Should().Contain("### DIFF: `src/A.cs`");
+        markdown.Should().NotContain("### DIFF: `src/Huge.cs`");
+        markdown.Should().NotContain("Diff omitted");
+        markdown.Should().NotContain("```diff\ndiff --git a/src/Huge.cs");
     }
+
+    [Fact]
+    public void MarkExcluded_ShouldMarkTheOmittedFileInTheTree()
+    {
+        var omitted = Chunk("src/Huge.cs") with { SkipReason = "file is larger than max-file-size (2.0 MB > 1.0 MB)" };
+        var root = RootNode(("src/Huge.cs", NodeStatus.Included), ("src/A.cs", NodeStatus.Included));
+
+        BundleDiff.MarkExcluded([omitted], [root]);
+
+        Child(root, "src/Huge.cs").Status.Should().Be(NodeStatus.OversizedFile);
+        Child(root, "src/A.cs").Status.Should().Be(NodeStatus.Included);
+    }
+
+    [Fact]
+    public void MarkExcluded_WhenTheBudgetOmittedTheChange_ShouldMarkItAsBudgetOmitted()
+    {
+        var omitted = Chunk("src/Huge.cs") with { SkipReason = "omitted by token budget (10 tokens; strategy: PathOrder)" };
+        var root = RootNode(("src/Huge.cs", NodeStatus.Included));
+
+        BundleDiff.MarkExcluded([omitted], [root]);
+
+        Child(root, "src/Huge.cs").Status.Should().Be(NodeStatus.TokenBudgetOmitted);
+    }
+
+    [Fact]
+    public void MarkExcluded_WithoutOmissions_ShouldLeaveTheTreeUntouched()
+    {
+        var root = RootNode(("src/A.cs", NodeStatus.Included));
+
+        BundleDiff.MarkExcluded([Chunk("src/A.cs")], [root]);
+
+        Child(root, "src/A.cs").Status.Should().Be(NodeStatus.Included);
+    }
+
+    [Fact]
+    public void DescribeExclusion_ShouldReportAMarkerOnlyForExcludedPaths()
+    {
+        var omitted = Chunk("src/Huge.cs") with { SkipReason = "file is larger than max-file-size (2.0 MB > 1.0 MB)" };
+        var chunks = new[] { Chunk("src/A.cs"), omitted };
+
+        BundleDiff.DescribeExclusion(chunks, "src/Huge.cs").Should().Be(" [LARGE]");
+        BundleDiff.DescribeExclusion(chunks, "src/A.cs").Should().BeNull();
+        BundleDiff.DescribeExclusion(chunks, "src/Unknown.cs").Should().BeNull();
+    }
+
+    private static ProjectNode RootNode(params (string Path, NodeStatus Status)[] files)
+    {
+        var root = new ProjectNode
+        {
+            Name = "Root/",
+            RelativePath = string.Empty,
+            IsDirectory = true,
+            Status = NodeStatus.Included
+        };
+
+        foreach (var (path, status) in files)
+        {
+            root.Children.Add(new ProjectNode
+            {
+                Name = Path.GetFileName(path),
+                RelativePath = path,
+                IsDirectory = false,
+                Status = status,
+                FileInfo = new TestFileInfo { Name = Path.GetFileName(path), PhysicalPath = path }
+            });
+        }
+
+        return root;
+    }
+
+    private static ProjectNode Child(ProjectNode root, string relativePath) =>
+        root.Children.Single(child => child.RelativePath == relativePath);
 
     [Fact]
     public void WriteSection_WithUntrackedChunks_ShouldAnnounceThemSeparately()

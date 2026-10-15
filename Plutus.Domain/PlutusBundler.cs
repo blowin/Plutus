@@ -48,6 +48,12 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
+        // Changes a limit left out are reported as tree markers, not as diff blocks with nothing but a reason.
+        if (gitDiff is not null)
+        {
+            BundleDiff.MarkExcluded(gitDiff.TrackedChunks.Concat(gitDiff.UntrackedChunks).ToArray(), bundleWriterEntries.ConvertAll(entry => entry.ProjectNode));
+        }
+
         List<BundleEntry> allEntries;
         try
         {

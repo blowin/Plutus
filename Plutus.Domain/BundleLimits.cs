@@ -3,8 +3,11 @@ namespace Plutus.Domain;
 /// <summary>One limitable payload: a name, its size on disk, and its token estimate.</summary>
 public sealed record BundleLimitItem(string Key, string DisplayPath, long SizeInBytes, int EstimatedTokens);
 
-/// <summary>A payload the limits excluded, with the reason the bundle reports in its place.</summary>
-public sealed record BundleLimitExclusion(string Key, string DisplayPath, string Reason);
+/// <summary>
+/// A payload the limits excluded, with the reason the bundle reports in its place and which rule produced it,
+/// so a caller can show the exclusion in its own terms instead of matching on reason text.
+/// </summary>
+public sealed record BundleLimitExclusion(string Key, string DisplayPath, string Reason, bool IsSizeLimit);
 
 /// <summary>
 /// Outcome of applying the limits: what stays, what was excluded and why, and the budget numbers.
@@ -47,7 +50,7 @@ public sealed class BundleLimits(FileSize maxFileSize, Tokens.TokenBudgetOptions
         {
             if (ExcludedBySize(item.SizeInBytes))
             {
-                exclusions.Add(new BundleLimitExclusion(item.Key, item.DisplayPath, SizeExclusionReason(item.SizeInBytes)));
+                exclusions.Add(new BundleLimitExclusion(item.Key, item.DisplayPath, SizeExclusionReason(item.SizeInBytes), IsSizeLimit: true));
                 continue;
             }
 
@@ -88,7 +91,7 @@ public sealed class BundleLimits(FileSize maxFileSize, Tokens.TokenBudgetOptions
         var selected = decision.Selected ?? new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in eligible.Where(item => !selected.Contains(item.Key)))
         {
-            exclusions.Add(new BundleLimitExclusion(item.Key, item.DisplayPath, selector.OmittedReason));
+            exclusions.Add(new BundleLimitExclusion(item.Key, item.DisplayPath, selector.OmittedReason, IsSizeLimit: false));
         }
 
         return new BundleLimitResult(

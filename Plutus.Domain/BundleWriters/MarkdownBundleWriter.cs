@@ -57,9 +57,16 @@ public class MarkdownBundleWriter(
         foreach (var entry in files)
         {
             var tokenSuffix = entry.EstimatedTokens.HasValue ? $"; ~{entry.EstimatedTokens.Value} tokens" : string.Empty;
+
+            // In diff mode the contents are absent, so the list states why a change was left out instead of
+            // giving it a diff block whose only content would be that reason.
+            var exclusion = gitDiff is null
+                ? null
+                : BundleDiff.DescribeExclusion(gitDiff.TrackedChunks.Concat(gitDiff.UntrackedChunks).ToArray(), entry.Entry.RelativePath);
+
             writer.WriteLine(IncludeFileContents
                 ? $"{entry.Entry.RelativePath} [{entry.Entry.File.Length.HumanSize()}{tokenSuffix}]"
-                : entry.Entry.RelativePath);
+                : $"{entry.Entry.RelativePath}{exclusion}");
         }
         writer.WriteLine("```");
 

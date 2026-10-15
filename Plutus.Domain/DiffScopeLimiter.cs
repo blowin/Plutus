@@ -1,7 +1,8 @@
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
-namespace Plutus.Domain.Diffing;
+namespace Plutus.Domain;
 
 /// <summary>Outcome of limiting a diff: the finished context plus the paths that were left out.</summary>
 public sealed record DiffScopeResult(
@@ -17,6 +18,12 @@ public sealed record DiffScopeResult(
 /// </summary>
 public sealed class DiffScopeLimiter(BundleLimits limits, bool ignorePathCase = true)
 {
+    /// <summary>Reason recorded on a change a size limit excluded.</summary>
+    public const string SizeExclusionReason = "file is larger than max-file-size";
+
+    /// <summary>Reason recorded on a change the token budget excluded.</summary>
+    public const string BudgetExclusionReason = "omitted by token budget";
+
     public DiffScopeResult Apply(
         string repositoryRoot,
         string comparisonBase,
@@ -51,15 +58,22 @@ public sealed class DiffScopeLimiter(BundleLimits limits, bool ignorePathCase = 
 
         var result = limits.Apply(items);
         var included = result.IncludedKeys.ToHashSet(StringComparer.Ordinal);
-        var reasons = result.Exclusions.ToDictionary(exclusion => exclusion.Key, exclusion => exclusion.Reason, StringComparer.Ordinal);
+        var statuses = result.Exclusions.ToDictionary(
+            exclusion => exclusion.Key,
+            exclusion => exclusion.IsSizeLimit ? NodeStatus.OversizedFile : NodeStatus.TokenBudgetOmitted,
+            StringComparer.Ordinal);
 
         var limited = all
             .Select(chunk => chunk with
             {
                 EstimatedTokens = TokenEstimator.Estimate(chunk.Text),
+
+                // The reason doubles as the signal behind the tree marker, so it stays short and stable.
                 SkipReason = included.Contains(chunk.RepositoryPath)
                     ? null
-                    : reasons.GetValueOrDefault(chunk.RepositoryPath, "excluded by bundle limits")
+                    : statuses.TryGetValue(chunk.RepositoryPath, out var status) && status == NodeStatus.OversizedFile
+                        ? SizeExclusionReason
+                        : BudgetExclusionReason
             })
             .ToArray();
 
