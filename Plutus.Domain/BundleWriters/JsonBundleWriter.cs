@@ -58,14 +58,8 @@ public class JsonBundleWriter(
                 : new JsonDiffModel
                 {
                     ComparisonBase = gitDiff.ComparisonBase,
-                    RawDiff = gitDiff.RawText,
-                    Files = gitDiff.Files.Select(f => new JsonChangedFileModel
-                    {
-                        RelativePath = f.Path,
-                        ChangeKind = f.Kind.ToString().ToLowerInvariant()
-                    }).ToList(),
-                    UntrackedFiles = gitDiff.UntrackedFiles.ToList(),
-                    UntrackedDiff = gitDiff.UntrackedRawText
+                    Chunks = gitDiff.TrackedChunks.Select(MapChunk).ToList(),
+                    UntrackedFiles = gitDiff.UntrackedChunks.Select(MapChunk).ToList()
                 }
         };
 
@@ -98,6 +92,18 @@ public class JsonBundleWriter(
         return folder;
     }
 
+    private static JsonDiffChunkModel MapChunk(DiffChunk chunk) => new()
+    {
+        RelativePath = chunk.Path,
+        ChangeKind = chunk.Kind.ToString().ToLowerInvariant(),
+        AddedLines = chunk.AddedLines,
+        DeletedLines = chunk.DeletedLines,
+        EstimatedTokens = chunk.EstimatedTokens,
+        IsSkipped = chunk.IsSkipped,
+        SkipReason = chunk.SkipReason,
+        Diff = chunk.IsSkipped ? null : chunk.Text
+    };
+
     private class JsonBundleModel
     {
         public BundleMetadata Metadata { get; set; } = new();
@@ -124,16 +130,20 @@ public class JsonBundleWriter(
     private class JsonDiffModel
     {
         public string ComparisonBase { get; set; } = string.Empty;
-        public List<JsonChangedFileModel> Files { get; set; } = [];
-        public List<string> UntrackedFiles { get; set; } = [];
-        public string RawDiff { get; set; } = string.Empty;
-        public string UntrackedDiff { get; set; } = string.Empty;
+        public List<JsonDiffChunkModel> Chunks { get; set; } = [];
+        public List<JsonDiffChunkModel> UntrackedFiles { get; set; } = [];
     }
 
-    private class JsonChangedFileModel
+    private class JsonDiffChunkModel
     {
         public string RelativePath { get; set; } = string.Empty;
         public string ChangeKind { get; set; } = string.Empty;
+        public int AddedLines { get; set; }
+        public int DeletedLines { get; set; }
+        public int EstimatedTokens { get; set; }
+        public bool IsSkipped { get; set; }
+        public string? SkipReason { get; set; }
+        public string? Diff { get; set; }
     }
 
     private class JsonFolderNode

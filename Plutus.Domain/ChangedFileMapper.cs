@@ -5,87 +5,94 @@ namespace Plutus.Domain;
 
 /// <summary>
 /// Translates the repository-relative paths reported by git into paths visible from each bundle root.
-/// Diff filtering, the directory tree and the raw diff section all depend on this single translation, so
-/// a bundle rooted at a subdirectory reports exactly the changes beneath it.
+/// Diff filtering, the directory tree and the diff sections all depend on this single translation, so a
+/// bundle rooted at a subdirectory reports only its own changes, with paths that match the rest of it.
 /// </summary>
 public sealed class ChangedFileMapper(string repositoryRoot, bool ignorePathCase = false)
 {
     /// <summary>
-    /// Groups the repository-relative diff by the bundle root each file belongs to and drops files that
-    /// fall outside every root.
+    /// Groups the per-file diffs by the bundle root each one belongs to and drops chunks outside every root.
+    /// Chunk paths and the paths inside the diff text are rewritten together so the two never disagree.
     /// </summary>
-    public GitDiffContext Resolve(GitDiffContext diff, IReadOnlyList<IFileInfo> roots)
+    public GitDiffContext Resolve(
+        string comparisonBase,
+        IReadOnlyList<DiffChunk> trackedChunks,
+        IReadOnlyList<DiffChunk> untrackedChunks,
+        IReadOnlyList<IFileInfo> roots)
     {
-        ArgumentNullException.ThrowIfNull(diff);
+        ArgumentNullException.ThrowIfNull(comparisonBase);
+        ArgumentNullException.ThrowIfNull(trackedChunks);
+        ArgumentNullException.ThrowIfNull(untrackedChunks);
         ArgumentNullException.ThrowIfNull(roots);
 
         var groups = new List<DiffFileGroup>(roots.Count);
         foreach (var root in roots)
         {
-            var rootPath = string.IsNullOrEmpty(root.PhysicalPath) ? root.Name : root.PhysicalPath;
-            groups.Add(new DiffFileGroup(rootPath, Relativize(diff.Files, rootPath), RelativizePaths(diff.UntrackedFiles, rootPath)));
+            var rootPath = RootPath(root);
+            groups.Add(new DiffFileGroup(
+                rootPath,
+                Relativize(trackedChunks, rootPath),
+                Relativize(untrackedChunks, rootPath)));
         }
 
-        // The flat lists are the union of the groups, so both views always agree.
-        return diff with
-        {
-            Files = groups.SelectMany(group => group.Files).ToArray(),
-            UntrackedFiles = groups.SelectMany(group => group.UntrackedPaths).ToArray(),
-            FileGroups = groups
-        };
+        return new GitDiffContext(comparisonBase) { FileGroups = groups };
     }
 
     /// <summary>Reports whether a scanned root is the repository itself or lives inside it.</summary>
     public bool IsInsideRepository(string rootPath)
     {
-        var comparison = ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var rootPrefix = VcsPathNormalizer.RootPrefix(rootPath);
         var repositoryPrefix = VcsPathNormalizer.RootPrefix(repositoryRoot);
 
-        return repositoryPrefix.StartsWith(rootPrefix, comparison) || rootPrefix.StartsWith(repositoryPrefix, comparison);
+        return repositoryPrefix.StartsWith(rootPrefix, Comparison) || rootPrefix.StartsWith(repositoryPrefix, Comparison);
+    }
+
+    /// <summary>Absolute path of a bundle root, which is also the key of its diff group.</summary>
+    public static string RootPath(IFileInfo root) => string.IsNullOrEmpty(root.PhysicalPath) ? root.Name : root.PhysicalPath;
+
+    private IReadOnlyList<DiffChunk> Relativize(IReadOnlyList<DiffChunk> chunks, string rootPath)
+    {
+        var relative = new List<DiffChunk>(chunks.Count);
+        foreach (var chunk in chunks)
+        {
+            if (TryRelativize(chunk.RepositoryPath, rootPath, out var relativePath))
+            {
+                relative.Add(chunk with { Path = relativePath, Text = RelativizeChunkText(chunk, rootPath, relativePath) });
+            }
+        }
+
+        return relative;
     }
 
     /// <summary>
-    /// Git reports paths relative to the repository root, so each path is anchored there first and the root
-    /// prefix is stripped. A root that is the repository itself keeps the path unchanged, a nested root
-    /// removes only its own prefix, and a path outside the root is dropped.
+    /// Rewrites the paths inside one chunk so the emitted patch matches the bundle root. The <c>diff --git</c>
+    /// header and the <c>---</c>/<c>+++</c> lines are covered, which keeps the diff consistent with the file
+    /// list. Text is only touched, never line separators.
     /// </summary>
-    private IReadOnlyList<ChangedFile> Relativize(IReadOnlyList<ChangedFile> files, string rootPath)
+    private string RelativizeChunkText(DiffChunk chunk, string rootPath, string relativePath)
     {
-        var relative = new List<ChangedFile>(files.Count);
-        foreach (var file in files)
+        // A root at the repository itself already sees git's own paths.
+        if (RootPrefixOf(rootPath) == RootPrefixOf(repositoryRoot))
         {
-            if (TryRelativize(file.Path, rootPath, out var relativePath))
-            {
-                relative.Add(file with { Path = relativePath });
-            }
+            return chunk.Text;
         }
 
-        return relative;
-    }
+        var from = RootPrefixOf(chunk.RepositoryPath);
+        var to = RootPrefixOf(relativePath);
 
-    private IReadOnlyList<string> RelativizePaths(IReadOnlyList<string> paths, string rootPath)
-    {
-        var relative = new List<string>(paths.Count);
-        foreach (var path in paths)
-        {
-            if (TryRelativize(path, rootPath, out var relativePath))
-            {
-                relative.Add(relativePath);
-            }
-        }
-
-        return relative;
+        // The trailing-separator form covers "diff --git a/x/y b/x/y"; the bare form covers bare path usage.
+        return chunk.Text
+            .Replace(from, to, Comparison)
+            .Replace(from.TrimEnd('/'), to.TrimEnd('/'), Comparison);
     }
 
     private bool TryRelativize(string repositoryRelativePath, string rootPath, out string relativePath)
     {
         relativePath = string.Empty;
 
-        var comparison = ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var rootPrefix = VcsPathNormalizer.RootPrefix(rootPath);
+        var rootPrefix = RootPrefixOf(rootPath);
         var anchored = VcsPathNormalizer.Anchor(repositoryRoot, repositoryRelativePath);
-        if (!anchored.StartsWith(rootPrefix, comparison))
+        if (!anchored.StartsWith(rootPrefix, Comparison))
         {
             return false;
         }
@@ -94,4 +101,8 @@ public sealed class ChangedFileMapper(string repositoryRoot, bool ignorePathCase
         relativePath = anchored[rootPrefix.Length..];
         return true;
     }
+
+    private string RootPrefixOf(string path) => VcsPathNormalizer.RootPrefix(path);
+
+    private StringComparison Comparison => ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

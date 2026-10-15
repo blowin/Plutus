@@ -8,13 +8,14 @@ namespace Plutus.Domain;
 
 public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IReadOnlyCollection<IBundleWriter> bundleWriters)
 {
-    /// <summary>Scans the bundle roots and writes the requested format, restricted to the diff subset when one was resolved.</summary>
+    /// <summary>Scans the bundle roots and writes the requested format, restricted to the diff scope when one was resolved.</summary>
     public virtual async Task<int> RunBundleAsync(
         ProjectScanner projectScanner,
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
         RunAppOptions options,
-        GitDiffContext? gitDiff = null)
+        GitDiffContext? gitDiff = null,
+        TokenBudgetSummary? diffBudgetSummary = null)
     {
         if (output.IsDirectory)
         {
@@ -52,7 +53,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         try
         {
             bundleWriter.IncludeFileContents = options.IncludeFileContents;
-            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize, gitDiff).ConfigureAwait(false);
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize, gitDiff, diffBudgetSummary).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
         {
@@ -71,8 +72,8 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
     }
 
     /// <summary>
-    /// Combines the diff scope and any requested untracked files into one selection, so both kinds of change
-    /// reach the bundle while everything else stays excluded.
+    /// Combines the tracked diff scope with any requested untracked files into one selection, so both kinds
+    /// of change reach the bundle while everything else stays excluded.
     /// </summary>
     private static DiffPathSet? CreateDiffPaths(GitDiffContext? gitDiff, IFileInfo root)
     {
@@ -81,8 +82,8 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
             return null;
         }
 
-        var rootPath = root.PhysicalPath ?? root.Name;
-        var paths = gitDiff.PathsFor(rootPath).Concat(gitDiff.UntrackedPathsFor(rootPath));
+        var rootPath = ChangedFileMapper.RootPath(root);
+        var paths = gitDiff.TrackedPathsFor(rootPath).Concat(gitDiff.UntrackedPathsFor(rootPath));
         return DiffPathSet.Create(paths);
     }
 }

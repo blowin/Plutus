@@ -27,7 +27,8 @@ public abstract class BaseBundleWriter(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         FileSize maxFileSize,
-        GitDiffContext? gitDiff = null)
+        GitDiffContext? gitDiff = null,
+        TokenBudgetSummary? diffBudgetSummary = null)
     {
         FileInfoDetailProvider.CreateDirectoryForFile(output);
 
@@ -57,7 +58,12 @@ public abstract class BaseBundleWriter(
             ApplyFileStatuses(root.ProjectNode, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
         }
 
-        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary, gitDiff).ConfigureAwait(false);
+        // A diff scope replaces the content budget with its own, because the diffs are what the bundle holds.
+        var budgetSummary = gitDiff is not null && diffBudgetSummary is not null
+            ? diffBudgetSummary
+            : tokenBudgetResult.Summary;
+
+        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, budgetSummary, gitDiff).ConfigureAwait(false);
         return entries;
     }
 

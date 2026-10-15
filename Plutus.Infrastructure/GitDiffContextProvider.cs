@@ -1,30 +1,29 @@
-using System.Text;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Tokens;
 using Plutus.Infrastructure.Git;
 
 namespace Plutus.Infrastructure;
 
 /// <summary>
-/// Discovers the changed-file subset and the raw diff text by running git. An explicit target uses
-/// merge-base semantics with the working tree as the destination; otherwise the working tree is compared
-/// with the upstream branch when one exists, falling back to <c>HEAD</c> so uncommitted work is included.
+/// Discovers the per-file diffs to bundle by running git, then hands the raw chunks to
+/// <see cref="DiffScopeLimiter"/>, which maps them onto the bundle roots and applies the limits.
 /// </summary>
+/// <remarks>
+/// Two comparisons are supported. With only a target, the merge base of that target and <c>HEAD</c> is
+/// compared with the working tree, so committed and uncommitted work are reviewed together. With a target
+/// and <see cref="GitDiffOptions.TargetTo"/>, the two revisions are compared directly, which is how a
+/// specific commit range is bundled.
+/// </remarks>
 public sealed class GitDiffContextProvider(
     IGitCommandExecutor gitCommandExecutor,
-    bool ignorePathCase = true,
-    long maxUntrackedFileDiffBytes = GitDiffContextProvider.DefaultMaxUntrackedFileDiffBytes) : IGitDiffContextProvider
+    DiffScopeLimiter diffScopeLimiter,
+    bool ignorePathCase = true) : IGitDiffContextProvider
 {
     private const string Head = "HEAD";
 
-    /// <summary>
-    /// Generated diffs carry the whole file, so a large untracked file would otherwise be inlined verbatim.
-    /// Such a file is still listed and still bundled as content; only its diff is skipped.
-    /// </summary>
-    public const long DefaultMaxUntrackedFileDiffBytes = 1024 * 1024;
-
-    public async Task<GitDiffContext?> ResolveAsync(
+    public async Task<DiffScopeResult?> ResolveAsync(
         GitDiffOptions options,
         IReadOnlyList<IFileInfo> roots,
         CancellationToken cancellationToken = default)
@@ -40,7 +39,7 @@ public sealed class GitDiffContextProvider(
 
         // Discovery starts at the bundle root, so a path outside a repository is reported as such instead of
         // silently inheriting whichever repository the process happens to run in.
-        var discoveryDirectory = RootPath(roots[0]);
+        var discoveryDirectory = ChangedFileMapper.RootPath(roots[0]);
         var repositoryRoot = await TryRunAsync(discoveryDirectory, ["rev-parse", "--show-toplevel"], cancellationToken).ConfigureAwait(false);
         if (repositoryRoot?.Succeeded != true || string.IsNullOrWhiteSpace(repositoryRoot.Value.StandardOutput))
         {
@@ -51,10 +50,10 @@ public sealed class GitDiffContextProvider(
         var workingDirectory = repositoryRoot.Value.StandardOutput;
         var mapper = new ChangedFileMapper(workingDirectory, ignorePathCase);
 
-        var outsideRoot = roots.FirstOrDefault(root => !mapper.IsInsideRepository(RootPath(root)));
+        var outsideRoot = roots.FirstOrDefault(root => !mapper.IsInsideRepository(ChangedFileMapper.RootPath(root)));
         if (outsideRoot is not null)
         {
-            await Console.Error.WriteLineAsync($"Error: Diff scoping requires every project path to be inside the git repository '{workingDirectory}'. Outside: '{RootPath(outsideRoot)}'.").ConfigureAwait(false);
+            await Console.Error.WriteLineAsync($"Error: Diff scoping requires every project path to be inside the git repository '{workingDirectory}'. Outside: '{ChangedFileMapper.RootPath(outsideRoot)}'.").ConfigureAwait(false);
             return null;
         }
 
@@ -71,79 +70,70 @@ public sealed class GitDiffContextProvider(
             return null;
         }
 
-        var context = new GitDiffContext(comparisonBase, GitDiffParser.ParseChangedFiles(diff.StandardOutput), diff.StandardOutput);
-        if (options.IncludeUntracked)
-        {
-            var untracked = await ResolveUntrackedFilesAsync(workingDirectory, cancellationToken).ConfigureAwait(false);
-            if (untracked is null)
-            {
-                return null;
-            }
+        var trackedChunks = GitDiffChunker.Split(diff.StandardOutput);
+        var untrackedChunks = options.IncludeUntracked
+            ? await ResolveUntrackedChunksAsync(workingDirectory, cancellationToken).ConfigureAwait(false)
+            : [];
 
-            context = context with
-            {
-                UntrackedFiles = untracked,
-                UntrackedRawText = await BuildUntrackedDiffsAsync(workingDirectory, untracked, cancellationToken).ConfigureAwait(false)
-            };
+        try
+        {
+            return diffScopeLimiter.Apply(
+                comparisonBase,
+                trackedChunks,
+                untrackedChunks,
+                roots,
+                path => FileSizeOf(workingDirectory, path));
         }
-
-        return mapper.Resolve(context, roots);
-    }
-
-    /// <summary>
-    /// Lists files git does not track yet, excluding anything <c>.gitignore</c> already covers. Without this
-    /// a newly created file is invisible, because <c>git diff</c> only looks at tracked content.
-    /// </summary>
-    private async Task<IReadOnlyList<string>?> ResolveUntrackedFilesAsync(string workingDirectory, CancellationToken cancellationToken)
-    {
-        var result = await TryRunAsync(workingDirectory, GitDiffArguments.ListUntrackedFiles, cancellationToken).ConfigureAwait(false);
-        if (result?.Succeeded != true)
+        catch (TokenBudgetExceededException exception)
         {
-            await Console.Error.WriteLineAsync($"Error: git ls-files failed: {result?.StandardError ?? "no output"}").ConfigureAwait(false);
+            await Console.Error.WriteLineAsync($"Error: {exception.Message}").ConfigureAwait(false);
             return null;
         }
-
-        return GitDiffParser.ParseNullSeparatedPaths(result.Value.StandardOutput);
     }
 
     /// <summary>
-    /// Builds a generated diff for each untracked file, so the structural section stays complete. A diff
-    /// that cannot be produced is skipped with a warning rather than failing the whole bundle.
+    /// Size of a file as it exists now. A path with no file behind it reports zero, because a deletion has
+    /// nothing left to weigh.
     /// </summary>
-    private async Task<string> BuildUntrackedDiffsAsync(
+    private static long FileSizeOf(string workingDirectory, string repositoryRelativePath)
+    {
+        var fullPath = Path.Combine(workingDirectory, repositoryRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        return new FileInfo(fullPath) is { Exists: true } file ? file.Length : 0;
+    }
+
+    /// <summary>
+    /// Builds one generated diff per untracked file, so an uncommitted new file is not silently invisible.
+    /// </summary>
+    private async Task<IReadOnlyList<DiffChunk>> ResolveUntrackedChunksAsync(
         string workingDirectory,
-        IReadOnlyList<string> untrackedFiles,
         CancellationToken cancellationToken)
     {
-        var builder = new StringBuilder();
-        foreach (var path in untrackedFiles)
+        var listed = await TryRunAsync(workingDirectory, GitDiffArguments.ListUntrackedFiles, cancellationToken).ConfigureAwait(false);
+        if (listed?.Succeeded != true)
         {
-            var fileDiff = await TryRunUntrackedDiffAsync(workingDirectory, path, cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(fileDiff))
-            {
-                continue;
-            }
-
-            if (builder.Length > 0 && builder[^1] != '\n')
-            {
-                builder.Append('\n');
-            }
-
-            builder.Append(fileDiff).Append('\n');
+            await Console.Error.WriteLineAsync($"Error: git ls-files failed: {listed?.StandardError ?? "no output"}").ConfigureAwait(false);
+            return [];
         }
 
-        return builder.ToString();
+        var paths = GitDiffParser.ParseNullSeparatedPaths(listed.Value.StandardOutput);
+        var chunks = new List<DiffChunk>(paths.Count);
+        foreach (var path in paths)
+        {
+            var text = await TryRunUntrackedDiffAsync(workingDirectory, path, cancellationToken).ConfigureAwait(false);
+            if (text is not null)
+            {
+                chunks.AddRange(GitDiffChunker.Split(text));
+            }
+        }
+
+        return chunks;
     }
 
-    private async Task<string?> TryRunUntrackedDiffAsync(string workingDirectory, string path, CancellationToken cancellationToken)
+    private async Task<string?> TryRunUntrackedDiffAsync(
+        string workingDirectory,
+        string path,
+        CancellationToken cancellationToken)
     {
-        var fullPath = Path.Combine(workingDirectory, path.Replace('/', Path.DirectorySeparatorChar));
-        if (new FileInfo(fullPath) is { Exists: true } file && file.Length > maxUntrackedFileDiffBytes)
-        {
-            await Console.Error.WriteLineAsync($"Warning: skipping the generated diff for untracked file '{path}' because it is larger than {maxUntrackedFileDiffBytes} bytes.").ConfigureAwait(false);
-            return null;
-        }
-
         try
         {
             var result = await RunAsync(workingDirectory, GitDiffArguments.BuildUntrackedFileDiff(path), cancellationToken).ConfigureAwait(false);
@@ -168,8 +158,8 @@ public sealed class GitDiffContextProvider(
     {
         if (!string.IsNullOrWhiteSpace(options.Target))
         {
-            // The ref itself is kept rather than the commit it points at, because merge-base semantics are
-            // evaluated by git when the diff runs.
+            // The ref itself is kept rather than the commit it points at, because the comparison semantics
+            // are evaluated by git when the diff runs.
             return options.Target;
         }
 
@@ -209,6 +199,4 @@ public sealed class GitDiffContextProvider(
 
     private Task<GitCommandResult> RunAsync(string? workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken) =>
         gitCommandExecutor.RunAsync(workingDirectory ?? Directory.GetCurrentDirectory(), arguments, cancellationToken);
-
-    private static string RootPath(IFileInfo root) => string.IsNullOrEmpty(root.PhysicalPath) ? root.Name : root.PhysicalPath;
 }

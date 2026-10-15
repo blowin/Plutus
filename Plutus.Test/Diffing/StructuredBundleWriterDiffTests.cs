@@ -14,7 +14,7 @@ namespace Plutus.Test.Diffing;
 
 public class StructuredBundleWriterDiffTests
 {
-    private const string RawDiff = "diff --git a/src/Core.cs b/src/Core.cs\n@@ -1 +1 @@\n-old\n+new";
+    private const string PatchText = "diff --git a/src/Core.cs b/src/Core.cs\n@@ -1 +1 @@\n-old\n+new";
 
     private readonly IFileInfoDetailProvider _detail = Substitute.For<IFileInfoDetailProvider>();
     private readonly IMarkdownLanguageProvider _languageProvider = Substitute.For<IMarkdownLanguageProvider>();
@@ -27,7 +27,7 @@ public class StructuredBundleWriterDiffTests
     }
 
     [Fact]
-    public async Task JsonWriter_WithDiffContext_ShouldEmitMetadataAndChangedFiles()
+    public async Task JsonWriter_WithDiffContext_ShouldEmitMetadataAndPerFileChunks()
     {
         var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
 
@@ -40,30 +40,42 @@ public class StructuredBundleWriterDiffTests
 
         var diff = root.GetProperty("Diff");
         diff.GetProperty("ComparisonBase").GetString().Should().Be("basesha");
-        diff.GetProperty("RawDiff").GetString().Should().Be(RawDiff);
 
-        var changed = diff.GetProperty("Files").EnumerateArray().Should().ContainSingle().Subject;
-        changed.GetProperty("RelativePath").GetString().Should().Be("src/Core.cs");
-        changed.GetProperty("ChangeKind").GetString().Should().Be("added");
+        var chunk = diff.GetProperty("Chunks").EnumerateArray().Should().ContainSingle().Subject;
+        chunk.GetProperty("RelativePath").GetString().Should().Be("src/Core.cs");
+        chunk.GetProperty("ChangeKind").GetString().Should().Be("added");
+        chunk.GetProperty("AddedLines").GetInt32().Should().Be(1);
+        chunk.GetProperty("DeletedLines").GetInt32().Should().Be(1);
+        chunk.GetProperty("Diff").GetString().Should().Be(PatchText);
     }
 
     [Fact]
-    public async Task JsonWriter_WithUntrackedFiles_ShouldListThemWithTheirGeneratedDiff()
+    public async Task JsonWriter_WhenAChunkWasOmitted_ShouldOmitItsPatchAndReportWhy()
+    {
+        var omitted = Chunk() with { SkipReason = "omitted by token budget (10 tokens; strategy: PathOrder)" };
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(omitted));
+
+        var chunk = ParseJson().RootElement.GetProperty("Diff").GetProperty("Chunks").EnumerateArray().Single();
+
+        chunk.GetProperty("IsSkipped").GetBoolean().Should().BeTrue();
+        chunk.GetProperty("SkipReason").GetString().Should().Contain("omitted by token budget");
+        chunk.TryGetProperty("Diff", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task JsonWriter_WithUntrackedChunks_ShouldKeepThemApartFromTrackedChunks()
     {
         var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
-        var context = CreateContext() with
-        {
-            UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
-        };
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), context);
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(untracked: [Chunk("src/New.cs")]));
 
         var diff = ParseJson().RootElement.GetProperty("Diff");
 
-        diff.GetProperty("UntrackedFiles").EnumerateArray().Select(item => item.GetString()).Should().Equal("src/New.cs");
-        diff.GetProperty("UntrackedDiff").GetString().Should().Contain("new file mode 100644");
-        diff.GetProperty("RawDiff").GetString().Should().Be(RawDiff);
+        diff.GetProperty("Chunks").EnumerateArray().Should().ContainSingle();
+        diff.GetProperty("UntrackedFiles").EnumerateArray().Should().ContainSingle()
+            .Which.GetProperty("RelativePath").GetString().Should().Be("src/New.cs");
     }
 
     [Fact]
@@ -91,11 +103,11 @@ public class StructuredBundleWriterDiffTests
 
         var root = ParseJson().RootElement;
         root.GetProperty("Files").EnumerateArray().Single().TryGetProperty("Content", out _).Should().BeFalse();
-        root.GetProperty("Diff").GetProperty("RawDiff").GetString().Should().Be(RawDiff);
+        root.GetProperty("Diff").GetProperty("Chunks").EnumerateArray().Should().ContainSingle();
     }
 
     [Fact]
-    public async Task XmlWriter_WithDiffContext_ShouldEmitMetadataAndEscapedRawDiff()
+    public async Task XmlWriter_WithDiffContext_ShouldEmitMetadataAndPerFileChunks()
     {
         var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
 
@@ -109,42 +121,52 @@ public class StructuredBundleWriterDiffTests
 
         var diff = document.Root!.Element("Diff")!;
         diff.Attribute("comparisonBase")!.Value.Should().Be("basesha");
-        diff.Element("RawDiff")!.Value.Should().Be(RawDiff);
 
-        var changed = diff.Elements("ChangedFile").Should().ContainSingle().Subject;
-        changed.Attribute("path")!.Value.Should().Be("src/Core.cs");
-        changed.Attribute("change")!.Value.Should().Be("added");
+        var chunk = diff.Elements("Chunk").Should().ContainSingle().Subject;
+        chunk.Attribute("path")!.Value.Should().Be("src/Core.cs");
+        chunk.Attribute("change")!.Value.Should().Be("added");
+        chunk.Attribute("addedLines")!.Value.Should().Be("1");
+        chunk.Element("Patch")!.Value.Should().Be(PatchText);
     }
 
     [Fact]
-    public async Task XmlWriter_WithUntrackedFiles_ShouldEmitThemWithTheirGeneratedDiff()
+    public async Task XmlWriter_WhenAChunkWasOmitted_ShouldReportTheReasonInsteadOfAPatch()
+    {
+        var omitted = Chunk() with { SkipReason = "diff is larger than max-file-size (2.0 MB > 1.0 MB)" };
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(omitted));
+
+        var chunk = ParseXml().Root!.Element("Diff")!.Elements("Chunk").Single();
+
+        chunk.Attribute("skipped")!.Value.Should().Be("true");
+        chunk.Attribute("reason")!.Value.Should().Contain("max-file-size");
+        chunk.Element("Patch").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task XmlWriter_WithUntrackedChunks_ShouldKeepThemApartFromTrackedChunks()
     {
         var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
-        var context = CreateContext() with
-        {
-            UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
-        };
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), context);
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(untracked: [Chunk("src/New.cs")]));
 
         var diff = ParseXml().Root!.Element("Diff")!;
 
-        diff.Elements("UntrackedFile").Should().ContainSingle()
+        diff.Elements("Chunk").Should().ContainSingle();
+        diff.Elements("UntrackedChunk").Should().ContainSingle()
             .Which.Attribute("path")!.Value.Should().Be("src/New.cs");
-        diff.Element("UntrackedDiff")!.Value.Should().Contain("new file mode 100644");
-        diff.Element("RawDiff")!.Value.Should().Be(RawDiff);
     }
 
     [Fact]
-    public async Task XmlWriter_WhenRawDiffContainsCdataTerminator_ShouldStayWellFormed()
+    public async Task XmlWriter_WhenPatchContainsCdataTerminator_ShouldStayWellFormed()
     {
-        const string hostileDiff = "diff --git a/A.cs b/A.cs\n+content with ]]> inside\n";
+        var hostile = Chunk() with { Text = "diff --git a/A.cs b/A.cs\n+content with ]]> inside" };
         var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(hostileDiff));
+        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(hostile));
 
-        ParseXml().Root!.Element("Diff")!.Element("RawDiff")!.Value.Should().Be(hostileDiff);
+        ParseXml().Root!.Element("Diff")!.Elements("Chunk").Single().Element("Patch")!.Value.Should().Be(hostile.Text);
     }
 
     [Fact]
@@ -159,7 +181,7 @@ public class StructuredBundleWriterDiffTests
 
         var document = ParseXml();
         document.Root!.Element("Files")!.Elements("File").Single().Element("Content").Should().BeNull();
-        document.Root!.Element("Diff")!.Element("RawDiff")!.Value.Should().Be(RawDiff);
+        document.Root!.Element("Diff")!.Elements("Chunk").Should().ContainSingle();
     }
 
     private JsonDocument ParseJson() => JsonDocument.Parse(ReadOutput());
@@ -168,8 +190,14 @@ public class StructuredBundleWriterDiffTests
 
     private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 
-    private static GitDiffContext CreateContext(string rawDiff = RawDiff) =>
-        new("basesha", [new ChangedFile("src/Core.cs", ChangeKind.Added)], rawDiff);
+    private static GitDiffContext CreateContext(DiffChunk? tracked = null, DiffChunk[]? untracked = null) =>
+        new("basesha")
+        {
+            FileGroups = [new DiffFileGroup("Root", [tracked ?? Chunk()], untracked ?? [])]
+        };
+
+    private static DiffChunk Chunk(string path = "src/Core.cs") =>
+        new(path, path, ChangeKind.Added, PatchText, 1, 1) { EstimatedTokens = 5 };
 
     private List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> Roots()
     {

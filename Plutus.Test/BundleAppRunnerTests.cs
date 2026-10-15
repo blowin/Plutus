@@ -5,6 +5,7 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
+using Plutus.Domain.Tokens;
 
 namespace Plutus.Test;
 
@@ -49,7 +50,7 @@ public class BundleAppRunnerTests
     public async Task RunAsync_WhenDiffDiscoveryFails_ShouldStopBeforeBundling()
     {
         _diffProvider.ResolveAsync(Arg.Any<GitDiffOptions>(), Arg.Any<IReadOnlyList<IFileInfo>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<GitDiffContext?>(null));
+            .Returns(Task.FromResult<DiffScopeResult?>(null));
 
         var result = await CreateRunner().RunAsync(CreateOptions(new GitDiffOptions()));
 
@@ -58,11 +59,13 @@ public class BundleAppRunnerTests
     }
 
     [Fact]
-    public async Task RunAsync_WithResolvedDiffContext_ShouldHandItToTheBundler()
+    public async Task RunAsync_WithResolvedDiffScope_ShouldHandTheContextAndItsBudgetToTheBundler()
     {
-        var context = new GitDiffContext("basesha", [new ChangedFile("src/Core.cs", ChangeKind.Modified)], "raw");
+        var context = CreateContext();
+        var summary = new TokenBudgetSummary(100, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder, 120, 90, "estimator");
+        var scope = new DiffScopeResult(context, summary, ["src/Large.cs"]);
         _diffProvider.ResolveAsync(Arg.Any<GitDiffOptions>(), Arg.Any<IReadOnlyList<IFileInfo>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<GitDiffContext?>(context));
+            .Returns(Task.FromResult<DiffScopeResult?>(scope));
 
         var result = await CreateRunner().RunAsync(CreateOptions(new GitDiffOptions { Target = "main" }));
 
@@ -72,6 +75,7 @@ public class BundleAppRunnerTests
             Arg.Is<IReadOnlyList<IFileInfo>>(roots => roots.Count == 1 && roots[0] == _root),
             Arg.Any<CancellationToken>());
         _bundler.LastDiffContext.Should().BeSameAs(context);
+        _bundler.LastDiffBudgetSummary.Should().BeSameAs(summary);
     }
 
     [Fact]
@@ -89,6 +93,15 @@ public class BundleAppRunnerTests
 
     private BundleAppRunner CreateRunner() =>
         new(_contextResolver, _detailProvider, _bundler, _matcherProvider, _diffProvider);
+
+    private static GitDiffContext CreateContext() =>
+        new("basesha")
+        {
+            FileGroups =
+            [
+                new DiffFileGroup("/repo", [new DiffChunk("src/Core.cs", "src/Core.cs", ChangeKind.Modified, "patch", 1, 0)], [])
+            ]
+        };
 
     private static RunAppOptions CreateOptions(GitDiffOptions? diff) => new()
     {
@@ -123,15 +136,19 @@ public class BundleAppRunnerTests
 
         public GitDiffContext? LastDiffContext { get; private set; }
 
+        public TokenBudgetSummary? LastDiffBudgetSummary { get; private set; }
+
         public override Task<int> RunBundleAsync(
             ProjectScanner projectScanner,
             IReadOnlyCollection<IFileInfo> roots,
             IFileInfo output,
             RunAppOptions options,
-            GitDiffContext? gitDiff = null)
+            GitDiffContext? gitDiff = null,
+            TokenBudgetSummary? diffBudgetSummary = null)
         {
             Invocations.Add(1);
             LastDiffContext = gitDiff;
+            LastDiffBudgetSummary = diffBudgetSummary;
             return Task.FromResult(0);
         }
     }

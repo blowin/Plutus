@@ -5,7 +5,12 @@ namespace Plutus.Domain.Tokens.Applier;
 /// <summary>Applies deterministic whole-file token-budget policies.</summary>
 public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudgetApplier
 {
+    private static readonly IReadOnlySet<string> EmptySelection = new HashSet<string>(StringComparer.Ordinal);
+
+    private readonly TokenBudgetSelector _selector = new(budget);
+
     public bool IsEnabled => true;
+
     public TokenBudgetResult Apply(IReadOnlyList<ProcessedFileContext> sourceFiles)
     {
         if (budget.MaxTokens < 1)
@@ -13,20 +18,17 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
             throw new ArgumentOutOfRangeException(nameof(budget), "Max tokens must be at least 1.");
         }
 
-        var files = sourceFiles.ToList();
-        var strategy = budget.SelectionStrategy;
-        if (!Enum.IsDefined(strategy))
-        {
-            throw new ArgumentOutOfRangeException(nameof(budget), $"Unknown token selection strategy '{strategy}'.");
-        }
-
         if (!Enum.IsDefined(budget.OverflowPolicy))
         {
             throw new ArgumentOutOfRangeException(nameof(budget), $"Unknown token overflow policy '{budget.OverflowPolicy}'.");
         }
 
-        // Sum as long: a large repository can exceed Int32 even though each file estimate is an int.
-        var candidateTokens = files.Where(f => !f.IsSkipped).Sum(f => (long)(f.EstimatedTokens ?? 0));
+        var files = sourceFiles.ToList();
+        var candidates = files.Where(f => !f.IsSkipped)
+            .Select(f => new TokenBudgetRequest(f.Entry.RelativePath, f.EstimatedTokens ?? 0))
+            .ToList();
+
+        var candidateTokens = _selector.Sum(candidates);
         var selected = files;
         var selectedTokens = candidateTokens;
 
@@ -42,34 +44,17 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
         }
         else if (candidateTokens > budget.MaxTokens && budget.OverflowPolicy == TokenOverflowPolicy.Select)
         {
-            var candidates = files.Where(f => !f.IsSkipped);
-            candidates = strategy switch
-            {
-                TokenSelectionStrategy.LargestFirst => candidates.OrderByDescending(f => f.EstimatedTokens)
-                    .ThenBy(f => f.Entry.RelativePath, StringComparer.Ordinal),
-                TokenSelectionStrategy.PathOrder => candidates.OrderBy(f => f.Entry.RelativePath, StringComparer.Ordinal),
-                _ => throw new ArgumentOutOfRangeException(nameof(budget), $"Unknown token selection strategy '{strategy}'.")
-            };
+            var decision = _selector.Select(candidates);
+            selectedTokens = decision.SelectedTokens;
+            var selectedPaths = decision.Selected ?? EmptySelection;
 
-            var selectedEntries = new HashSet<BundleEntry>();
-            selectedTokens = 0;
-            foreach (var file in candidates)
-            {
-                var estimate = file.EstimatedTokens ?? 0;
-                if (estimate <= budget.MaxTokens - selectedTokens)
-                {
-                    selectedEntries.Add(file.Entry);
-                    selectedTokens += estimate;
-                }
-            }
-
-            selected = files.ConvertAll(file => !file.IsSkipped && !selectedEntries.Contains(file.Entry)
+            selected = files.ConvertAll(file => !file.IsSkipped && !selectedPaths.Contains(file.Entry.RelativePath)
                 ? file with
                 {
                     Content = null,
                     IsSkipped = true,
                     IsTokenBudgetOmitted = true,
-                    SkipReason = $"omitted by token budget ({budget.MaxTokens} tokens; strategy: {strategy})"
+                    SkipReason = _selector.OmittedReason
                 }
                 : file);
         }
@@ -78,7 +63,8 @@ public sealed class TokenBudgetApplier(TokenBudgetOptions budget) : ITokenBudget
         {
             PrintTokenReport(files, selected, candidateTokens, selectedTokens, failPolicy: false);
         }
-        return new TokenBudgetResult(selected, new TokenBudgetSummary(budget.MaxTokens, budget.OverflowPolicy, strategy, candidateTokens, selectedTokens, TokenEstimator.Method));
+
+        return new TokenBudgetResult(selected, new TokenBudgetSummary(budget.MaxTokens, budget.OverflowPolicy, budget.SelectionStrategy, candidateTokens, selectedTokens, TokenEstimator.Method));
     }
 
     private void PrintTokenReport(

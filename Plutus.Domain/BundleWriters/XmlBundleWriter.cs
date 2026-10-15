@@ -111,30 +111,38 @@ public class XmlBundleWriter(
         await writer.WriteStartElementAsync(null, "Diff", null);
         await writer.WriteAttributeStringAsync(null, "comparisonBase", null, gitDiff.ComparisonBase);
 
-        foreach (var file in gitDiff.Files)
+        foreach (var chunk in gitDiff.TrackedChunks)
         {
-            await writer.WriteStartElementAsync(null, "ChangedFile", null);
-            await writer.WriteAttributeStringAsync(null, "path", null, file.Path);
-            await writer.WriteAttributeStringAsync(null, "change", null, file.Kind.ToString().ToLowerInvariant());
-            await writer.WriteEndElementAsync();
+            await WriteChunkAsync(writer, "Chunk", chunk);
         }
 
-        foreach (var path in gitDiff.UntrackedFiles)
+        foreach (var chunk in gitDiff.UntrackedChunks)
         {
-            await writer.WriteStartElementAsync(null, "UntrackedFile", null);
-            await writer.WriteAttributeStringAsync(null, "path", null, path);
-            await writer.WriteEndElementAsync();
+            await WriteChunkAsync(writer, "UntrackedChunk", chunk);
         }
 
-        // Escaped text rather than CDATA, because a diff payload may itself contain the CDATA terminator.
-        await writer.WriteStartElementAsync(null, "RawDiff", null);
-        await writer.WriteStringAsync(gitDiff.RawText);
         await writer.WriteEndElementAsync();
+    }
 
-        if (!string.IsNullOrWhiteSpace(gitDiff.UntrackedRawText))
+    private static async Task WriteChunkAsync(XmlWriter writer, string elementName, DiffChunk chunk)
+    {
+        await writer.WriteStartElementAsync(null, elementName, null);
+        await writer.WriteAttributeStringAsync(null, "path", null, chunk.Path);
+        await writer.WriteAttributeStringAsync(null, "change", null, chunk.Kind.ToString().ToLowerInvariant());
+        await writer.WriteAttributeStringAsync(null, "addedLines", null, chunk.AddedLines.ToString());
+        await writer.WriteAttributeStringAsync(null, "deletedLines", null, chunk.DeletedLines.ToString());
+        await writer.WriteAttributeStringAsync(null, "estimatedTokens", null, chunk.EstimatedTokens.ToString());
+
+        if (chunk.IsSkipped)
         {
-            await writer.WriteStartElementAsync(null, "UntrackedDiff", null);
-            await writer.WriteStringAsync(gitDiff.UntrackedRawText);
+            await writer.WriteAttributeStringAsync(null, "skipped", null, "true");
+            await writer.WriteAttributeStringAsync(null, "reason", null, chunk.SkipReason);
+        }
+        else
+        {
+            // Escaped text rather than CDATA, because a diff payload may itself contain the CDATA terminator.
+            await writer.WriteStartElementAsync(null, "Patch", null);
+            await writer.WriteStringAsync(chunk.Text);
             await writer.WriteEndElementAsync();
         }
 

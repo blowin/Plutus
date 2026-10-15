@@ -13,126 +13,137 @@ namespace Plutus.Test.Diffing;
 public class BundleDiffTests
 {
     [Fact]
-    public void RenderSection_ShouldNameTheComparisonBaseAndChangedFileCount()
+    public void WriteSection_ShouldNameTheComparisonBaseAndFileCount()
     {
-        var diff = CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("src/A.cs"));
+        var writer = CreateWriter();
 
-        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+        BundleDiff.WriteSection(writer, Context(Chunk("src/A.cs")), "Bundle scope is limited to", includeFileContents: true);
 
+        var markdown = writer.ToString();
         markdown.Should().StartWith("## Changes against `abc123`");
         markdown.Should().Contain("Bundle scope is limited to 1 file(s).");
-        markdown.Should().Contain("### Raw diff");
+    }
+
+    [Fact]
+    public void WriteSection_ShouldFenceEveryFileSeparately()
+    {
+        var writer = CreateWriter();
+
+        BundleDiff.WriteSection(writer, Context(Chunk("src/A.cs"), Chunk("src/B.cs")), "Bundle scope is limited to", includeFileContents: true);
+
+        var markdown = writer.ToString();
+        markdown.Should().Contain("### DIFF: `src/A.cs`");
+        markdown.Should().Contain("### DIFF: `src/B.cs`");
         markdown.Should().Contain("```diff");
-        markdown.Should().Contain("diff --git a/A.cs b/A.cs");
+        markdown.Should().Contain("- Change: `modified`; lines: `+2/-1`; tokens: `~7`");
     }
 
     [Fact]
-    public void RenderSection_WhenNoFilesChanged_ShouldExplainTheEmptyScope()
+    public void WriteSection_WhenAChunkWasOmitted_ShouldReportTheReasonInPlace()
     {
-        var diff = CreateContext("abc123", string.Empty);
+        var omitted = Chunk("src/Huge.cs") with { SkipReason = "omitted by token budget (10 tokens; strategy: PathOrder)" };
+        var writer = CreateWriter();
 
-        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+        BundleDiff.WriteSection(writer, Context(Chunk("src/A.cs"), omitted), "Bundle scope is limited to", includeFileContents: true);
 
-        markdown.Should().Contain("## Changes against `abc123`");
+        var markdown = writer.ToString();
+        markdown.Should().Contain("### DIFF: `src/Huge.cs`");
+        markdown.Should().Contain("Diff omitted: omitted by token budget (10 tokens; strategy: PathOrder)");
+        markdown.Should().NotContain("- Change: `modified`; lines: `+2/-1`; tokens: `~7`\n\n```diff\ndiff --git a/src/Huge.cs");
+    }
+
+    [Fact]
+    public void WriteSection_WithUntrackedChunks_ShouldAnnounceThemSeparately()
+    {
+        var writer = CreateWriter();
+
+        BundleDiff.WriteSection(writer, ContextWithUntracked([Chunk("src/A.cs")], [Chunk("src/New.cs")]), "Bundle scope is limited to", includeFileContents: true);
+
+        var markdown = writer.ToString();
+        markdown.Should().Contain("New files git does not track yet (1), generated diffs included below:");
+        markdown.Should().Contain("### DIFF: `src/New.cs`");
+    }
+
+    [Fact]
+    public void WriteSection_WhenNoFilesChanged_ShouldExplainTheEmptyScope()
+    {
+        var writer = CreateWriter();
+
+        BundleDiff.WriteSection(writer, Context(), "Bundle scope is limited to", includeFileContents: true);
+
+        var markdown = writer.ToString();
         markdown.Should().Contain("No changed files were reported for this scope.");
-        markdown.Should().NotContain("### Raw diff");
+        markdown.Should().NotContain("### DIFF:");
     }
 
     [Fact]
-    public void RenderSection_WhenDiffTextIsWhitespaceOnly_ShouldOmitTheRawDiffBlock()
+    public void WriteSection_WhenContentsAreIncludedAndNothingChanged_ShouldNotRepeatTheFileCount()
     {
-        var diff = CreateContext("abc123", $"   {Environment.NewLine}  ", File("src/A.cs"));
+        var writer = CreateWriter();
 
-        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+        BundleDiff.WriteSection(writer, Context(), "Bundle scope is limited to", includeFileContents: true);
 
-        markdown.Should().Contain("1 file(s).");
-        markdown.Should().NotContain("### Raw diff");
+        writer.ToString().Should().NotContain("Bundle scope is limited to");
     }
 
     [Fact]
-    public void RenderSection_WhenDiffContainsAFence_ShouldUseALongerOuterFence()
+    public void WriteSection_WhenContentsAreOmitted_ShouldAlwaysStateTheScope()
     {
-        string rawDiff = $"diff --git a/A.cs b/A.cs{Environment.NewLine}+```csharp{Environment.NewLine}";
+        var writer = CreateWriter();
 
-        var markdown = BundleDiff.RenderSection(CreateContext("abc123", rawDiff, File("A.cs")), "Bundle scope is limited to");
+        BundleDiff.WriteSection(writer, Context(), "Bundle scope is limited to", includeFileContents: false);
 
-        markdown.Should().Contain("````diff");
-        markdown.Should().Contain("````");
-        markdown.Should().NotContain($"{Environment.NewLine}```diff");
+        writer.ToString().Should().Contain("Bundle scope is limited to 0 file(s).");
     }
 
     [Fact]
-    public void RenderSection_WhenDiffDoesNotEndWithNewLine_ShouldStillCloseTheFence()
+    public void WriteSection_WhenDiffContainsAFence_ShouldUseALongerOuterFence()
     {
-        string rawDiff = $"diff --git a/A.cs b/A.cs{Environment.NewLine}+last line without newline";
+        var chunk = new DiffChunk("src/A.cs", "src/A.cs", ChangeKind.Modified, "diff --git a/src/A.cs b/src/A.cs\n+```csharp\n", 1, 0);
+        var writer = CreateWriter();
 
-        var markdown = BundleDiff.RenderSection(CreateContext("abc123", rawDiff, File("A.cs")), "Bundle scope is limited to");
+        BundleDiff.WriteSection(writer, Context(chunk), "Bundle scope is limited to", includeFileContents: true);
 
-        markdown.Should().EndWith($"```{Environment.NewLine}");
-        markdown.Should().Contain($"+last line without newline{Environment.NewLine}```");
+        writer.ToString().Should().Contain("````diff");
     }
 
     [Fact]
-    public void RenderSection_WithUntrackedFiles_ShouldListThemAndIncludeTheirGeneratedDiffs()
+    public void WriteSection_WhenDiffDoesNotEndWithNewLine_ShouldStillCloseTheFence()
     {
-        var diff = CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("A.cs")) with
-        {
-            UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = $"diff --git a/src/New.cs b/src/New.cs{Environment.NewLine}new file mode 100644"
-        };
-        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
+        var chunk = new DiffChunk("src/A.cs", "src/A.cs", ChangeKind.Modified, "diff --git a/src/A.cs b/src/A.cs\n+last", 1, 0);
+        var writer = CreateWriter();
 
-        markdown.Should().Contain("New files git does not track yet (1), generated diffs below:");
-        markdown.Should().Contain("- `src/New.cs`");
-        markdown.Should().Contain("### Raw diff");
-        markdown.Should().Contain("new file mode 100644");
+        BundleDiff.WriteSection(writer, Context(chunk), "Bundle scope is limited to", includeFileContents: true);
+
+        writer.ToString().Should().Contain("+last\n```");
     }
 
     [Fact]
-    public void RenderSection_WhenOnlyUntrackedFilesChanged_ShouldStillShowTheirDiff()
+    public void WriteSection_WithNullContext_ShouldThrow()
     {
-        var diff = CreateContext("abc123", string.Empty) with
-        {
-            UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = $"diff --git a/src/New.cs b/src/New.cs{Environment.NewLine}new file mode 100644"
-        };
-
-        var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
-
-        markdown.Should().Contain("- `src/New.cs`");
-        markdown.Should().Contain("new file mode 100644");
-        markdown.Should().NotContain("No changed files were reported");
-    }
-
-    [Fact]
-    public void RenderSection_WhenNothingChanged_ShouldExplainTheEmptyScope()
-    {
-        var markdown = BundleDiff.RenderSection(CreateContext("abc123", string.Empty), "Bundle scope is limited to");
-
-        markdown.Should().Contain("No changed files were reported for this scope.");
-        markdown.Should().NotContain("### Raw diff");
-    }
-
-    [Fact]
-    public void RenderSection_WithoutUntrackedFiles_ShouldNotMentionThem()
-    {
-        var markdown = BundleDiff.RenderSection(CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("A.cs")), "Bundle scope is limited to");
-
-        markdown.Should().NotContain("git does not track");
-    }
-
-    [Fact]
-    public void RenderSection_WithNullContext_ShouldThrow()
-    {
-        var act = () => BundleDiff.RenderSection(null!, "Bundle scope is limited to");
+        var act = () => BundleDiff.WriteSection(CreateWriter(), null!, "Bundle scope is limited to", includeFileContents: true);
 
         act.Should().Throw<ArgumentNullException>();
     }
 
-    private static GitDiffContext CreateContext(string comparisonBase, string rawText, params ChangedFile[] files) =>
-        new(comparisonBase, files, rawText);
+    /// <summary>Matches the production writer, which uses an explicitly encoded StreamWriter and writes "\n".</summary>
+    private static StringWriter CreateWriter() => new() { NewLine = "\n" };
 
-    private static ChangedFile File(string path) => new(path, ChangeKind.Modified);
+    private static GitDiffContext Context(params DiffChunk[] tracked) => ContextWithUntracked(tracked, []);
+
+    private static GitDiffContext ContextWithUntracked(DiffChunk[] tracked, DiffChunk[] untracked) =>
+        new GitDiffContext("abc123")
+        {
+            FileGroups =
+            [
+                new DiffFileGroup("/repo", [.. tracked.Select(WithTokens)], [.. untracked.Select(WithTokens)])
+            ]
+        };
+
+    private static DiffChunk WithTokens(DiffChunk chunk) => chunk with { EstimatedTokens = 7 };
+
+    private static DiffChunk Chunk(string path) =>
+        new(path, path, ChangeKind.Modified, $"diff --git a/{path} b/{path}\n-old\n+new\n+added", 2, 1);
 }
 
 public class MarkdownBundleWriterDiffTests
@@ -149,21 +160,16 @@ public class MarkdownBundleWriterDiffTests
     }
 
     [Fact]
-    public async Task WriteAsync_WithDiffContext_ShouldAppendTheRawDiffSection()
+    public async Task WriteAsync_WithDiffContext_ShouldAppendTheDiffSection()
     {
         var writer = CreateWriter();
-        var diff = CreateContext(
-            "abc123",
-            $"diff --git a/src/Core.cs b/src/Core.cs{Environment.NewLine}-old{Environment.NewLine}+new",
-            new ChangedFile("src/Core.cs", ChangeKind.Modified));
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), DiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("## FILE: `src/Core.cs`");
         result.Should().Contain("## Changes against `abc123`");
-        result.Should().Contain("### Raw diff");
-        result.Should().Contain("```diff");
+        result.Should().Contain("### DIFF: `src/Core.cs`");
         result.Should().Contain("+new");
     }
 
@@ -182,9 +188,8 @@ public class MarkdownBundleWriterDiffTests
     {
         // The writer serializes the tree it is handed; restricting the tree is the scanner's responsibility.
         var writer = CreateWriter();
-        var diff = CreateContext("abc123", string.Empty);
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), EmptyDiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("No changed files were reported for this scope.");
@@ -196,9 +201,8 @@ public class MarkdownBundleWriterDiffTests
     {
         var writer = CreateWriter();
         writer.IncludeFileContents = false;
-        var diff = CreateContext("abc123", $"diff --git a/src/Core.cs b/src/Core.cs{Environment.NewLine}-old{Environment.NewLine}+new", new ChangedFile("src/Core.cs", ChangeKind.Modified));
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), DiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("# Project Bundle");
@@ -246,8 +250,20 @@ public class MarkdownBundleWriterDiffTests
 
     private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 
-    private static GitDiffContext CreateContext(string comparisonBase, string rawText, params ChangedFile[] files) =>
-        new(comparisonBase, files, rawText);
+    private static GitDiffContext DiffContext() =>
+        new("abc123")
+        {
+            FileGroups =
+            [
+                new DiffFileGroup(
+                    "Root",
+                    [new DiffChunk("src/Core.cs", "src/Core.cs", ChangeKind.Modified, "diff --git a/src/Core.cs b/src/Core.cs\n-old\n+new", 1, 1) { EstimatedTokens = 7 }],
+                    [])
+            ]
+        };
+
+    private static GitDiffContext EmptyDiffContext() =>
+        new("abc123") { FileGroups = [new DiffFileGroup("Root", [], [])] };
 
     private static List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> Roots(
         (IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode) root) => [root];

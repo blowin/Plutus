@@ -1,60 +1,11 @@
 namespace Plutus.Domain.Diffing;
 
 /// <summary>
-/// Extracts changed paths from unified git diff text. Parsing the diff that is bundled anyway keeps the
-/// discovered subset and the structural <c>.diff</c> section guaranteed consistent, and avoids a second
-/// process invocation whose output could drift from the first.
+/// Parses the path lists git prints for machine consumption. File changes themselves are read from unified
+/// diff text by <see cref="GitDiffChunker"/>, because a diff has to be split per file to be limitable.
 /// </summary>
 public static class GitDiffParser
 {
-    private const string GitHeaderPrefix = "diff --git ";
-
-    public static IReadOnlyList<ChangedFile> ParseChangedFiles(string diffText)
-    {
-        ArgumentNullException.ThrowIfNull(diffText);
-
-        var files = new List<ChangedFile>();
-        string? currentPath = null;
-
-        foreach (var line in EnumerateLines(diffText))
-        {
-            if (line.StartsWith(GitHeaderPrefix, StringComparison.Ordinal))
-            {
-                currentPath = DiffPathNormalizer.ParseDiffHeaderDestination(line[GitHeaderPrefix.Length..]);
-                if (!string.IsNullOrEmpty(currentPath))
-                {
-                    files.Add(new ChangedFile(currentPath, ChangeKind.Modified));
-                }
-
-                continue;
-            }
-
-            if (string.IsNullOrEmpty(currentPath))
-            {
-                continue;
-            }
-
-            if (line.StartsWith("new file mode ", StringComparison.Ordinal))
-            {
-                SetKind(files, ChangeKind.Added);
-            }
-            else if (line.StartsWith("deleted file mode ", StringComparison.Ordinal))
-            {
-                SetKind(files, ChangeKind.Deleted);
-            }
-            else if (line.StartsWith("rename from ", StringComparison.Ordinal))
-            {
-                SetKind(files, ChangeKind.Renamed);
-            }
-            else if (line.StartsWith("old mode ", StringComparison.Ordinal))
-            {
-                SetKind(files, ChangeKind.TypeChanged);
-            }
-        }
-
-        return files;
-    }
-
     /// <summary>
     /// Splits the null-terminated output of <c>git ls-files -z</c>. Null separation is used because a path
     /// may contain spaces, quotes or newlines, and git would otherwise escape it.
@@ -74,17 +25,5 @@ public static class GitDiffParser
         }
 
         return paths;
-    }
-
-    private static void SetKind(List<ChangedFile> files, ChangeKind kind) =>
-        files[^1] = files[^1] with { Kind = kind };
-
-    private static IEnumerable<string> EnumerateLines(string text)
-    {
-        using var reader = new StringReader(text);
-        while (reader.ReadLine() is { } line)
-        {
-            yield return line;
-        }
     }
 }

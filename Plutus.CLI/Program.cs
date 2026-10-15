@@ -187,7 +187,7 @@ public static class Program
 
         var diffFromOption = new Option<string?>("--diff-from")
         {
-            Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Cannot be combined with --branch or --commit.",
+            Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
             Validators =
             {
                 result =>
@@ -196,6 +196,22 @@ public static class Program
                     if (target is not null && string.IsNullOrWhiteSpace(target))
                     {
                         result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
+                    }
+                }
+            }
+        };
+
+        var diffToOption = new Option<string?>("--diff-to")
+        {
+            Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
+            Validators =
+            {
+                result =>
+                {
+                    var target = result.GetValueOrDefault<string?>();
+                    if (target is not null && string.IsNullOrWhiteSpace(target))
+                    {
+                        result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
                     }
                 }
             }
@@ -230,6 +246,7 @@ public static class Program
             tokenSelectionStrategyOption,
             diffOnlyOption,
             diffFromOption,
+            diffToOption,
             diffIncludeUntrackedOption,
         };
 
@@ -241,6 +258,7 @@ public static class Program
             var maxTokens = parseResult.GetValue(maxTokensOption);
             var diffOnly = parseResult.GetValue(diffOnlyOption);
             var diffFrom = parseResult.GetValue(diffFromOption);
+            var diffTo = parseResult.GetValue(diffToOption);
             var diffIncludeUntracked = parseResult.GetValue(diffIncludeUntrackedOption);
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
@@ -255,6 +273,12 @@ public static class Program
                 return 1;
             }
 
+            if (!string.IsNullOrWhiteSpace(diffTo) && string.IsNullOrWhiteSpace(diffFrom))
+            {
+                Console.Error.WriteLine("Error: --diff-to requires --diff-from to define the other end of the range.");
+                return 1;
+            }
+
             Encoding targetEncoding;
             try
             {
@@ -266,6 +290,13 @@ public static class Program
                 return 1;
             }
 
+            var tokenBudgetOptions = maxTokens is { } tokenLimit
+                ? new TokenBudgetOptions(
+                    tokenLimit,
+                    parseResult.GetValue(tokenOverflowPolicyOption)!,
+                    parseResult.GetValue(tokenSelectionStrategyOption)!)
+                : null;
+            var maxFileSize = parseResult.GetValue(maxSizeOption)!;
             var options = new RunAppOptions
             {
                 ProjectPath = parseResult.GetValue(projectPathsArgument)!,
@@ -274,7 +305,7 @@ public static class Program
                 ExcludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>(),
                 UseDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption),
                 AllowDangerous = parseResult.GetValue(allowDangerousFilesOption),
-                MaxFileSize = parseResult.GetValue(maxSizeOption)!,
+                MaxFileSize = maxFileSize,
                 ExcludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>(),
                 ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
                 IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
@@ -285,17 +316,17 @@ public static class Program
                 Format = parseResult.GetValue(formatOption)!,
                 Branch = branch,
                 Commit = commit,
-                TokenBudget = maxTokens is { } tokenLimit
-                    ? new TokenBudgetOptions(
-                        tokenLimit,
-                        parseResult.GetValue(tokenOverflowPolicyOption)!,
-                        parseResult.GetValue(tokenSelectionStrategyOption)!)
-                    : null,
+                TokenBudget = tokenBudgetOptions,
                 Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
                     ? new GitDiffOptions
                     {
                         Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom,
-                        IncludeUntracked = diffIncludeUntracked
+                        TargetTo = string.IsNullOrWhiteSpace(diffTo) ? null : diffTo,
+                        IncludeUntracked = diffIncludeUntracked,
+
+                        // The same limits the content path uses, so a diff cannot bypass them.
+                        MaxFileSize = maxFileSize,
+                        TokenBudget = tokenBudgetOptions
                     }
                     : null,
                 IncludeFileContents = !diffOnly,

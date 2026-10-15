@@ -75,7 +75,7 @@ public class MarkdownBundleWriter(
             writer.WriteLine();
             writer.WriteLine("---");
             writer.WriteLine();
-            writer.Write(BundleDiff.RenderSection(gitDiff, "Bundle scope is limited to"));
+            BundleDiff.WriteSection(writer, gitDiff, "Bundle scope is limited to", IncludeFileContents);
         }
     }
 

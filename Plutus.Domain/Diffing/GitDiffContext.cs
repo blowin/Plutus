@@ -1,51 +1,58 @@
 namespace Plutus.Domain.Diffing;
 
-/// <summary>Changed files discovered under one bundle root, with paths relative to that root.</summary>
-public sealed record DiffFileGroup(string RootPath, IReadOnlyList<ChangedFile> Files, IReadOnlyList<string> UntrackedPaths);
+/// <summary>
+/// The diff scoped view of one bundle root: the tracked file diffs and the generated diffs for untracked
+/// files, both with paths relative to that root. <see cref="ChangedFileMapper"/> produces one group per root
+/// and drops paths that belong to no root.
+/// </summary>
+public sealed record DiffFileGroup(
+    string RootPath,
+    IReadOnlyList<DiffChunk> TrackedChunks,
+    IReadOnlyList<DiffChunk> UntrackedChunks)
+{
+    public IReadOnlyList<string> TrackedPaths => TrackedChunks.Select(chunk => chunk.Path).ToArray();
+
+    public IReadOnlyList<string> UntrackedPaths => UntrackedChunks.Select(chunk => chunk.Path).ToArray();
+}
 
 /// <summary>
-/// Discovery result of a diff scoped bundle run: the files that changed, the untracked files that were
-/// requested, and the raw unified diff that documents the tracked change structurally. A <c>null</c> context
-/// means diff scoping was not requested.
+/// Discovery result of a diff scoped bundle run: the revision the comparison was made against and the
+/// per-root diff views that the bundle is limited to. A <c>null</c> context means diff scoping was not
+/// requested.
 /// </summary>
-public sealed record GitDiffContext(
-    string ComparisonBase,
-    IReadOnlyList<ChangedFile> Files,
-    string RawText)
+public sealed record GitDiffContext(string ComparisonBase)
 {
-    /// <summary>Paths git does not track yet, ordered as reported; empty unless untracked files were requested.</summary>
-    public IReadOnlyList<string> UntrackedFiles { get; init; } = [];
-
-    /// <summary>
-    /// Generated new-file diffs for <see cref="UntrackedFiles"/>, kept apart from <see cref="RawText"/> so the
-    /// tracked diff stays a verbatim <c>git diff</c> and <see cref="Files"/> keeps describing tracked changes
-    /// only. Writers render both.
-    /// </summary>
-    public string UntrackedRawText { get; init; } = string.Empty;
-
     /// <summary>Per-root views resolved by <see cref="Plutus.Domain.ChangedFileMapper"/>; empty until mapping ran.</summary>
     public IReadOnlyList<DiffFileGroup> FileGroups { get; init; } = [];
 
-    /// <summary>Changed files under one root, or an empty list when that root has none.</summary>
-    public IReadOnlyList<string> PathsFor(string rootPath, bool ignorePathCase = false) =>
-        GroupFor(rootPath, ignorePathCase)?.Files.Select(file => file.Path).ToArray() ?? [];
+    /// <summary>Tracked chunks for every root, used for the top-level diff section.</summary>
+    public IReadOnlyList<DiffChunk> TrackedChunks => FileGroups.SelectMany(group => group.TrackedChunks).ToArray();
 
-    /// <summary>Untracked files under one root, or an empty list when that root has none.</summary>
-    public IReadOnlyList<string> UntrackedPathsFor(string rootPath, bool ignorePathCase = false) =>
-        GroupFor(rootPath, ignorePathCase)?.UntrackedPaths ?? [];
+    /// <summary>Untracked chunks for every root, used for the top-level diff section.</summary>
+    public IReadOnlyList<DiffChunk> UntrackedChunks => FileGroups.SelectMany(group => group.UntrackedChunks).ToArray();
 
-    private DiffFileGroup? GroupFor(string rootPath, bool ignorePathCase)
+    /// <summary>Tracked paths visible from one root, or an empty list when that root has none.</summary>
+    public IReadOnlyList<string> TrackedPathsFor(string rootPath) => GroupFor(rootPath)?.TrackedPaths ?? [];
+
+    /// <summary>Untracked paths visible from one root, or an empty list when that root has none.</summary>
+    public IReadOnlyList<string> UntrackedPathsFor(string rootPath) => GroupFor(rootPath)?.UntrackedPaths ?? [];
+
+    /// <summary>Tracked chunks visible from one root, or an empty list when that root has none.</summary>
+    public IReadOnlyList<DiffChunk> TrackedChunksFor(string rootPath) => GroupFor(rootPath)?.TrackedChunks ?? [];
+
+    /// <summary>Untracked chunks visible from one root, or an empty list when that root has none.</summary>
+    public IReadOnlyList<DiffChunk> UntrackedChunksFor(string rootPath) => GroupFor(rootPath)?.UntrackedChunks ?? [];
+
+    /// <summary>
+    /// Finds the view for one bundle root. Both sides are normalized before comparing, because the same
+    /// directory reaches here as <c>D:\dir</c> from the file provider and as <c>D:/dir</c> from git; an exact
+    /// string comparison silently produced an empty set, which excluded every file from the bundle.
+    /// </summary>
+    private DiffFileGroup? GroupFor(string rootPath)
     {
-        var comparison = ignorePathCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var normalized = VcsPathNormalizer.RootPrefix(rootPath);
 
-        foreach (var group in FileGroups)
-        {
-            if (group.RootPath.Equals(rootPath, comparison))
-            {
-                return group;
-            }
-        }
-
-        return null;
+        return FileGroups.FirstOrDefault(group =>
+            VcsPathNormalizer.RootPrefix(group.RootPath).Equals(normalized, StringComparison.OrdinalIgnoreCase));
     }
 }

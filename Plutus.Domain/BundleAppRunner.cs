@@ -1,5 +1,6 @@
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
+using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
 
@@ -20,12 +21,14 @@ public class BundleAppRunner(
 
         var (roots, output) = details;
 
-        var gitDiff = options.Diff is { } diffOptions
-            ? await gitDiffContextProvider.ResolveAsync(diffOptions, roots)
-            : null;
-        if (options.Diff is not null && gitDiff is null)
+        DiffScopeResult? diffScope = null;
+        if (options.Diff is { } diffOptions)
         {
-            return 1;
+            diffScope = await gitDiffContextProvider.ResolveAsync(diffOptions, roots);
+            if (diffScope is null)
+            {
+                return 1;
+            }
         }
 
         var additionalMatchers = additionalIgnoreMatcherProvider.GetMatchers(roots.ConvertAll(detailProvider.CreateFileProvider), options).ToList();
@@ -33,6 +36,6 @@ public class BundleAppRunner(
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
 
         var projectScanner = new ProjectScanner(detailProvider, ignoreMatcher);
-        return await bundler.RunBundleAsync(projectScanner, roots, output, options, gitDiff);
+        return await bundler.RunBundleAsync(projectScanner, roots, output, options, diffScope?.Context, diffScope?.Summary);
     }
 }

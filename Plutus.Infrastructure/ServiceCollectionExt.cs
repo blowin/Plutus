@@ -56,6 +56,10 @@ public static class ServiceCollectionExt
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
         services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
+        services.AddScoped<BundleLimits>(_ => new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget));
+        services.AddScoped<DiffScopeLimiter>(provider => new DiffScopeLimiter(
+            new ChangedFileMapper(Directory.GetCurrentDirectory()),
+            provider.GetRequiredService<BundleLimits>()));
         services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
             ? new NullGitDiffContextProvider()
             : ActivatorUtilities.CreateInstance<GitDiffContextProvider>(provider));

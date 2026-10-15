@@ -4,95 +4,92 @@ using Plutus.Domain.Diffing;
 namespace Plutus.Domain.BundleWriters;
 
 /// <summary>
-/// Renders the complementary diff section that documents the requested change structurally next to the
-/// changed file contents. The stored diff text is already merge-base applied by git, so it is emitted
-/// verbatim inside a fence that cannot be terminated by diff content.
+/// Renders the diff sections. Each file gets its own fenced block instead of one solid patch, because that is
+/// what makes the size and token limits meaningful: a change that is left out is reported in place, and the
+/// rest of the change set is still readable.
 /// </summary>
 public static class BundleDiff
 {
-    public static string RenderSection(GitDiffContext diff, string changedFilesHeading)
+    public static void WriteSection(
+        TextWriter writer,
+        GitDiffContext diff,
+        string changedFilesHeading,
+        bool includeFileContents)
     {
+        ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(diff);
 
-        var builder = new StringBuilder(1024);
-        builder.Append("## Changes against `").Append(diff.ComparisonBase).Append('`').AppendLine();
-        builder.AppendLine();
+        writer.WriteLine($"## Changes against `{diff.ComparisonBase}`");
+        writer.WriteLine();
 
-        AppendUntrackedFiles(builder, diff);
-        AppendRawDiff(builder, diff, changedFilesHeading);
-        return builder.ToString();
+        var tracked = diff.TrackedChunks;
+        var untracked = diff.UntrackedChunks;
+
+        // When the contents are omitted the diff is the artifact, so the scope line always appears. When the
+        // contents are present the "## File List" block has already stated the count.
+        if (!includeFileContents || tracked.Count > 0)
+        {
+            writer.WriteLine($"{changedFilesHeading} {tracked.Count} file(s).");
+            writer.WriteLine();
+        }
+
+        WriteUntrackedNote(writer, untracked);
+
+        if (tracked.Count == 0 && untracked.Count == 0)
+        {
+            writer.WriteLine("No changed files were reported for this scope.");
+            return;
+        }
+
+        WriteChunks(writer, tracked);
+        WriteChunks(writer, untracked);
     }
 
     /// <summary>
-    /// Untracked files are listed separately because <c>git diff</c> cannot describe them; their generated
-    /// new-file diffs follow in the same fenced block as the tracked diff.
+    /// Untracked files are called out because <c>git diff</c> cannot describe them; their diffs are generated
+    /// separately and follow below.
     /// </summary>
-    private static void AppendUntrackedFiles(StringBuilder builder, GitDiffContext diff)
+    private static void WriteUntrackedNote(TextWriter writer, IReadOnlyList<DiffChunk> untracked)
     {
-        if (diff.UntrackedFiles.Count == 0)
+        if (untracked.Count == 0)
         {
             return;
         }
 
-        builder.Append("New files git does not track yet (").Append(diff.UntrackedFiles.Count).Append("), generated diffs below:").AppendLine();
-        builder.AppendLine();
-        foreach (var path in diff.UntrackedFiles)
-        {
-            builder.Append("- `").Append(path).Append('`').AppendLine();
-        }
-
-        builder.AppendLine();
+        writer.WriteLine($"New files git does not track yet ({untracked.Count}), generated diffs included below:");
+        writer.WriteLine();
     }
 
-    private static void AppendRawDiff(StringBuilder builder, GitDiffContext diff, string changedFilesHeading)
+    private static void WriteChunks(TextWriter writer, IReadOnlyList<DiffChunk> chunks)
     {
-        var combinedDiff = CombineDiffs(diff.RawText, diff.UntrackedRawText);
-
-        if (diff.Files.Count == 0 && string.IsNullOrWhiteSpace(combinedDiff))
+        foreach (var chunk in chunks)
         {
-            builder.Append("No changed files were reported for this scope.").AppendLine();
-            return;
+            writer.WriteLine("---");
+            writer.WriteLine();
+            writer.WriteLine($"### DIFF: `{chunk.Path}`");
+            writer.WriteLine();
+
+            if (chunk.IsSkipped)
+            {
+                writer.WriteLine($"Diff omitted: {chunk.SkipReason}");
+                writer.WriteLine();
+                continue;
+            }
+
+            writer.WriteLine($"- Change: `{chunk.Kind.ToString().ToLowerInvariant()}`; lines: `+{chunk.AddedLines}/-{chunk.DeletedLines}`; tokens: `~{chunk.EstimatedTokens}`");
+            writer.WriteLine();
+
+            var fence = BuildFence(chunk.Text);
+            writer.WriteLine($"{fence}diff");
+            writer.Write(chunk.Text);
+            if (!chunk.Text.EndsWith('\n'))
+            {
+                writer.WriteLine();
+            }
+
+            writer.WriteLine(fence);
+            writer.WriteLine();
         }
-
-        if (diff.Files.Count > 0)
-        {
-            builder.Append(changedFilesHeading).Append(' ').Append(diff.Files.Count).Append(" file(s).").AppendLine();
-        }
-
-        if (string.IsNullOrWhiteSpace(combinedDiff))
-        {
-            return;
-        }
-
-        builder.AppendLine();
-        builder.Append("### Raw diff").AppendLine();
-        builder.AppendLine();
-        var fence = BuildFence(combinedDiff);
-        builder.Append(fence).Append("diff").AppendLine();
-        builder.Append(combinedDiff);
-        if (!combinedDiff.EndsWith(Environment.NewLine))
-        {
-            builder.AppendLine();
-        }
-
-        builder.Append(fence).AppendLine();
-    }
-
-    /// <summary>Joins the tracked diff and the generated untracked diffs into one block for a single fence.</summary>
-    private static string CombineDiffs(string trackedDiff, string untrackedDiff)
-    {
-        if (string.IsNullOrWhiteSpace(trackedDiff))
-        {
-            return untrackedDiff;
-        }
-
-        if (string.IsNullOrWhiteSpace(untrackedDiff))
-        {
-            return trackedDiff;
-        }
-
-        var separator = trackedDiff.EndsWith(Environment.NewLine) ? Environment.NewLine : Environment.NewLine + Environment.NewLine;
-        return trackedDiff + separator + untrackedDiff;
     }
 
     /// <summary>Uses a fence longer than any backtick run inside the diff, so content cannot close it early.</summary>

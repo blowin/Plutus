@@ -1,10 +1,8 @@
 namespace Plutus.Domain.Diffing;
 
 /// <summary>
-/// Builds the git command lines for the supported diff scopes. An explicit base uses merge-base semantics
-/// with the working tree as the destination, so the commits made on the branch and any uncommitted work are
-/// reviewed together. Without a base the working tree is compared with <c>HEAD</c>, which keeps the diff
-/// limited to uncommitted work.
+/// Builds the git command lines for the supported diff scopes: an explicit commit range, or an explicit base
+/// compared with the working tree so uncommitted work is still reviewed, or the working tree alone.
 /// </summary>
 public static class GitDiffArguments
 {
@@ -23,14 +21,20 @@ public static class GitDiffArguments
         return ["diff", "--no-color", "--no-ext-diff", "--no-index", "--", DevNullDevice, repositoryRelativePath];
     }
 
-    /// <summary><c>/dev/null</c> is accepted by git on every platform, including Windows.</summary>
-    private const string DevNullDevice = "/dev/null";
-
     public static IReadOnlyList<string> Build(GitDiffOptions options, string? comparisonBase)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         var arguments = new List<string> { "diff", "--no-color", "--no-ext-diff", "--no-renames" };
+
+        if (!string.IsNullOrWhiteSpace(options.TargetTo))
+        {
+            // An explicit range compares the two revisions directly; the working tree is not involved.
+            arguments.Add(string.IsNullOrWhiteSpace(comparisonBase) ? options.Target! : comparisonBase);
+            arguments.Add(options.TargetTo);
+            return arguments;
+        }
+
         if (!string.IsNullOrWhiteSpace(options.Target))
         {
             arguments.Add("--merge-base");
@@ -39,4 +43,7 @@ public static class GitDiffArguments
 
         return arguments;
     }
+
+    /// <summary><c>/dev/null</c> is accepted by git on every platform, including Windows.</summary>
+    private const string DevNullDevice = "/dev/null";
 }
