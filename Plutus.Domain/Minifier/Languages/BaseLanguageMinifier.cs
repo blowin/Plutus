@@ -1,18 +1,34 @@
 using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public abstract class BaseLanguageMinifier : ILanguageMinifier
+/// <summary>
+/// Base class for every language minifier. Comment removal is delegated to an <see cref="ICommentStripper"/>,
+/// which is the lexical scanner unless a project-maintained ANTLR grammar was selected for that language.
+/// </summary>
+public abstract class BaseLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null) : ILanguageMinifier
 {
-    public abstract string Language { get; }
-    public abstract string Description { get; }
-
-    // Abstract property that concrete languages must implement
-    protected abstract Regex CommentReplacePattern { get; }
-
     // Matches any line containing only optional whitespace followed by a newline character sequence.
     // The (?m) flag enables multi-line mode so ^ anchors to the start of individual lines.
     private static readonly Regex BlankLineStripPattern = new(@"(?m)^[ \t]*\r?\n", RegexOptions.Compiled, TimeSpan.FromSeconds(2));
+
+    public abstract string Language { get; }
+
+    public abstract string Description { get; }
+
+    protected CommentStripOptions StripOptions { get; } = options ?? CommentStripOptions.Default;
+
+    protected SourceProcessingMode Mode { get; } = mode;
+
+    /// <summary>The strategy that answers for this language. Lexical scanning unless a grammar was registered.</summary>
+    protected ICommentStripper Stripper { get; } = stripper ?? LexicalCommentStripper.Instance;
+
+    protected ICommentStripObserver? Observer { get; } = observer;
 
     public string Minify(string sourceCode)
     {
@@ -23,17 +39,27 @@ public abstract class BaseLanguageMinifier : ILanguageMinifier
 
         try
         {
-            // 1. Strip comments out while leaving protected string boundaries unharmed
-            var result = CommentReplacePattern.Replace(sourceCode, match =>
-                match.Groups[1].Success ? match.Groups[1].Value : string.Empty);
+            // 1. Remove comments. Literal contents are protected by the language syntax table, and a language with
+            //    no entry is passed through untouched instead of being scanned with another language's rules.
+            var stripped = Stripper.Strip(sourceCode, Language, StripOptions);
+            Observer?.OnCommentsStripped(Language, stripped);
 
-            // 2. Run custom pipeline integrations (like C# region handling hooks)
-            result = MinifyInternal(result);
+            if (!stripped.LanguageSupported)
+            {
+                return sourceCode;
+            }
 
-            // 3. Remove all lines that contain only whitespace characters or are entirely empty.
-            // This acts as an aggressive token compressor, pulling code lines tightly together.
+            // 2. Language-specific integrations that are not comment removal (for example C# region handling).
+            var result = AfterCommentStrip(stripped.Content);
+
+            if (Mode == SourceProcessingMode.StripComments)
+            {
+                return result;
+            }
+
+            // 3. Minification proper: language boilerplate, then whitespace-only lines, then the outer trim.
+            result = MinifyWhitespace(result);
             result = BlankLineStripPattern.Replace(result, string.Empty);
-
             return result.Trim();
         }
         catch (RegexMatchTimeoutException)
@@ -42,6 +68,9 @@ public abstract class BaseLanguageMinifier : ILanguageMinifier
         }
     }
 
-    // Optional lifecycle hook for advanced language-specific stripping
-    protected virtual string MinifyInternal(string sourceCode) => sourceCode;
+    /// <summary>Optional hook that runs in both modes, after comments are removed.</summary>
+    protected virtual string AfterCommentStrip(string sourceCode) => sourceCode;
+
+    /// <summary>Optional hook that runs only in <see cref="SourceProcessingMode.Minify"/>.</summary>
+    protected virtual string MinifyWhitespace(string sourceCode) => sourceCode;
 }

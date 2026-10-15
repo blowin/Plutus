@@ -1,31 +1,20 @@
 using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class CSharpLanguageMinifier : BaseLanguageMinifier
+/// <summary>
+/// C# minifier. Comment removal is lexical; the extra hook drops region directives, which are boilerplate rather
+/// than comments and are therefore only removed when minifying.
+/// </summary>
+public sealed class CSharpLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier("csharp", "C# Minifier (Removes standard/XML comments and collapses blank lines)", options, mode, stripper, observer)
 {
-    public override string Language => "csharp";
-
-    public override string Description => "C# Minifier (Removes standard/XML comments and collapses blank lines)";
-
-    protected override Regex CommentReplacePattern { get; } = new(@"(?x)
-        (
-            """"""[\s\S]*?""""""         # 1. Correctly matches raw string literals (including newlines and quotes)
-            | @""[^""]*"" (?:""""[^""]*"")* "" # 2. Verbatim strings
-
-            | "" (?: [^""\\] | \\. )* ""       # 3. Regular strings
-            | ' (?: [^'\\] | \\. )* '          # 4. Character literals
-        )
-        | (/\*[\s\S]*?\*/) # Multi-line comments
-        | ( // [^\r\n]* )                            # Single-line comments",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-
-
     private static readonly Regex RegionReplacePattern = new(@"^[ \t]*\#(?:region|endregion).*", RegexOptions.Compiled | RegexOptions.Multiline);
 
-    protected override string MinifyInternal(string sourceCode)
-    {
-        // Add specific C# rule to drop region headers
-        return RegionReplacePattern.Replace(sourceCode, string.Empty);
-    }
+    protected override string MinifyWhitespace(string sourceCode) => RegionReplacePattern.Replace(sourceCode, string.Empty);
 }

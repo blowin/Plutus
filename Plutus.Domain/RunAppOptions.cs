@@ -1,4 +1,5 @@
 using System.Text;
+using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
@@ -18,6 +19,28 @@ public record RunAppOptions
     public required List<string> IncludeDirPatterns { get; init; }
     public required List<string> IncludeFilePatterns { get; init; }
     public bool Minify { get; init; }
+
+    /// <summary>
+    /// Remove comments without touching whitespace or line endings (<c>--strip-comments</c>). <see cref="Minify"/>
+    /// is a superset, so when both are set the whitespace pass runs as well.
+    /// </summary>
+    public bool StripComments { get; init; }
+
+    /// <summary>
+    /// Keep documentation comments when stripping or minifying (<c>--preserve-doc-comments</c>). Off by default:
+    /// documentation comments are removed like any other comment unless this is set.
+    /// </summary>
+    public bool PreserveDocumentationComments { get; init; }
+
+    /// <summary>What <c>--comment-strategy</c> asked for, before it is resolved against the grammar inventory.</summary>
+    public CommentStrategyRequest CommentStrategy { get; init; } = CommentStrategyRequest.Auto;
+
+    /// <summary>
+    /// The strategy resolved for this run, or <c>null</c> when no comment processing was requested. Resolving it
+    /// once keeps the CLI error message and the pipeline in agreement, and makes the choice reportable.
+    /// </summary>
+    public CommentStrippingPlan? CommentStripPlan { get; init; }
+
     public required Encoding TargetEncoding { get; init; }
     public required int MaxConcurrency { get; init; }
     public required string Format { get; init; }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
@@ -69,12 +70,26 @@ public static class ServiceCollectionExt
         services.AddSingleton(options);
         services.AddSingleton(options.TargetEncoding);
 
+        // Source processing. The comment strategy was resolved by the CLI against the grammars the project
+        // actually maintains, so this composition only has to honor it; the report it writes is printed after the
+        // run, which is what makes the selected strategy observable.
+        services.AddSingleton(_ => new CommentStrippingReport(
+            options.CommentStripPlan ?? DisabledCommentPlan));
         services.AddSingleton<ICodeMinifier>(provider =>
         {
             var op = provider.GetRequiredService<RunAppOptions>();
-            return op.Minify ? CompositeCodeMinifier.CreateFull() : IdentityCodeMinifier.Instance;
+            var report = provider.GetRequiredService<CommentStrippingReport>();
+            return CodeMinifierFactory.Create(op, report, op.CommentStripPlan);
         });
 
         return services;
     }
+
+    /// <summary>The plan recorded when neither <c>--strip-comments</c> nor <c>--minify</c> was requested.</summary>
+    private static readonly CommentStrippingPlan DisabledCommentPlan = new()
+    {
+        Request = CommentStrategyRequest.Auto,
+        DefaultStrategy = CommentStripStrategy.None,
+        Rationale = "comment processing is disabled",
+    };
 }

@@ -20,7 +20,10 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | `--token-selection-strategy <path-order\|largest-first>` | `path-order` | Whole-file selection strategy used when the overflow policy is `select`. |
 | `--max-concurrency <number>` | `8` | Maximum number of concurrent file-read operations. Must be at least `1`. |
 | `--encoding <name>` | `utf-8` | Text encoding used for reading and writing. Examples: `utf-8`, `windows-1251`, `koi8-r`. The encoding must be supported by .NET. |
-| `-m`, `--minify` | Off | Apply the configured source minifier before writing file contents. The transformations depend on the language. |
+| `-m`, `--minify` | Off | Apply the configured source minifier before writing file contents: comments are removed and whitespace-only lines are collapsed. Uses the same comment scanner as `--strip-comments`; the transformations depend on the language. |
+| `--strip-comments` | Off | Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation, and line endings are preserved, and a space is inserted when removing a comment would otherwise join two tokens. See [Comment stripping](COMMENT_STRIPPING.md). |
+| `--preserve-doc-comments` | Off | Keep documentation comments (`///`, `//!`, `/** */`, `/*! */`) while stripping or minifying. Off by default: documentation comments are removed like any other comment. No effect without `--strip-comments` or `--minify`. |
+| `--comment-strategy <auto\|lexical\|antlr>` | `auto` | How comments are located. `auto` uses ANTLR token channels for languages a project-maintained grammar covers and lexical scanning elsewhere; `lexical` forces the character scanner; `antlr` requires a maintained grammar and fails when none exists (no silent fallback). See [ANTLR grammar inventory](ANTLR_GRAMMAR_INVENTORY.md). |
 | `--no-gitignore` | Off | Do not read the root `.gitignore`. |
 | `--use-default-excludes` | On | Use built-in exclusions for common generated/junk paths. |
 | `--exclude <pattern...>` / `-e` | None | Global gitignore-style patterns that can exclude files and directories. Can be repeated. |
@@ -130,6 +133,43 @@ Diff omitted: omitted by token budget (60000 tokens; strategy: PathOrder)
 ```
 
 The token budget uses the same policies and selection strategies as the content path (`fail`, `warn`, `select`; `path-order`, `largest-first`), and the bundle header reports the diff numbers. `--exclude`/`--include` filters and sensitive-file protection apply to the diff scope as well.
+
+## Comment stripping
+
+`--strip-comments` removes comments without touching anything else, and `--minify` removes them and collapses
+whitespace-only lines. Both use the same language-aware lexical scanner; neither rewrites the contents of string,
+raw-string, template, regex, or markup-attribute literals, and neither merges two tokens when a comment between them
+disappears.
+
+```bash
+dotnet run --project Plutus.CLI -- ./src --strip-comments -o ./artifacts/context.md
+dotnet run --project Plutus.CLI -- ./src --strip-comments --preserve-doc-comments
+dotnet run --project Plutus.CLI -- ./src --minify --comment-strategy lexical
+```
+
+The default for documentation comments is explicit: **they are removed** unless `--preserve-doc-comments` is
+given. Languages without a distinct documentation form (Go, Python, SQL, C, HTML, the config formats) ignore that
+flag, because a plain `//` or `#` comment cannot be classified as documentation.
+
+`--comment-strategy antlr` selects real token-channel processing and therefore requires a project-maintained
+grammar. This build maintains none, so the flag fails with the manifest path it probed instead of degrading to
+lexical scanning:
+
+```text
+Error: --comment-strategy antlr requires at least one project-maintained ANTLR grammar, and this build ships none
+(none (probed '/app/grammars/grammar-manifest.json')). Provide a manifest and its .g4/lexer files, or use
+--comment-strategy lexical.
+```
+
+Every comment-processing run prints which strategy answered and what it removed:
+
+```text
+Comment stripping: strategy=lexical (requested: auto; lexical scanning; no project-maintained grammar (none (probed '/app/grammars/grammar-manifest.json')))
+Comment stripping: files=12; removed=37 (inline 20, block 12, documentation 5); documentation preserved=3; unterminated=0; languages: csharp=9, javascript=3
+```
+
+The supported languages, comment forms, guarantees, and known limitations are documented in
+[Comment stripping](COMMENT_STRIPPING.md).
 
 ## Filtering notes
 

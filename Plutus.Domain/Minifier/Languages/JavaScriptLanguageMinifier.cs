@@ -1,16 +1,15 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class JavaScriptLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "javascript";
-
-    public override string Description => "JavaScript/TypeScript Minifier (Removes standard comments, protects template literals)";
-
-    // Group 1 protects template literals (backticks), double quotes, single quotes, and regex literals safely.
-    // Group 2/3 captures and destroys block and single-line comments.
-    protected override Regex CommentReplacePattern { get; } = new Regex(
-        @"(`[\s\S]*?`|""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>
+/// JavaScript/TypeScript minifier. The lexical scanner protects template literals (including comments inside
+/// <c>${...}</c> holes, which are code) and regular-expression literals such as <c>/[/*]/</c>.
+/// </summary>
+public sealed class JavaScriptLanguageMinifier(
+    string language = "javascript",
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier(language, "JavaScript/TypeScript Minifier (Removes standard comments, protects template literals)", options, mode, stripper, observer);

@@ -1,18 +1,11 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class PhpLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "php";
-    public override string Description => "PHP Minifier (Removes //, # and /*...*/ comments)";
-
-    protected override Regex CommentReplacePattern { get; } = new(@"(?x)
-            ( "" (?: [^""\\] | \\. )* ""                 # 1. Double quoted strings
-
-            | ' (?: [^'\\] | \\. )* ' )                  # 2. Single quoted strings
-            | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / ) # Block comments
-            | ( // [^\r\n]* )                            # Line comments type 1
-            | ( \# [^\r\n]* )                            # Line comments type 2 (#)",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>PHP minifier, including heredoc and nowdoc bodies.</summary>
+public sealed class PhpLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier("php", "PHP Minifier (Removes //, # and /*...*/ comments)", options, mode, stripper, observer);

@@ -1,15 +1,11 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class SqlLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "sql";
-    public override string Description => "SQL Minifier (Removes inline -- and block /*...*/ comments)";
-
-    protected override Regex CommentReplacePattern { get; } = new(@"(?x)
-            ( ' (?: [^'\\] | \\. | '' )* ' )             # 1. SQL string literals (handles escaped '')
-            | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / ) # Block comments
-            | ( -- [^\r\n]* )                            # Single-line -- comments",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>SQL minifier, including PostgreSQL dollar-quoted bodies and T-SQL bracket identifiers.</summary>
+public sealed class SqlLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier("sql", "SQL Minifier (Removes inline -- and block /*...*/ comments)", options, mode, stripper, observer);

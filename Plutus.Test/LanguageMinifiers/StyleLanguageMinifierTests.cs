@@ -6,6 +6,9 @@ public class StyleLanguageMinifierTests : MinifierTestsBase
 {
     private readonly StyleLanguageMinifier _minifier = new();
 
+    // Plain CSS has no line comments, so the preprocessor dialect is what decides whether '//' is a comment.
+    private readonly StyleLanguageMinifier _scssMinifier = new("scss");
+
     [Fact]
     public void Minify_CssComments_RemovesStandardBlockComments()
     {
@@ -53,7 +56,7 @@ public class StyleLanguageMinifierTests : MinifierTestsBase
                        "            }";
 
         // Act
-        var result = _minifier.Minify(source);
+        var result = _scssMinifier.Minify(source);
 
         // Assert
         Assert.Equal(Normalize(expected), Normalize(result));

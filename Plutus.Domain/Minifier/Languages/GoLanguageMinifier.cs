@@ -1,13 +1,11 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class GoLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "go";
-    public override string Description => "Go Minifier (Removes comments, preserves standard and raw strings)";
-
-    protected override Regex CommentReplacePattern { get; } = new Regex(
-        @"(`[\s\S]*?`|""(?:[^""\\]|\\.)*""|'(?:[^'\\]|\\.)*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>Go minifier. Go has no distinct documentation comment form, so <c>//</c> is always an ordinary comment.</summary>
+public sealed class GoLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier("go", "Go Minifier (Removes comments, preserves standard and raw strings)", options, mode, stripper, observer);

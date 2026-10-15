@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <!-- Removed: layout metadata -->
+    <title data-note="<!-- kept, this is an attribute -->">Fixture</title>
+    <script>
+        // This script body is not scanned as markup: the line stays.
+        var re = /a\/\/b/;
+    </script>
+    <style>
+        /* This style body is not scanned as markup either. */
+        .x { color: red; }
+    </style>
+</head>
+<body>
+    <p class="lead">Text with &lt;!-- escaped marker --&gt;.</p>
+    <!-- Removed: footer note -->
+</body>
+</html>
