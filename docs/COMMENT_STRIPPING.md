@@ -153,11 +153,12 @@ plutus ./src --strip-comments --comment-strategy antlr          # ANTLR token ch
   path instead of quietly falling back to lexical scanning. A manifest that exists but cannot be trusted (invalid
   JSON, unknown channel name, missing `.g4` file) fails the run for `auto` and `antlr` as well.
 
-When comment processing runs, the CLI prints what actually happened:
+When comment processing runs, the run report states what actually happened:
 
 ```text
-Comment stripping: strategy=lexical (requested: auto; lexical scanning; no project-maintained grammar (none (probed '/app/grammars/grammar-manifest.json')))
-Comment stripping: files=12; removed=37 (inline 20, block 12, documentation 5); documentation preserved=3; unterminated=0; languages: csharp=9, javascript=3
+Source processing
+  comments    strategy=lexical (requested: auto) — lexical scanning; no project-maintained grammar
+              files=12, removed=37 (inline 20, block 12, documentation 5), documentation preserved=3, languages: csharp=9, javascript=3
 ```
 
 A strategy that declines to transform a file (for example a grammar-backed lexer whose tokens do not tile the

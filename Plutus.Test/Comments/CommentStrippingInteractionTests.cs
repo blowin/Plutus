@@ -91,11 +91,13 @@ public class CommentStrippingInteractionTests
 
         minifier.Minify("// comment\ncode();\n", "csharp");
 
-        report.IsActive.Should().BeTrue();
-        report.FilesProcessed.Should().Be(1);
-        report.RemovedComments.Should().Be(1);
-        report.StrategiesByLanguage.Should().ContainKey(LanguageId.CSharp).WhoseValue.Should().Be("Lexical");
-        report.Describe().Should().Contain("strategy=lexical").And.Contain("files=1");
+        var summary = report.Snapshot();
+
+        summary.IsActive.Should().BeTrue();
+        summary.Files.Should().Be(1);
+        summary.RemovedComments.Should().Be(1);
+        summary.Strategies[LanguageId.CSharp].Should().Be(CommentStripStrategy.Lexical);
+        summary.Languages[LanguageId.CSharp].Should().Be(1);
     }
 
     [Fact]
@@ -130,8 +132,9 @@ public class CommentStrippingInteractionTests
         minifiers.Minify("SELECT 1; -- comment", LanguageId.Sql).Should().Be("SELECT 1; ");
         minifiers.Minify("a(); // comment", LanguageId.CSharp).Should().Be("a(); ");
 
-        report.StrategiesByLanguage[LanguageId.Sql].Should().Be("AntlrTokenChannel");
-        report.StrategiesByLanguage[LanguageId.CSharp].Should().Be("Lexical");
+        var summary = report.Snapshot();
+        summary.Strategies[LanguageId.Sql].Should().Be(CommentStripStrategy.AntlrTokenChannel);
+        summary.Strategies[LanguageId.CSharp].Should().Be(CommentStripStrategy.Lexical);
     }
 
     private static SourceProcessingContext Context(

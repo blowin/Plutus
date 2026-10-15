@@ -43,6 +43,7 @@ flowchart TD
 - **Source-processing modes:** `SourceProcessingMode` distinguishes stripping comments from minifying: the whitespace pass, C# region removal, and the final trim happen only in `Minify` mode, which keeps `--strip-comments` byte-faithful outside the comments themselves.
 - **Discovery over dispatch:** language processors (`IMaintainedLanguageProcessor`) and structural providers (`ISignatureSkeletonProvider`) declare the language they serve and are registered by the container scanning for their interface. `LanguageMinifierCatalog.Compose` fills in every other language from the syntax table and rejects a language claimed twice, so no switch over language identifiers exists in the code.
 - **Language identity:** `LanguageId` is a normalized value type rather than a loose string, so lookups need no comparer, a misspelled identifier cannot silently miss a table entry, and the canonical spellings live in one place.
+- **One output target:** services report progress, warnings and errors through `IRunOutput` instead of writing to the console, and the bundler records its numbers in `BundleRunReport` instead of printing them. The host binds the target (`ConsoleRunOutput` for the CLI, `NullRunOutput` for a library caller or a test) and `RunReportWriter` renders the whole run report in one place, so the wording, the alignment and the number culture cannot drift between layers.
 - **Dependency injection:** `Plutus.Infrastructure` registers the concrete services consumed by the CLI runner.
 
 ## Error and omission semantics

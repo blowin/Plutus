@@ -2,12 +2,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens.Applier;
+using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
 
@@ -15,8 +17,18 @@ namespace Plutus.Infrastructure;
 
 public static class ServiceCollectionExt
 {
-    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, RunAppOptions options)
+    /// <summary>
+    /// Registers the services of a run. <paramref name="runOutput"/> is the single target every service reports to;
+    /// when it is omitted the run is silent, which is what a library caller or a test usually wants.
+    /// </summary>
+    public static IServiceCollection AddInfrastructureServices(
+        this IServiceCollection services,
+        RunAppOptions options,
+        IRunOutput? runOutput = null)
     {
+        var output = runOutput ?? NullRunOutput.Instance;
+        services.AddSingleton(output);
+        services.AddSingleton<BundleRunReport>();
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
             AllowAutoRedirect = true,
@@ -57,15 +69,15 @@ public static class ServiceCollectionExt
         services.AddSingleton<IFileInfoDetailProvider, PhysicianPlutusFileInfo>();
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
-        services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
+        services.AddSingleton<IAdditionalIgnoreMatcherProvider>(_ => new AdditionalIgnoreMatcherProvider(output));
         services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
 
         // One limits service per payload: the bundle both carries source files and, in diff mode, diffs.
         // The repository root is resolved per bundle by the provider, so it is passed to Apply rather than
         // captured here.
-        services.AddScoped<BundleLimits>(_ => new BundleLimits(options.MaxFileSize, options.TokenBudget));
-        services.AddScoped<DiffScopeLimiter>(_ => new DiffScopeLimiter(
-            new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget)));
+        services.AddScoped(_ => new BundleLimits(options.MaxFileSize, options.TokenBudget, output));
+        services.AddScoped(_ => new DiffScopeLimiter(
+            new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget, output)));
         services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
             ? new NullGitDiffContextProvider()
             : ActivatorUtilities.CreateInstance<GitDiffContextProvider>(provider));

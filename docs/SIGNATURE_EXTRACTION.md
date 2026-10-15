@@ -88,7 +88,16 @@ public void Run(); // starts the work
   (`files with parse diagnostics=N`). When the parse tree is too damaged for a safe cut — a synthesised body with
   no braces of its own, or spans that conflict — the file is returned unchanged with the reason recorded.
 - **Never silent.** Every run prints which provider answered, how many bodies of each kind were cut, and how many
-  files had no provider.
+  files had no provider:
+
+  ```text
+  Source processing
+    signatures  provider=roslyn-csharp
+                files=12, bodies=48 (accessor=6, constructor=3, method=30, property=9), without a provider=2
+  ```
+
+  The run report is rendered by one writer, and every service in a run reports through one output target, so the
+  wording does not depend on which layer is speaking; see [Architecture](ARCHITECTURE.md).
 
 ## Interaction with the other flags
 

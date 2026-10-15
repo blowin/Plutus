@@ -33,7 +33,8 @@ public class CommentStrippingPlanTests
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.Lexical);
         plan.GrammarBackedLanguages.Should().BeEmpty();
         plan.Rationale.Should().Contain("no project-maintained grammar");
-        plan.Describe().Should().StartWith("strategy=lexical (requested: auto;");
+        plan.DefaultStrategy.ToDisplayName().Should().Be("lexical");
+        plan.Request.ToDisplayName().Should().Be("auto");
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public class CommentStrippingPlanTests
         error.Should().BeNull();
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.AntlrTokenChannel);
         plan.GrammarBackedLanguages.Should().Equal(LanguageId.Sql);
-        plan.Describe().Should().StartWith("strategy=antlr-token-channel");
+        plan.DefaultStrategy.ToDisplayName().Should().Be("antlr-token-channel");
     }
 
     [Fact]
@@ -124,12 +125,13 @@ public class CommentStrippingPlanTests
 public class CommentStrippingReportTests
 {
     [Fact]
-    public void Describe_WithoutActivity_StatesThatNothingNeededProcessing()
+    public void Snapshot_WithoutActivity_ReportsThatNothingWasProcessed()
     {
         var report = new CommentStrippingReport(Plan());
 
         report.IsActive.Should().BeFalse();
-        report.Describe().Should().Contain("no source file required comment processing");
+        report.Snapshot().IsActive.Should().BeFalse();
+        report.Snapshot().Files.Should().Be(0);
     }
 
     [Fact]
@@ -140,28 +142,36 @@ public class CommentStrippingReportTests
         report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, inline: 2, block: 1, documentation: 1));
         report.OnCommentsStripped(LanguageId.JavaScript, Result(LanguageId.JavaScript, inline: 3));
 
-        report.IsActive.Should().BeTrue();
-        report.FilesProcessed.Should().Be(2);
-        report.RemovedComments.Should().Be(7);
-        report.StrategiesByLanguage.Should().HaveCount(2);
+        var summary = report.Snapshot();
+
+        summary.IsActive.Should().BeTrue();
+        summary.Files.Should().Be(2);
+        summary.RemovedComments.Should().Be(7);
+        summary.Languages.Should().HaveCount(2);
+        summary.Languages[LanguageId.CSharp].Should().Be(1);
     }
 
     [Fact]
-    public void Describe_ReportsStrategyCountsAndLanguages()
+    public void Snapshot_CarriesStrategyCountsAndLanguages()
     {
         var report = new CommentStrippingReport(Plan());
         report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, inline: 1));
         report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, block: 1, preservedDocumentation: 2, unterminated: 1));
 
-        var description = report.Describe();
+        var summary = report.Snapshot();
 
-        description.Should().Contain("strategy=lexical");
-        description.Should().Contain("files=2");
-        description.Should().Contain("removed=2");
-        description.Should().Contain("inline 1, block 1, documentation 0");
-        description.Should().Contain("documentation preserved=2");
-        description.Should().Contain("unterminated=1");
-        description.Should().Contain("languages: csharp=2");
+        summary.Strategy.Should().Be(CommentStripStrategy.Lexical);
+        summary.Request.Should().Be(CommentStrategyRequest.Auto);
+        summary.Rationale.Should().NotBeNullOrWhiteSpace();
+        summary.Files.Should().Be(2);
+        summary.RemovedComments.Should().Be(2);
+        summary.RemovedInline.Should().Be(1);
+        summary.RemovedBlock.Should().Be(1);
+        summary.RemovedDocumentation.Should().Be(0);
+        summary.PreservedDocumentation.Should().Be(2);
+        summary.Unterminated.Should().Be(1);
+        summary.Languages[LanguageId.CSharp].Should().Be(2);
+        summary.Strategies[LanguageId.CSharp].Should().Be(CommentStripStrategy.Lexical);
     }
 
     [Fact]
@@ -171,9 +181,10 @@ public class CommentStrippingReportTests
 
         report.OnCommentsStripped(LanguageId.Sql, Result(LanguageId.Sql) with { FallbackReason = "lexer output does not tile the input" });
 
-        report.Fallbacks.Should().Be(1);
-        report.FallbackReasons.Should().ContainSingle().Which.Should().Contain("does not tile");
-        report.Describe().Should().Contain("strategy fallbacks=1");
+        var summary = report.Snapshot();
+
+        summary.Fallbacks.Should().Be(1);
+        summary.FallbackReasons.Should().ContainSingle().Which.Should().Contain("does not tile");
     }
 
     private static CommentStrippingPlan Plan()

@@ -167,7 +167,14 @@ are left alone. Only C# has a provider today; any other language is passed throu
 report:
 
 ```text
-Signature extraction: files=12; bodies stripped=48 (method 30, property 9, accessor 6, constructor 3); providers: roslyn-csharp=10; without a provider=2; files with parse diagnostics=0 (0 diagnostic(s)); fallbacks=0
+Bundle created:  /work/artifacts/api-surface.md
+Files included:  12
+Total size:      240.5 KB
+Elapsed time:    0.42s (420 ms)
+
+Source processing
+  signatures  provider=roslyn-csharp
+              files=12, bodies=48 (accessor=6, constructor=3, method=30, property=9), without a provider=2
 ```
 
 The order is always comments, then signatures, then whitespace, so `--signatures-only` composes with
@@ -202,14 +209,24 @@ Error: --comment-strategy antlr requires at least one project-maintained ANTLR g
 --comment-strategy lexical.
 ```
 
-Every comment-processing run prints which strategy answered and what it removed:
+Every run that processes source prints what happened, and every service in the run reports through the same output,
+so the wording does not depend on which layer is speaking:
 
 ```text
-Comment stripping: strategy=lexical (requested: auto; lexical scanning; no project-maintained grammar (none (probed '/app/grammars/grammar-manifest.json')))
-Comment stripping: files=12; removed=37 (inline 20, block 12, documentation 5); documentation preserved=3; unterminated=0; languages: csharp=9, javascript=3
+Bundle created:  /work/artifacts/context.md
+Files included:  12
+Total size:      240.5 KB
+Elapsed time:    0.42s (420 ms)
+
+Source processing
+  comments    strategy=lexical (requested: auto) — lexical scanning; no project-maintained grammar
+              files=12, removed=37 (inline 20, block 12, documentation 5), documentation preserved=3, languages: csharp=9, javascript=3
+  signatures  provider=roslyn-csharp
+              files=12, bodies=48 (accessor=6, constructor=3, method=30, property=9), without a provider=2
 ```
 
-The supported languages, comment forms, guarantees, and known limitations are documented in
+Warnings and errors go to standard error as `Warning: …` and `Error: …`; results go to standard output, framed as
+`label:  value`. The supported languages, comment forms, guarantees, and known limitations are documented in
 [Comment stripping](COMMENT_STRIPPING.md).
 
 ## Filtering notes

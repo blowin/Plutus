@@ -1,3 +1,5 @@
+using Plutus.Domain.Diagnostics;
+
 namespace Plutus.Domain;
 
 /// <summary>One limitable payload: a name, its size on disk, and its token estimate.</summary>
@@ -24,8 +26,13 @@ public sealed record BundleLimitResult(
 /// the token budget, the overflow policies and the selection strategies exist in exactly one place and
 /// cannot drift apart between them.
 /// </summary>
-public sealed class BundleLimits(FileSize maxFileSize, Tokens.TokenBudgetOptions? tokenBudget)
+public sealed class BundleLimits(
+    FileSize maxFileSize,
+    Tokens.TokenBudgetOptions? tokenBudget,
+    IRunOutput? runOutput = null)
 {
+    private readonly IRunOutput _output = runOutput ?? NullRunOutput.Instance;
+
     /// <summary>True when a budget is configured, so callers know whether estimating is worth the work.</summary>
     public bool EstimatesTokens => tokenBudget is not null;
 
@@ -83,7 +90,7 @@ public sealed class BundleLimits(FileSize maxFileSize, Tokens.TokenBudgetOptions
 
         if (tokenBudget.OverflowPolicy == Tokens.TokenOverflowPolicy.Warn)
         {
-            Console.Error.WriteLine($"Warning: estimated usage ({candidateTokens:N0} tokens) exceeds --max-tokens {tokenBudget.MaxTokens:N0}; all eligible items will be included.");
+            _output.Warning($"estimated usage ({candidateTokens:N0} tokens) exceeds --max-tokens {tokenBudget.MaxTokens:N0}; all eligible items will be included.");
             return new BundleLimitResult(eligible.Select(item => item.Key).ToArray(), exclusions, candidateTokens, candidateTokens);
         }
 

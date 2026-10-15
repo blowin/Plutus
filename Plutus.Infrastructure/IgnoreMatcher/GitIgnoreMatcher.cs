@@ -1,6 +1,7 @@
 using System.Text;
 using MAB.DotIgnore;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diagnostics;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Infrastructure.IgnoreMatcher;
@@ -23,12 +24,19 @@ public sealed class GitIgnoreMatcher(IgnoreList ignoreList) : IIgnoreMatcher
     public static IIgnoreMatcher FromExcludeDirs(IReadOnlyCollection<string> extraIgnorePatterns)
         => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new ExcludeDirectoryMatcher(e));
 
-    public static IIgnoreMatcher FromLines(IReadOnlyCollection<string> extraIgnorePatterns)
+    public static IIgnoreMatcher FromLines(IReadOnlyCollection<string> extraIgnorePatterns, IRunOutput? runOutput = null)
         => CreateIgnoreMatcherOrEmpty(extraIgnorePatterns, e => new GitIgnoreMatcher(e));
 
-    public static IIgnoreMatcher FromFolders(List<IFileProvider> roots, List<string> ignorePatterns, Encoding? encoding = null)
+    public static IIgnoreMatcher FromFolders(
+        List<IFileProvider> roots,
+        List<string> ignorePatterns,
+        Encoding? encoding = null,
+        IRunOutput? runOutput = null)
     {
-        var ignoreLines = roots.SelectMany(e => LoadIgnoreLines(e, encoding)).Concat(ignorePatterns).ToList();
+        var ignoreLines = roots
+            .SelectMany(e => LoadIgnoreLines(e, runOutput ?? NullRunOutput.Instance, encoding))
+            .Concat(ignorePatterns)
+            .ToList();
         return FromLines(ignoreLines);
     }
 
@@ -39,7 +47,7 @@ public sealed class GitIgnoreMatcher(IgnoreList ignoreList) : IIgnoreMatcher
         return ignoreLines.Count == 0 ? EmptyIgnoreMatcher.Instance : factory(new IgnoreList(ignoreLines));
     }
 
-    private static List<string> LoadIgnoreLines(IFileProvider provider, Encoding? encoding = null)
+    private static List<string> LoadIgnoreLines(IFileProvider provider, IRunOutput output, Encoding? encoding = null)
     {
         var lines = new List<string>();
         var gitIgnoreFile = provider.GetFileInfo(".gitignore");
@@ -61,7 +69,7 @@ public sealed class GitIgnoreMatcher(IgnoreList ignoreList) : IIgnoreMatcher
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Warning: failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
+            output.Warning($"failed to read {gitIgnoreFile.PhysicalPath ?? gitIgnoreFile.Name}: {ex.Message}");
         }
 
         return lines;

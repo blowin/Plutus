@@ -23,16 +23,6 @@ public sealed record CommentStrippingPlan
         PreserveDocumentationComments = preserveDocumentationComments,
         Strategy = DefaultStrategy,
     };
-
-    /// <summary>Human-readable form used by the CLI report and by failure messages.</summary>
-    public string Describe()
-    {
-        var request = Request.ToString().ToLowerInvariant();
-        var strategy = DefaultStrategy == CommentStripStrategy.AntlrTokenChannel
-            ? "antlr-token-channel"
-            : DefaultStrategy == CommentStripStrategy.Lexical ? "lexical" : "none";
-        return $"strategy={strategy} (requested: {request}; {Rationale})";
-    }
 }
 
 /// <summary>Resolves the requested strategy against the grammars the project actually maintains.</summary>
@@ -81,7 +71,9 @@ public static class CommentStrippingPlanner
                 return true;
 
             case CommentStrategyRequest.Auto:
-                plan = plan with { Rationale = $"lexical scanning; no project-maintained grammar ({inventory.Describe()})" };
+                // The probed manifest path belongs in the failure message the user sees when they ask for ANTLR, not
+                // in the rationale of every run that simply scans lexically.
+                plan = plan with { Rationale = "lexical scanning; no project-maintained grammar" };
                 return true;
 
             case CommentStrategyRequest.Antlr when inventory.HasGrammars:

@@ -96,25 +96,25 @@ public class SignatureExtractionPipelineTests
         minifier.Minify(ClassWithComment, LanguageId.CSharp);
         minifier.Minify("def add(a, b):\n    return a + b\n", "python");
 
-        report.IsActive.Should().BeTrue();
-        report.FilesProcessed.Should().Be(2);
-        report.StrippedBodies.Should().Be(1);
-        report.UnsupportedFiles.Should().Be(1);
-        report.ProvidersUsed.Should().ContainKey("roslyn-csharp");
-        report.StrippedBodiesByKind.Should().ContainKey(MemberKind.Method).WhoseValue.Should().Be(1);
+        var summary = report.Snapshot();
 
-        var description = report.Describe();
-        description.Should().Contain("files=2");
-        description.Should().Contain("bodies stripped=1");
-        description.Should().Contain("method 1");
-        description.Should().Contain("roslyn-csharp=1");
-        description.Should().Contain("without a provider=1");
+        summary.IsActive.Should().BeTrue();
+        summary.Files.Should().Be(2);
+        summary.StrippedBodies.Should().Be(1);
+        summary.FilesWithoutProvider.Should().Be(1);
+        summary.Providers.Should().ContainKey("roslyn-csharp").WhoseValue.Should().Be(1);
+        summary.BodiesByKind.Should().ContainKey(MemberKind.Method).WhoseValue.Should().Be(1);
+        summary.Fallbacks.Should().Be(0);
     }
 
     [Fact]
     public void Report_WithoutActivity_SaysSo()
     {
-        new SignatureExtractionReport().Describe().Should().Contain("no source file was processed structurally");
+        var summary = new SignatureExtractionReport().Snapshot();
+
+        summary.IsActive.Should().BeFalse();
+        summary.Files.Should().Be(0);
+        summary.StrippedBodies.Should().Be(0);
     }
 
     [Fact]

@@ -4,8 +4,8 @@ namespace Plutus.Domain.Structure;
 
 /// <summary>
 /// Collects what structural extraction actually did during a run: which provider answered, how many bodies of each
-/// kind were cut, and how often the parser disagreed with the file. The CLI prints this, which is what keeps
-/// "signature extraction" from being an unverifiable claim about the bundle.
+/// kind were cut, and how often the parser disagreed with the file. The host prints <see cref="Snapshot"/>, which is
+/// what keeps "signature extraction" from being an unverifiable claim about the bundle.
 /// </summary>
 public sealed class SignatureExtractionReport : ISignatureExtractionObserver
 {
@@ -19,27 +19,6 @@ public sealed class SignatureExtractionReport : ISignatureExtractionObserver
     private long _fallbacks;
 
     public bool IsActive => Interlocked.Read(ref _files) > 0;
-
-    public long FilesProcessed => Interlocked.Read(ref _files);
-
-    public long StrippedBodies => _bodiesByKind.Values.Sum(counter => counter.Value);
-
-    public long UnsupportedFiles => Interlocked.Read(ref _unsupportedFiles);
-
-    public long FilesWithParseDiagnostics => Interlocked.Read(ref _filesWithDiagnostics);
-
-    public long ParseDiagnostics => Interlocked.Read(ref _parseDiagnostics);
-
-    public long Fallbacks => Interlocked.Read(ref _fallbacks);
-
-    /// <summary>Provider names actually used, with the number of files each answered for.</summary>
-    public IReadOnlyDictionary<string, long> ProvidersUsed =>
-        _languages.Values
-            .Where(statistics => statistics.Provider is not null)
-            .GroupBy(statistics => statistics.Provider!)
-            .ToDictionary(group => group.Key, group => group.Sum(statistics => statistics.Files), StringComparer.Ordinal);
-
-    public IReadOnlyCollection<string> FallbackReasons => _reasons.ToArray();
 
     public void OnSignaturesExtracted(LanguageId language, SignatureExtractionResult result)
     {
@@ -69,29 +48,21 @@ public sealed class SignatureExtractionReport : ISignatureExtractionObserver
         _languages.GetOrAdd(language, static _ => new LanguageStatistics()).Record(result.Provider);
     }
 
-    /// <summary>Counts of stripped bodies per declaration kind, ordered by kind for a stable report.</summary>
-    public IReadOnlyDictionary<MemberKind, long> StrippedBodiesByKind =>
-        _bodiesByKind.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value.Value);
-
-    public string Describe()
+    /// <summary>Captures the report as data, so a host can render it without reaching into mutable counters.</summary>
+    public SignatureExtractionSummary Snapshot() => new()
     {
-        if (!IsActive)
-        {
-            return "Signature extraction: no source file was processed structurally";
-        }
-
-        var providers = ProvidersUsed.Count == 0
-            ? "none"
-            : string.Join(", ", ProvidersUsed.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}"));
-
-        var kinds = _bodiesByKind.Count == 0
-            ? "none"
-            : string.Join(", ", _bodiesByKind.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key.ToString().ToLowerInvariant()} {pair.Value.Value}"));
-
-        return $"Signature extraction: files={FilesProcessed}; bodies stripped={StrippedBodies} ({kinds}); "
-               + $"providers: {providers}; without a provider={UnsupportedFiles}; "
-               + $"files with parse diagnostics={FilesWithParseDiagnostics} ({ParseDiagnostics} diagnostic(s)); fallbacks={Fallbacks}";
-    }
+        Files = Interlocked.Read(ref _files),
+        BodiesByKind = _bodiesByKind.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value.Value),
+        Providers = _languages.Values
+            .Where(statistics => statistics.Provider is not null)
+            .GroupBy(statistics => statistics.Provider!)
+            .ToDictionary(group => group.Key, group => (long)group.Sum(statistics => statistics.Files), StringComparer.Ordinal),
+        FilesWithoutProvider = Interlocked.Read(ref _unsupportedFiles),
+        FilesWithParseDiagnostics = Interlocked.Read(ref _filesWithDiagnostics),
+        ParseDiagnostics = Interlocked.Read(ref _parseDiagnostics),
+        Fallbacks = Interlocked.Read(ref _fallbacks),
+        FallbackReasons = _reasons.ToArray(),
+    };
 
     private sealed class Counter
     {

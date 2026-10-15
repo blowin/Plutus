@@ -1,18 +1,22 @@
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
+using Plutus.Domain.Diagnostics;
 
 namespace Plutus.Infrastructure;
 
 public class ProjectContextResolver(
     IFileInfoDetailProvider provider,
     IReadOnlyCollection<IRemoteRepository> remoteRepositories,
-    IPathService pathService) : IProjectContextResolver
+    IPathService pathService,
+    IRunOutput? runOutput = null) : IProjectContextResolver
 {
+    private readonly IRunOutput _output = runOutput ?? NullRunOutput.Instance;
+
     public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format, string? branch, string? commit)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
-            Console.Error.WriteLine("Error: No project paths specified.");
+            _output.Error("No project paths specified.");
             return null;
         }
 
@@ -29,7 +33,7 @@ public class ProjectContextResolver(
 
         if (output.IsDirectory)
         {
-            Console.Error.WriteLine($"Error: Output path is a directory: {output.PhysicalPath ?? output.Name}");
+            _output.Error($"Output path is a directory: {output.PhysicalPath ?? output.Name}");
             return null;
         }
 
@@ -63,14 +67,14 @@ public class ProjectContextResolver(
                     continue;
                 }
 
-                Console.WriteLine($"Downloading remote repository: {path}...");
+                _output.Info($"Downloading remote repository: {path}...");
                 try
                 {
                     return await remoteRepositoryProvider.DownloadAsync(path, branch, commit);
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Error downloading repository {path}: {ex.Message}");
+                    _output.Error($"downloading repository {path}: {ex.Message}");
                     throw;
                 }
             }
