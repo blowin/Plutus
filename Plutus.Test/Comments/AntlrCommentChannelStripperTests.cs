@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Plutus.Domain;
 using Plutus.Domain.Comments;
 
 namespace Plutus.Test.Comments;
@@ -12,7 +13,7 @@ public class AntlrCommentChannelStripperTests
 {
     private static readonly GrammarInventoryEntry Grammar = new()
     {
-        Language = "sql",
+        Language = LanguageId.Sql,
         GrammarFile = "SqlLexer.g4",
         LexerClass = "SqlLexer",
         CommentTokenTypes = ["SIMPLE_COMMENT", "BRACKETED_COMMENT"],
@@ -152,7 +153,7 @@ public class AntlrCommentChannelStripperTests
 
         public bool ThrowOnTokenize { get; init; }
 
-        public string Language => "sql";
+        public LanguageId Language => LanguageId.Sql;
 
         public IReadOnlyList<CommentChannelToken> Tokenize(string source)
         {

@@ -24,6 +24,7 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | `--strip-comments` | Off | Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation, and line endings are preserved, and a space is inserted when removing a comment would otherwise join two tokens. See [Comment stripping](COMMENT_STRIPPING.md). |
 | `--preserve-doc-comments` | Off | Keep documentation comments (`///`, `//!`, `/** */`, `/*! */`) while stripping or minifying. Off by default: documentation comments are removed like any other comment. No effect without `--strip-comments` or `--minify`. |
 | `--comment-strategy <auto\|lexical\|antlr>` | `auto` | How comments are located. `auto` uses ANTLR token channels for languages a project-maintained grammar covers and lexical scanning elsewhere; `lexical` forces the character scanner; `antlr` requires a maintained grammar and fails when none exists (no silent fallback). See [ANTLR grammar inventory](ANTLR_GRAMMAR_INVENTORY.md). |
+| `--signatures-only` | Off | Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, `=>` expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of `--strip-comments` and `--minify`. See [Signature extraction](SIGNATURE_EXTRACTION.md). |
 | `--no-gitignore` | Off | Do not read the root `.gitignore`. |
 | `--use-default-excludes` | On | Use built-in exclusions for common generated/junk paths. |
 | `--exclude <pattern...>` / `-e` | None | Global gitignore-style patterns that can exclude files and directories. Can be repeated. |
@@ -134,6 +135,53 @@ Diff omitted: omitted by token budget (60000 tokens; strategy: PathOrder)
 
 The token budget uses the same policies and selection strategies as the content path (`fail`, `warn`, `select`; `path-order`, `largest-first`), and the bundle header reports the diff numbers. `--exclude`/`--include` filters and sensitive-file protection apply to the diff scope as well.
 
+## Signature extraction
+
+`--signatures-only` replaces implementation bodies with a structural `;` using a real parse tree, so a bundle can
+carry a project's shape instead of its code:
+
+```bash
+dotnet run --project Plutus.CLI -- ./src --signatures-only -o ./artifacts/api-surface.md
+dotnet run --project Plutus.CLI -- ./src --signatures-only --strip-comments
+dotnet run --project Plutus.CLI -- ./src --signatures-only --minify --include-files "*.cs"
+```
+
+```csharp
+public sealed class WidgetService : IWidgetService
+{
+    private readonly Dictionary<string, Widget> _widgets = new();
+
+    public WidgetService(IEnumerable<Widget> widgets);
+
+    public int Count;
+
+    public Widget? Find(string id);
+
+    public string Describe<T>(T value) where T : notnull;
+}
+```
+
+Declarations, attributes, documentation comments, generic parameters and constraints survive. Interface members,
+abstract members, auto-properties and field initializers are already signatures or are part of the contract, so they
+are left alone. Only C# has a provider today; any other language is passed through unchanged and counted in the run
+report:
+
+```text
+Bundle created:  /work/artifacts/api-surface.md
+Files included:  12
+Total size:      240.5 KB
+Elapsed time:    0.42s (420 ms)
+
+Source processing
+  signatures  provider=roslyn-csharp
+              files=12, bodies=48 (accessor=6, constructor=3, method=30, property=9), without a provider=2
+```
+
+The order is always comments, then signatures, then whitespace, so `--signatures-only` composes with
+`--strip-comments`, `--preserve-doc-comments` and `--minify`. The output is a skeleton for reading and for model
+context, not compilable code; details, guarantees and limitations are in
+[Signature extraction](SIGNATURE_EXTRACTION.md).
+
 ## Comment stripping
 
 `--strip-comments` removes comments without touching anything else, and `--minify` removes them and collapses
@@ -161,14 +209,24 @@ Error: --comment-strategy antlr requires at least one project-maintained ANTLR g
 --comment-strategy lexical.
 ```
 
-Every comment-processing run prints which strategy answered and what it removed:
+Every run that processes source prints what happened, and every service in the run reports through the same output,
+so the wording does not depend on which layer is speaking:
 
 ```text
-Comment stripping: strategy=lexical (requested: auto; lexical scanning; no project-maintained grammar (none (probed '/app/grammars/grammar-manifest.json')))
-Comment stripping: files=12; removed=37 (inline 20, block 12, documentation 5); documentation preserved=3; unterminated=0; languages: csharp=9, javascript=3
+Bundle created:  /work/artifacts/context.md
+Files included:  12
+Total size:      240.5 KB
+Elapsed time:    0.42s (420 ms)
+
+Source processing
+  comments    strategy=lexical (requested: auto) — lexical scanning; no project-maintained grammar
+              files=12, removed=37 (inline 20, block 12, documentation 5), documentation preserved=3, languages: csharp=9, javascript=3
+  signatures  provider=roslyn-csharp
+              files=12, bodies=48 (accessor=6, constructor=3, method=30, property=9), without a provider=2
 ```
 
-The supported languages, comment forms, guarantees, and known limitations are documented in
+Warnings and errors go to standard error as `Warning: …` and `Error: …`; results go to standard output, framed as
+`label:  value`. The supported languages, comment forms, guarantees, and known limitations are documented in
 [Comment stripping](COMMENT_STRIPPING.md).
 
 ## Filtering notes

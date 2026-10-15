@@ -1,3 +1,4 @@
+using Plutus.Domain;
 using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Test.LanguageMinifiers;
@@ -6,8 +7,8 @@ public class StyleLanguageMinifierTests : MinifierTestsBase
 {
     private readonly StyleLanguageMinifier _minifier = new();
 
-    // Plain CSS has no line comments, so the preprocessor dialect is what decides whether '//' is a comment.
-    private readonly StyleLanguageMinifier _scssMinifier = new("scss");
+    // Plain CSS has no line comments, so the preprocessor dialect passed to Minify decides whether '//' is one.
+    private readonly StyleLanguageMinifier _scssMinifier = new();
 
     [Fact]
     public void Minify_CssComments_RemovesStandardBlockComments()
@@ -56,7 +57,7 @@ public class StyleLanguageMinifierTests : MinifierTestsBase
                        "            }";
 
         // Act
-        var result = _scssMinifier.Minify(source);
+        var result = _scssMinifier.Minify(source, LanguageId.Scss);
 
         // Assert
         Assert.Equal(Normalize(expected), Normalize(result));

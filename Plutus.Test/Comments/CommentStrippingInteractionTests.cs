@@ -17,16 +17,16 @@ public class CommentStrippingInteractionTests
     [Fact]
     public void Create_NoCommentFlags_ReturnsTheIdentityMinifier()
     {
-        var minifier = CodeMinifierFactory.Create(Options());
+        var minifier = TestSourceProcessing.Create(Options());
 
-        minifier.Should().BeSameAs(IdentityCodeMinifier.Instance);
+        minifier.Should().BeOfType<IdentityCodeMinifier>();
         minifier.Minify(MixedSource, "csharp").Should().Be(MixedSource);
     }
 
     [Fact]
     public void Create_StripComments_RemovesOnlyTheComments()
     {
-        var minifier = CodeMinifierFactory.Create(Options(strip: true));
+        var minifier = TestSourceProcessing.Create(Options(strip: true));
 
         // Every line ending survives, including the ones the comments left behind.
         minifier.Minify(MixedSource, "csharp").Should().Be("a();\n\n\nb();\n");
@@ -35,7 +35,7 @@ public class CommentStrippingInteractionTests
     [Fact]
     public void Create_Minify_AlsoCollapsesWhitespaceOnlyLinesAndTrims()
     {
-        var minifier = CodeMinifierFactory.Create(Options(minify: true));
+        var minifier = TestSourceProcessing.Create(Options(minify: true));
 
         minifier.Minify(MixedSource, "csharp").Should().Be("a();\nb();");
     }
@@ -43,8 +43,8 @@ public class CommentStrippingInteractionTests
     [Fact]
     public void Create_BothFlags_BehavesLikeMinify()
     {
-        var both = CodeMinifierFactory.Create(Options(minify: true, strip: true));
-        var minifyOnly = CodeMinifierFactory.Create(Options(minify: true));
+        var both = TestSourceProcessing.Create(Options(minify: true, strip: true));
+        var minifyOnly = TestSourceProcessing.Create(Options(minify: true));
 
         both.Minify(MixedSource, "csharp").Should().Be(minifyOnly.Minify(MixedSource, "csharp"));
     }
@@ -54,7 +54,7 @@ public class CommentStrippingInteractionTests
     [InlineData(false, true)]
     public void Create_PreserveDocComments_KeepsDocumentationInBothModes(bool minify, bool strip)
     {
-        var minifier = CodeMinifierFactory.Create(Options(minify: minify, strip: strip, preserve: true));
+        var minifier = TestSourceProcessing.Create(Options(minify: minify, strip: strip, preserve: true));
 
         var result = minifier.Minify(MixedSource, "csharp");
 
@@ -67,7 +67,7 @@ public class CommentStrippingInteractionTests
     [InlineData(false)]
     public void Create_DocumentationComments_AreRemovedByDefault(bool minify)
     {
-        var minifier = CodeMinifierFactory.Create(Options(minify: minify, strip: !minify));
+        var minifier = TestSourceProcessing.Create(Options(minify: minify, strip: !minify));
 
         minifier.Minify(MixedSource, "csharp").Should().NotContain("/// docs");
     }
@@ -77,8 +77,8 @@ public class CommentStrippingInteractionTests
     {
         const string source = "value # text\n/* neither */\n";
 
-        CodeMinifierFactory.Create(Options(strip: true)).Minify(source, "lua").Should().Be(source);
-        CodeMinifierFactory.Create(Options(minify: true)).Minify(source, "lua").Should().Be(source);
+        TestSourceProcessing.Create(Options(strip: true)).Minify(source, "lua").Should().Be(source);
+        TestSourceProcessing.Create(Options(minify: true)).Minify(source, "lua").Should().Be(source);
     }
 
     [Fact]
@@ -86,15 +86,18 @@ public class CommentStrippingInteractionTests
     {
         var plan = Resolve(CommentStrategyRequest.Auto, GrammarInventory.Empty);
         var report = new CommentStrippingReport(plan);
-        var minifier = CodeMinifierFactory.Create(Options(strip: true, plan: plan), report, plan);
+        var options = Options(strip: true, plan: plan);
+        var minifier = TestSourceProcessing.Minifier(Context(options, plan, report));
 
         minifier.Minify("// comment\ncode();\n", "csharp");
 
-        report.IsActive.Should().BeTrue();
-        report.FilesProcessed.Should().Be(1);
-        report.RemovedComments.Should().Be(1);
-        report.StrategiesByLanguage.Should().ContainKey("csharp").WhoseValue.Should().Be("Lexical");
-        report.Describe().Should().Contain("strategy=lexical").And.Contain("files=1");
+        var summary = report.Snapshot();
+
+        summary.IsActive.Should().BeTrue();
+        summary.Files.Should().Be(1);
+        summary.RemovedComments.Should().Be(1);
+        summary.Strategies[LanguageId.CSharp].Should().Be(CommentStripStrategy.Lexical);
+        summary.Languages[LanguageId.CSharp].Should().Be(1);
     }
 
     [Fact]
@@ -117,21 +120,30 @@ public class CommentStrippingInteractionTests
 
         var plan = Resolve(CommentStrategyRequest.Antlr, inventory);
         var report = new CommentStrippingReport(plan);
-        var lexer = new StubChannelLexer("sql");
-        var minifiers = CompositeCodeMinifier.CreateFull(
-            plan.ToOptions(false),
-            SourceProcessingMode.StripComments,
-            report,
+        var lexer = new StubChannelLexer(LanguageId.Sql);
+        var options = Options(strip: true, plan: plan);
+        var minifiers = TestSourceProcessing.Minifier(Context(
+            options,
             plan,
+            report,
             inventory,
-            new Dictionary<string, ICommentChannelLexer> { ["sql"] = lexer });
+            new Dictionary<LanguageId, ICommentChannelLexer> { [LanguageId.Sql] = lexer }));
 
-        minifiers.Minify("SELECT 1; -- comment", "sql").Should().Be("SELECT 1; ");
-        minifiers.Minify("a(); // comment", "csharp").Should().Be("a(); ");
+        minifiers.Minify("SELECT 1; -- comment", LanguageId.Sql).Should().Be("SELECT 1; ");
+        minifiers.Minify("a(); // comment", LanguageId.CSharp).Should().Be("a(); ");
 
-        report.StrategiesByLanguage["sql"].Should().Be("AntlrTokenChannel");
-        report.StrategiesByLanguage["csharp"].Should().Be("Lexical");
+        var summary = report.Snapshot();
+        summary.Strategies[LanguageId.Sql].Should().Be(CommentStripStrategy.AntlrTokenChannel);
+        summary.Strategies[LanguageId.CSharp].Should().Be(CommentStripStrategy.Lexical);
     }
+
+    private static SourceProcessingContext Context(
+        RunAppOptions options,
+        CommentStrippingPlan plan,
+        ICommentStripObserver? observer = null,
+        GrammarInventory? inventory = null,
+        IReadOnlyDictionary<LanguageId, ICommentChannelLexer>? lexers = null) =>
+        new CodeMinifierFactory(options, TestSourceProcessing.Syntax, inventory, lexers, TestSourceProcessing.Providers(), observer).CreateContext();
 
     private static RunAppOptions Options(bool minify = false, bool strip = false, bool preserve = false, CommentStrippingPlan? plan = null) => new()
     {
@@ -159,7 +171,7 @@ public class CommentStrippingInteractionTests
 
     private static CommentStrippingPlan Resolve(CommentStrategyRequest request, GrammarInventory inventory)
     {
-        CommentStrippingPlanner.TryResolve(request, inventory, out var plan, out var error).Should().BeTrue(error);
+        new CommentStrippingPlanner().TryResolve(request, inventory, out var plan, out var error).Should().BeTrue(error);
         return plan;
     }
 
@@ -167,9 +179,9 @@ public class CommentStrippingInteractionTests
     /// A minimal lexer that reports one line comment per <c>--</c>, which is enough to prove that the channel path
     /// is wired and observable.
     /// </summary>
-    private sealed class StubChannelLexer(string language) : ICommentChannelLexer
+    private sealed class StubChannelLexer(LanguageId language) : ICommentChannelLexer
     {
-        public string Language { get; } = language;
+        public LanguageId Language { get; } = language;
 
         public IReadOnlyList<CommentChannelToken> Tokenize(string source)
         {

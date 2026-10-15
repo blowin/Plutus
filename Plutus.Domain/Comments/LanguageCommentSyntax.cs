@@ -124,7 +124,11 @@ public sealed record StringLiteralSyntax
 /// <summary>Every comment and literal form of one language.</summary>
 public sealed record LanguageCommentSyntax
 {
+    /// <summary>The canonical identifier spelling of the language, as listed by <see cref="LanguageId.All"/>.</summary>
     public required string Language { get; init; }
+
+    /// <summary>The same identifier as a value, which is what the pipeline passes around.</summary>
+    public LanguageId Id => LanguageId.Parse(Language);
 
     /// <summary>Name for user-facing messages, for example <c>C#</c>.</summary>
     public required string DisplayName { get; init; }
@@ -146,4 +150,7 @@ public sealed record LanguageCommentSyntax
 
     /// <summary>Other language identifiers that share this syntax, such as <c>tsx</c> for <c>javascript</c>.</summary>
     public IReadOnlyList<string> Aliases { get; init; } = [];
+
+    /// <summary>The aliases as values.</summary>
+    public IReadOnlyList<LanguageId> AliasIds => Aliases.Select(LanguageId.Parse).ToArray();
 }

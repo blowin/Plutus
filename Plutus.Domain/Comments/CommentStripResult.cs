@@ -12,6 +12,9 @@ public sealed record CommentStripResult
     /// <summary>The strategy that produced <see cref="Content"/>.</summary>
     public required CommentStripStrategy Strategy { get; init; }
 
+    /// <summary>The language the pass ran for, <c>default</c> when the input had no identifier.</summary>
+    public LanguageId Language { get; init; }
+
     /// <summary>
     /// <c>false</c> when the language has no maintained comment syntax: the content is passed through untouched
     /// rather than having another language's rules applied to it.

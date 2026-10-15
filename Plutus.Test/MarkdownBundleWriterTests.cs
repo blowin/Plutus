@@ -41,7 +41,7 @@ public class MarkdownBundleWriterTests
             .Returns(_ => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
 
         // Важно: BundleWriter сам определит язык "markdown" для расширения .md
-        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
@@ -69,7 +69,7 @@ public class MarkdownBundleWriterTests
         mockFile.CreateReadStream().Returns(e => new MemoryStream(stream.ToArray()));
         mockFile.Length.Returns(stream.Length);
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.GetEncoding(1251), new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.GetEncoding(1251), new BundleLimits(FileSize.FromBytes(4096), null));
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
@@ -88,7 +88,7 @@ public class MarkdownBundleWriterTests
         mockFile.Name.Returns("big_file.txt");
         mockFile.Length.Returns(5000); // Размер 5000 байт
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
         var roots = CreateSingleFileRoot("big_file.txt", mockFile);
 
         // Act

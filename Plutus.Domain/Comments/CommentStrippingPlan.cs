@@ -15,7 +15,7 @@ public sealed record CommentStrippingPlan
     public required string Rationale { get; init; }
 
     /// <summary>Languages that will use ANTLR token channels because a maintained grammar covers them.</summary>
-    public IReadOnlyList<string> GrammarBackedLanguages { get; init; } = [];
+    public IReadOnlyList<LanguageId> GrammarBackedLanguages { get; init; } = [];
 
     public CommentStripOptions ToOptions(bool preserveDocumentationComments) => new()
     {
@@ -23,27 +23,20 @@ public sealed record CommentStrippingPlan
         PreserveDocumentationComments = preserveDocumentationComments,
         Strategy = DefaultStrategy,
     };
-
-    /// <summary>Human-readable form used by the CLI report and by failure messages.</summary>
-    public string Describe()
-    {
-        var request = Request.ToString().ToLowerInvariant();
-        var strategy = DefaultStrategy == CommentStripStrategy.AntlrTokenChannel
-            ? "antlr-token-channel"
-            : DefaultStrategy == CommentStripStrategy.Lexical ? "lexical" : "none";
-        return $"strategy={strategy} (requested: {request}; {Rationale})";
-    }
 }
 
-/// <summary>Resolves the requested strategy against the grammars the project actually maintains.</summary>
-public static class CommentStrippingPlanner
+/// <summary>
+/// Resolves the requested strategy against the grammars the project actually maintains. It is a service rather than
+/// a static helper so a host can inject it and a test can substitute it, and so the resolution has one owner.
+/// </summary>
+public sealed class CommentStrippingPlanner
 {
     /// <summary>
     /// Resolves the plan, or fails with a reason. A broken manifest is a failure even for <c>auto</c>: falling
     /// back to lexical scanning because a grammar could not be read is exactly the silent downgrade this feature
     /// is meant to prevent.
     /// </summary>
-    public static bool TryResolve(CommentStrategyRequest request, GrammarInventory inventory, out CommentStrippingPlan plan, out string? error)
+    public bool TryResolve(CommentStrategyRequest request, GrammarInventory inventory, out CommentStrippingPlan plan, out string? error)
     {
         plan = new CommentStrippingPlan
         {
@@ -66,7 +59,8 @@ public static class CommentStrippingPlanner
             return false;
         }
 
-        var grammarLanguages = inventory.Entries.Select(entry => entry.Language).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // LanguageId normalizes its value, so plain Distinct is already case-insensitive.
+        var grammarLanguages = inventory.Entries.Select(entry => entry.Language).Distinct().ToList();
 
         switch (request)
         {
@@ -80,7 +74,9 @@ public static class CommentStrippingPlanner
                 return true;
 
             case CommentStrategyRequest.Auto:
-                plan = plan with { Rationale = $"lexical scanning; no project-maintained grammar ({inventory.Describe()})" };
+                // The probed manifest path belongs in the failure message the user sees when they ask for ANTLR, not
+                // in the rationale of every run that simply scans lexically.
+                plan = plan with { Rationale = "lexical scanning; no project-maintained grammar" };
                 return true;
 
             case CommentStrategyRequest.Antlr when inventory.HasGrammars:

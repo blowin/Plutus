@@ -35,3 +35,19 @@ public enum CommentStrategyRequest
     /// <summary>Always use ANTLR token channels; fails when no maintained grammar covers a language.</summary>
     Antlr = 2,
 }
+
+/// <summary>
+/// The names the strategies are reported under. They are part of the vocabulary of the feature, not of any one
+/// front end, so both the messages the domain produces and the run report the host prints use them.
+/// </summary>
+public static class CommentStrategyNames
+{
+    public static string ToDisplayName(this CommentStripStrategy strategy) => strategy switch
+    {
+        CommentStripStrategy.AntlrTokenChannel => "antlr-token-channel",
+        CommentStripStrategy.Lexical => "lexical",
+        _ => "none",
+    };
+
+    public static string ToDisplayName(this CommentStrategyRequest request) => request.ToString().ToLowerInvariant();
+}

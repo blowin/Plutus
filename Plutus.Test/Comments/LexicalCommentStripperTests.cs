@@ -10,7 +10,7 @@ namespace Plutus.Test.Comments;
 public class LexicalCommentStripperTests
 {
     private static CommentStripResult Strip(string source, string language = "csharp", CommentStripOptions? options = null) =>
-        LexicalCommentStripper.Instance.Strip(source, language, options ?? CommentStripOptions.Default);
+        new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, options ?? CommentStripOptions.Default);
 
     private static string StripText(string source, string language = "csharp", CommentStripOptions? options = null) =>
         Strip(source, language, options).Content;

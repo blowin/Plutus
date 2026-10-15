@@ -5,7 +5,11 @@ namespace Plutus.Domain.Comments;
 /// consumed as part of a literal, or consumed as a comment; nothing is rewritten, so whitespace, line endings and
 /// literal contents reach the output byte for byte.
 /// </summary>
-internal sealed class CommentScanner(string source, LanguageCommentSyntax syntax, CommentStripOptions options)
+internal sealed class CommentScanner(
+    string source,
+    LanguageCommentSyntax syntax,
+    CommentStripOptions options,
+    LanguageId language)
 {
     private static readonly HashSet<string> RegexPrefixKeywords = new(StringComparer.Ordinal)
     {
@@ -41,6 +45,7 @@ internal sealed class CommentScanner(string source, LanguageCommentSyntax syntax
         {
             Content = _buffer.ToString(),
             Strategy = CommentStripStrategy.Lexical,
+            Language = language,
             RemovedInlineComments = _removedInline,
             RemovedBlockComments = _removedBlock,
             RemovedDocumentationComments = _removedDocumentation,

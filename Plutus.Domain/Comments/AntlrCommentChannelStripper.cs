@@ -19,11 +19,11 @@ public sealed class AntlrCommentChannelStripper(GrammarInventoryEntry grammar, I
 
     public GrammarInventoryEntry Grammar { get; } = grammar;
 
-    public CommentStripResult Strip(string source, string language, CommentStripOptions options)
+    public CommentStripResult Strip(string source, LanguageId language, CommentStripOptions options)
     {
         if (string.IsNullOrEmpty(source))
         {
-            return new CommentStripResult { Content = source, Strategy = Strategy };
+            return new CommentStripResult { Content = source, Strategy = Strategy, Language = language };
         }
 
         var channelNumbers = Grammar.ResolveCommentChannelNumbers(out var unresolved);
@@ -95,12 +95,17 @@ public sealed class AntlrCommentChannelStripper(GrammarInventoryEntry grammar, I
         {
             Content = buffer.ToString(),
             Strategy = Strategy,
+            Language = language,
             RemovedInlineComments = removedInline,
             RemovedBlockComments = removedBlock,
             RemovedDocumentationComments = removedDocumentation,
             PreservedDocumentationComments = preservedDocumentation,
         };
     }
+
+    /// <summary>Boundary convenience for callers that already hold an identifier as text.</summary>
+    public CommentStripResult Strip(string source, string? language, CommentStripOptions options) =>
+        Strip(source, LanguageId.From(language), options);
 
     private bool IsCommentToken(CommentChannelToken token, IReadOnlyList<int> channelNumbers) =>
         _commentTokenTypes.Contains(token.TypeName)

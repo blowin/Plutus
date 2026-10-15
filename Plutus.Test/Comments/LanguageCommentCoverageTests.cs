@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Minifier;
 
@@ -77,7 +78,7 @@ public class LanguageCommentCoverageTests
     {
         var source = commentLine + "\n" + literalLine + "\n";
 
-        var result = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
+        var result = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, CommentStripOptions.Default);
 
         result.LanguageSupported.Should().BeTrue($"{language} is advertised as supported");
 
@@ -93,8 +94,8 @@ public class LanguageCommentCoverageTests
     {
         var source = commentLine + "\n" + literalLine + "\n";
 
-        var first = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
-        var second = LexicalCommentStripper.Instance.Strip(first.Content, language, CommentStripOptions.Default);
+        var first = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, CommentStripOptions.Default);
+        var second = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(first.Content, language, CommentStripOptions.Default);
 
         second.RemovedComments.Should().Be(0);
         second.Content.Should().Be(first.Content);
@@ -105,7 +106,7 @@ public class LanguageCommentCoverageTests
     {
         var sampled = Samples.Select(sample => sample.Language).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        LanguageCommentSyntaxRegistry.Definitions
+        TestSourceProcessing.Syntax.Definitions
             .Select(definition => definition.Language)
             .Should().BeSubsetOf(sampled);
     }
@@ -113,7 +114,7 @@ public class LanguageCommentCoverageTests
     [Fact]
     public void Registry_EveryDefinitionDeclaresAtLeastOneCommentForm()
     {
-        foreach (var syntax in LanguageCommentSyntaxRegistry.Definitions)
+        foreach (var syntax in TestSourceProcessing.Syntax.Definitions)
         {
             (syntax.LineComments.Count > 0 || syntax.BlockComments.Count > 0)
                 .Should().BeTrue($"{syntax.Language} must declare a comment form or stop claiming support");
@@ -123,27 +124,46 @@ public class LanguageCommentCoverageTests
     [Fact]
     public void Registry_SupportedLanguagesAreOfferedByTheCatalog()
     {
-        var catalog = CompositeCodeMinifier.CreateFull().SupportedMinifiers
-            .Select(minifier => minifier.Language)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var catalog = new CompositeCodeMinifier(TestSourceProcessing.Minifiers(SourceProcessingContext.Default));
 
-        LanguageCommentSyntaxRegistry.Languages.Should().BeSubsetOf(catalog);
+        TestSourceProcessing.Syntax.Languages.Should().BeSubsetOf(catalog.SupportedLanguages);
     }
 
     [Fact]
     public void Registry_LanguagesWithoutSyntaxAreNotOfferedByTheCatalog()
     {
-        var catalog = CompositeCodeMinifier.CreateFull();
+        var catalog = new CompositeCodeMinifier(TestSourceProcessing.Minifiers(SourceProcessingContext.Default));
 
-        catalog.SupportedMinifiers.Should().NotContain(minifier => minifier.Language == "yaml");
+        catalog.SupportedLanguages.Should().NotContain(LanguageId.Parse("yaml"));
         catalog.Minify("value # text", "yaml").Should().Be("value # text");
+    }
+
+    [Fact]
+    public void Registry_EveryLanguageNameIsADeclaredLanguageId()
+    {
+        // The table may only use spellings this project declares, so a language cannot be invented in passing.
+        TestSourceProcessing.Syntax.LanguageNames.Should().BeSubsetOf(LanguageId.All.Select(id => id.Value));
+    }
+
+    [Fact]
+    public void Registry_DeclaredProcessorsCoverExactlyTheMaintainedProcessorSet()
+    {
+        // The container discovers processors by interface; the catalog lists them. Both must be the same set.
+        var discovered = typeof(IMaintainedLanguageProcessor).Assembly
+            .GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(IMaintainedLanguageProcessor).IsAssignableFrom(type))
+            .ToHashSet();
+
+        var maintained = new LanguageMinifierCatalog(TestSourceProcessing.Syntax).Maintained().Select(minifier => minifier.GetType()).ToHashSet();
+
+        maintained.Should().BeEquivalentTo(discovered);
     }
 
     [Fact]
     public void Registry_UnknownLanguageIsReportedAsUnsupported()
     {
-        LexicalCommentStripper.Supports("lua").Should().BeFalse();
-        LexicalCommentStripper.Supports("csharp").Should().BeTrue();
-        LexicalCommentStripper.Supports("CSHARP").Should().BeTrue();
+        TestSourceProcessing.Syntax.IsSupported("lua").Should().BeFalse();
+        TestSourceProcessing.Syntax.IsSupported("csharp").Should().BeTrue();
+        TestSourceProcessing.Syntax.IsSupported("CSHARP").Should().BeTrue();
     }
 }

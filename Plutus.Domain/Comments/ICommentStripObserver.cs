@@ -6,5 +6,5 @@ namespace Plutus.Domain.Comments;
 /// </summary>
 public interface ICommentStripObserver
 {
-    void OnCommentsStripped(string language, CommentStripResult result);
+    void OnCommentsStripped(LanguageId language, CommentStripResult result);
 }

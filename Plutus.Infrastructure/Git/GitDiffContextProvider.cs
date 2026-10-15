@@ -1,5 +1,6 @@
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
+using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
@@ -18,9 +19,12 @@ namespace Plutus.Infrastructure.Git;
 public sealed class GitDiffContextProvider(
     IGitCommandExecutor gitCommandExecutor,
     DiffScopeLimiter diffScopeLimiter,
-    bool ignorePathCase = true) : IGitDiffContextProvider
+    bool ignorePathCase = true,
+    IRunOutput? runOutput = null) : IGitDiffContextProvider
 {
     private const string Head = "HEAD";
+
+    private readonly IRunOutput _output = runOutput ?? NullRunOutput.Instance;
 
     public async Task<DiffScopeResult?> ResolveAsync(
         GitDiffOptions options,
@@ -32,7 +36,7 @@ public sealed class GitDiffContextProvider(
 
         if (roots.Count == 0)
         {
-            await Console.Error.WriteLineAsync("Error: Diff scoping requires at least one project path.").ConfigureAwait(false);
+            _output.Error("Diff scoping requires at least one project path.");
             return null;
         }
 
@@ -42,7 +46,7 @@ public sealed class GitDiffContextProvider(
         var repositoryRoot = await TryRunAsync(discoveryDirectory, ["rev-parse", "--show-toplevel"], cancellationToken).ConfigureAwait(false);
         if (repositoryRoot?.Succeeded != true || string.IsNullOrWhiteSpace(repositoryRoot.Value.StandardOutput))
         {
-            await Console.Error.WriteLineAsync("Error: Diff scoping requires a local git repository; no repository was found for the given project path.").ConfigureAwait(false);
+            _output.Error("Diff scoping requires a local git repository; no repository was found for the given project path.");
             return null;
         }
 
@@ -52,7 +56,7 @@ public sealed class GitDiffContextProvider(
         var outsideRoot = roots.FirstOrDefault(root => !mapper.IsInsideRepository(ChangedFileMapper.RootPath(root)));
         if (outsideRoot is not null)
         {
-            await Console.Error.WriteLineAsync($"Error: Diff scoping requires every project path to be inside the git repository '{workingDirectory}'. Outside: '{ChangedFileMapper.RootPath(outsideRoot)}'.").ConfigureAwait(false);
+            _output.Error($"Diff scoping requires every project path to be inside the git repository '{workingDirectory}'. Outside: '{ChangedFileMapper.RootPath(outsideRoot)}'.");
             return null;
         }
 
@@ -65,7 +69,7 @@ public sealed class GitDiffContextProvider(
         var diff = await RunAsync(workingDirectory, GitDiffArguments.Build(options, comparisonBase), cancellationToken).ConfigureAwait(false);
         if (!diff.Succeeded)
         {
-            await Console.Error.WriteLineAsync($"Error: git diff failed: {diff.StandardError}").ConfigureAwait(false);
+            _output.Error($"git diff failed: {diff.StandardError}");
             return null;
         }
 
@@ -86,7 +90,7 @@ public sealed class GitDiffContextProvider(
         }
         catch (TokenBudgetExceededException exception)
         {
-            await Console.Error.WriteLineAsync($"Error: {exception.Message}").ConfigureAwait(false);
+            _output.Error(exception.Message);
             return null;
         }
     }
@@ -111,7 +115,7 @@ public sealed class GitDiffContextProvider(
         var listed = await TryRunAsync(workingDirectory, GitDiffArguments.ListUntrackedFiles, cancellationToken).ConfigureAwait(false);
         if (listed?.Succeeded != true)
         {
-            await Console.Error.WriteLineAsync($"Error: git ls-files failed: {listed?.StandardError ?? "no output"}").ConfigureAwait(false);
+            _output.Error($"git ls-files failed: {listed?.StandardError ?? "no output"}");
             return [];
         }
 
@@ -144,12 +148,12 @@ public sealed class GitDiffContextProvider(
                 return result.StandardOutput;
             }
 
-            await Console.Error.WriteLineAsync($"Warning: unable to generate a diff for untracked file '{path}': {result.StandardError}").ConfigureAwait(false);
+            _output.Warning($"unable to generate a diff for untracked file '{path}': {result.StandardError}");
             return null;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await Console.Error.WriteLineAsync($"Warning: unable to generate a diff for untracked file '{path}': {exception.Message}").ConfigureAwait(false);
+            _output.Warning($"unable to generate a diff for untracked file '{path}': {exception.Message}");
             return null;
         }
     }
@@ -180,7 +184,7 @@ public sealed class GitDiffContextProvider(
             return resolvedResult.StandardOutput;
         }
 
-        await Console.Error.WriteLineAsync($"Error: {failureMessage}").ConfigureAwait(false);
+        _output.Error(failureMessage);
         return null;
     }
 
@@ -192,7 +196,7 @@ public sealed class GitDiffContextProvider(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await Console.Error.WriteLineAsync($"Error: Unable to run git. Install git and ensure it is available on PATH. ({exception.Message})").ConfigureAwait(false);
+            _output.Error($"Unable to run git. Install git and ensure it is available on PATH. ({exception.Message})");
             return null;
         }
     }

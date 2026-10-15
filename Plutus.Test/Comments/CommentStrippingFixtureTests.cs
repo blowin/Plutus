@@ -46,8 +46,8 @@ public class CommentStrippingFixtureTests
     {
         var source = ReadFixture(file);
 
-        var first = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
-        var second = LexicalCommentStripper.Instance.Strip(first.Content, language, CommentStripOptions.Default);
+        var first = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, CommentStripOptions.Default);
+        var second = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(first.Content, language, CommentStripOptions.Default);
 
         first.LanguageSupported.Should().BeTrue();
         first.RemovedComments.Should().BeGreaterThan(0, "{0} contains comments that must be removed", file);
@@ -61,10 +61,16 @@ public class CommentStrippingFixtureTests
     {
         var source = ReadFixture(file);
 
-        var result = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
+        var result = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, CommentStripOptions.Default);
 
         CountLines(result.Content).Should().Be(CountLines(source), "removing a comment must not move the lines of {0}", file);
-        result.Content.Should().NotContain("\r", "the fixtures use LF and stripping must not introduce CR");
+
+        // Stripping neither adds, removes nor rewrites a line terminator: the sequence must be identical, whether
+        // the checkout handed us LF or CRLF.
+        LineTerminators(result.Content).Should().Equal(
+            LineTerminators(source),
+            "stripping must not change the line endings of {0}",
+            file);
     }
 
     [Theory]
@@ -73,7 +79,7 @@ public class CommentStrippingFixtureTests
     {
         var source = ReadFixture(file);
 
-        var result = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
+        var result = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(source, language, CommentStripOptions.Default);
 
         result.RemovedComments.Should().Be(
             result.RemovedInlineComments + result.RemovedBlockComments + result.RemovedDocumentationComments);
@@ -205,9 +211,9 @@ public class CommentStrippingFixtureTests
     {
         var options = new CommentStripOptions { PreserveDocumentationComments = true };
 
-        var csharp = LexicalCommentStripper.Instance.Strip(ReadFixture("Program.cs"), "csharp", options).Content;
-        var rust = LexicalCommentStripper.Instance.Strip(ReadFixture("lib.rs"), "rust", options).Content;
-        var go = LexicalCommentStripper.Instance.Strip(ReadFixture("server.go"), "go", options).Content;
+        var csharp = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(ReadFixture("Program.cs"), "csharp", options).Content;
+        var rust = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(ReadFixture("lib.rs"), "rust", options).Content;
+        var go = new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(ReadFixture("server.go"), "go", options).Content;
 
         csharp.Should().Contain("/// <summary>").And.NotContain("A block comment");
         rust.Should().Contain("//! Crate-level documentation").And.Contain("/// A parser over borrowed input.");
@@ -257,9 +263,33 @@ public class CommentStrippingFixtureTests
     }
 
     private static string Strip(string file, string language) =>
-        LexicalCommentStripper.Instance.Strip(ReadFixture(file), language, CommentStripOptions.Default).Content;
+        new LexicalCommentStripper(TestSourceProcessing.Syntax).Strip(ReadFixture(file), language, CommentStripOptions.Default).Content;
 
     private static int CountLines(string text) => text.Split('\n').Length;
+
+    /// <summary>Every line terminator of the text, in order, so a change of style or count is visible.</summary>
+    private static IEnumerable<string> LineTerminators(string text)
+    {
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '\r')
+            {
+                if (index + 1 < text.Length && text[index + 1] == '\n')
+                {
+                    index++;
+                    yield return "\r\n";
+                }
+                else
+                {
+                    yield return "\r";
+                }
+            }
+            else if (text[index] == '\n')
+            {
+                yield return "\n";
+            }
+        }
+    }
 
     /// <summary>
     /// Writes the stripped source to a temporary file and runs an available parser over it. Returns <c>true</c>

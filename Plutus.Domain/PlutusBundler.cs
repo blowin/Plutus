@@ -1,13 +1,25 @@
 using System.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
 
-public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IReadOnlyCollection<IBundleWriter> bundleWriters)
+/// <summary>
+/// Scans the roots and writes the bundle. It reports problems through <see cref="IRunOutput"/> and records the run
+/// numbers in <see cref="BundleRunReport"/>; it does not format or print the summary itself.
+/// </summary>
+public class PlutusBundler(
+    IFileInfoDetailProvider fileInfoDetailProvider,
+    IReadOnlyCollection<IBundleWriter> bundleWriters,
+    IRunOutput? runOutput = null,
+    BundleRunReport? runReport = null)
 {
+    private readonly IRunOutput _output = runOutput ?? NullRunOutput.Instance;
+    private readonly BundleRunReport _report = runReport ?? new BundleRunReport();
+
     /// <summary>Scans the bundle roots and writes the requested format, restricted to the diff scope when one was resolved.</summary>
     public virtual async Task<int> RunBundleAsync(
         ProjectScanner projectScanner,
@@ -18,7 +30,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
     {
         if (output.IsDirectory)
         {
-            Console.Error.WriteLine($"Error: Output path is a directory: {output.PhysicalPath ?? output.Name}");
+            _output.Error($"Output path is a directory: {output.PhysicalPath ?? output.Name}");
             return 1;
         }
 
@@ -26,14 +38,14 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         if (bundleWriter is null)
         {
             var list = string.Join(", ", bundleWriters.Select(e => e.FormatExtension));
-            Console.Error.WriteLine($"Error: Unsupported compilation format targeting style '{options.Format}'. Available: [{list}].");
+            _output.Error($"Unsupported compilation format targeting style '{options.Format}'. Available: [{list}].");
             return 1;
         }
 
         var physicalPath = output.PhysicalPath;
         if (string.IsNullOrWhiteSpace(physicalPath))
         {
-            Console.Error.WriteLine("Error: Output path is empty.");
+            _output.Error("Output path is empty.");
             return 1;
         }
 
@@ -62,17 +74,15 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         }
         catch (TokenBudgetExceededException ex)
         {
-            Console.Error.WriteLine($"Error: {ex.Message}");
+            _output.Error(ex.Message);
             return 1;
         }
 
 
         stopwatch.Stop();
 
-        Console.WriteLine($"Bundle created: {physicalPath}");
-        Console.WriteLine($"Files included: {allEntries.Count}");
-        Console.WriteLine($"Total size: {allEntries.Sum(e => e.File.Length).HumanSize()}");
-        Console.WriteLine($"Elapsed time:   {stopwatch.Elapsed.TotalSeconds:F2}s ({stopwatch.ElapsedMilliseconds} ms)");
+        // The numbers are recorded, not printed: the host decides how a run summary reads.
+        _report.Record(physicalPath, allEntries.Count, allEntries.Sum(e => e.File.Length), stopwatch.Elapsed);
         return 0;
     }
 

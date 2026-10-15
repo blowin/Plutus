@@ -3,9 +3,12 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
+using Plutus.Infrastructure.Diagnostics;
 
 namespace Plutus.CLI;
 
@@ -18,6 +21,10 @@ public static class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        // One output target for the whole run: services report through this, so no layer below decides how a run
+        // reads, and the report of what happened is printed in exactly one place.
+        IRunOutput output = new ConsoleRunOutput();
 
         var projectPathsArgument = new Argument<List<string>>("project-path")
         {
@@ -146,6 +153,11 @@ public static class Program
         };
         commentStrategyOption.AcceptOnlyFromAmong("auto", "lexical", "antlr");
 
+        var signaturesOnlyOption = new Option<bool>("--signatures-only")
+        {
+            Description = "Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, => expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of --strip-comments and --minify."
+        };
+
         var encodingOption = new Option<string>("--encoding")
         {
             Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
@@ -259,6 +271,7 @@ public static class Program
             stripCommentsOption,
             preserveDocCommentsOption,
             commentStrategyOption,
+            signaturesOnlyOption,
             encodingOption,
             maxConcurrencyOption,
             formatOption,
@@ -284,19 +297,19 @@ public static class Program
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
-                Console.Error.WriteLine("Error: branch and commit cannot be used together.");
+                output.Error("branch and commit cannot be used together.");
                 return 1;
             }
 
             if (!string.IsNullOrWhiteSpace(diffFrom) && (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit)))
             {
-                Console.Error.WriteLine("Error: --diff-from cannot be used together with --branch or --commit.");
+                output.Error("--diff-from cannot be used together with --branch or --commit.");
                 return 1;
             }
 
             if (!string.IsNullOrWhiteSpace(diffTo) && string.IsNullOrWhiteSpace(diffFrom))
             {
-                Console.Error.WriteLine("Error: --diff-to requires --diff-from to define the other end of the range.");
+                output.Error("--diff-to requires --diff-from to define the other end of the range.");
                 return 1;
             }
 
@@ -307,7 +320,7 @@ public static class Program
             }
             catch (ArgumentException)
             {
-                Console.Error.WriteLine($"Error: Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
+                output.Error($"Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
                 return 1;
             }
 
@@ -322,18 +335,19 @@ public static class Program
             var stripComments = parseResult.GetValue(stripCommentsOption);
             var preserveDocComments = parseResult.GetValue(preserveDocCommentsOption);
             var commentStrategy = parseResult.GetValue(commentStrategyOption)!;
+            var signaturesOnly = parseResult.GetValue(signaturesOnlyOption);
 
             // The two comment switches do nothing on their own; say so instead of accepting them in silence.
             if (!stripComments && !minify)
             {
                 if (preserveDocComments)
                 {
-                    Console.Error.WriteLine("Warning: --preserve-doc-comments has no effect without --strip-comments or --minify.");
+                    output.Warning("--preserve-doc-comments has no effect without --strip-comments or --minify.");
                 }
 
                 if (commentStrategy != CommentStrategyRequest.Auto)
                 {
-                    Console.Error.WriteLine("Warning: --comment-strategy has no effect without --strip-comments or --minify.");
+                    output.Warning("--comment-strategy has no effect without --strip-comments or --minify.");
                 }
             }
 
@@ -342,9 +356,9 @@ public static class Program
             CommentStrippingPlan? commentStripPlan = null;
             if (stripComments || minify)
             {
-                if (!CommentStrippingPlanner.TryResolve(commentStrategy, GrammarInventory.Discover(), out var resolved, out var planError))
+                if (!new CommentStrippingPlanner().TryResolve(commentStrategy, new GrammarInventoryLoader().Discover(), out var resolved, out var planError))
                 {
-                    Console.Error.WriteLine($"Error: {planError}");
+                    output.Error(planError!);
                     return 1;
                 }
 
@@ -369,6 +383,7 @@ public static class Program
                 PreserveDocumentationComments = preserveDocComments,
                 CommentStrategy = commentStrategy,
                 CommentStripPlan = commentStripPlan,
+                SignaturesOnly = signaturesOnly,
                 TargetEncoding = targetEncoding,
                 MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
                 Format = parseResult.GetValue(formatOption)!,
@@ -392,11 +407,11 @@ public static class Program
 
             try
             {
-                return await RunAppAsync(options);
+                return await RunAppAsync(options, output);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error: {ex.Message}");
+                output.Error(ex.Message);
                 return 1;
             }
         });
@@ -405,13 +420,13 @@ public static class Program
         return await Task.FromResult(await result.InvokeAsync()).ConfigureAwait(false);
     }
 
-    private static async Task<int> RunAppAsync(RunAppOptions options)
+    private static async Task<int> RunAppAsync(RunAppOptions options, IRunOutput output)
     {
         Console.OutputEncoding = options.TargetEncoding;
         Console.InputEncoding = options.TargetEncoding;
 
         var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options);
+        sc.AddInfrastructureServices(options, output);
         await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,
@@ -419,20 +434,9 @@ public static class Program
         });
         await using var scope = serviceProvider.CreateAsyncScope();
 
-        var runner = scope.ServiceProvider.GetRequiredService<BundleAppRunner>();
-        var exitCode = await runner.RunAsync(options);
+        var exitCode = await scope.ServiceProvider.GetRequiredService<BundleAppRunner>().RunAsync(options);
 
-        // Report which strategy actually ran and what it removed. Without this, "lexical scanning" and "ANTLR
-        // token channels" would be indistinguishable from the outside.
-        if (options.CommentStripPlan is not null)
-        {
-            var report = scope.ServiceProvider.GetRequiredService<CommentStrippingReport>();
-            Console.WriteLine(report.Describe());
-            foreach (var reason in report.FallbackReasons)
-            {
-                Console.Error.WriteLine($"Warning: comment stripping did not run for {reason}");
-            }
-        }
+        scope.ServiceProvider.GetRequiredService<IRunReportWriter>().Write();
 
         return exitCode;
     }
