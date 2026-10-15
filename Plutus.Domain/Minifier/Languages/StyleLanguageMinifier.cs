@@ -1,17 +1,15 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class StyleLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "css";
-
-    public override string Description => "Style Sheets Minifier (Removes CSS/SCSS standard and inline comment blocks)";
-
-    // Group 1: Protects single-quoted and double-quoted strings (crucial for font-families and url() assets)
-    // Group 2: Identifies and strips standard block style comments /* ... */
-    // Group 3: Identifies and strips modern preprocessor inline comments // ...
-    protected override Regex CommentReplacePattern { get; } = new Regex(
-        @"(""[^""]*""|'[^']*')|(/\*[^*]*\*+(?:[^/*][^*]*\*+)*/)|(//[^\x0D\x0A]*)",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>
+/// Style-sheet minifier. Plain CSS only has <c>/* */</c>; the preprocessor dialects add <c>//</c>, so the
+/// language identifier decides which forms apply.
+/// </summary>
+public sealed class StyleLanguageMinifier(
+    string language = "css",
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier(language, "Style Sheets Minifier (Removes CSS/SCSS standard and inline comment blocks)", options, mode, stripper, observer);

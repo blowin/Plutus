@@ -1,0 +1,9 @@
+// Palette variables are line comments in SCSS.
+$primary: #4bbc25;
+$asset: url("images/icon//dark/*.svg");
+
+/* Structural card container. */
+.card {
+    color: $primary;
+    background-image: $asset; // an inline comment
+}

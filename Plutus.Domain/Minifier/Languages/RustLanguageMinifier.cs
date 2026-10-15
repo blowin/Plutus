@@ -1,17 +1,11 @@
-using System.Text.RegularExpressions;
+using Plutus.Domain.Comments;
 
 namespace Plutus.Domain.Minifier.Languages;
 
-public sealed class RustLanguageMinifier : BaseLanguageMinifier
-{
-    public override string Language => "rust";
-    public override string Description => "Rust Minifier (Removes standard/doc comments)";
-
-    protected override Regex CommentReplacePattern { get; } = new(@"(?x)
-            ( "" (?: [^""\\] | \\. )* ""                    # 1. Standard string literals
-
-            | ' (?: [^'\\] | \\. )* ' )                     # 2. Character literals / Lifetimes protection boundary
-            | ( /\* [^*]* \*+ (?: [^/*] [^*]* \*+ )* / )    # Block comments
-            | ( // [^\r\n]* )                               # Line and Doc comments",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-}
+/// <summary>Rust minifier. Block comments nest, and lifetimes are not mistaken for character literals.</summary>
+public sealed class RustLanguageMinifier(
+    CommentStripOptions? options = null,
+    SourceProcessingMode mode = SourceProcessingMode.Minify,
+    ICommentStripper? stripper = null,
+    ICommentStripObserver? observer = null)
+    : SyntaxLanguageMinifier("rust", "Rust Minifier (Removes standard/doc comments)", options, mode, stripper, observer);

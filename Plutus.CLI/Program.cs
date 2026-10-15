@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
@@ -128,6 +129,23 @@ public static class Program
         };
         minifyOption.Aliases.Add("-m");
 
+        var stripCommentsOption = new Option<bool>("--strip-comments")
+        {
+            Description = "Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation and line endings are preserved, and a space is inserted when removing a comment would join two tokens."
+        };
+
+        var preserveDocCommentsOption = new Option<bool>("--preserve-doc-comments")
+        {
+            Description = "Keep documentation comments (///, //!, /** */, /*! */) when stripping or minifying. Off by default: documentation comments are removed like any other comment."
+        };
+
+        var commentStrategyOption = new Option<CommentStrategyRequest>("--comment-strategy")
+        {
+            Description = "How comments are located: auto (ANTLR token channels where a project-maintained grammar exists, lexical scanning elsewhere), lexical (language-aware character scanner), antlr (requires a project-maintained grammar; fails when none exists).",
+            DefaultValueFactory = _ => CommentStrategyRequest.Auto
+        };
+        commentStrategyOption.AcceptOnlyFromAmong("auto", "lexical", "antlr");
+
         var encodingOption = new Option<string>("--encoding")
         {
             Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
@@ -238,6 +256,9 @@ public static class Program
             useDefaultExcludesOption,
             allowDangerousFilesOption,
             minifyOption,
+            stripCommentsOption,
+            preserveDocCommentsOption,
+            commentStrategyOption,
             encodingOption,
             maxConcurrencyOption,
             formatOption,
@@ -297,6 +318,39 @@ public static class Program
                     parseResult.GetValue(tokenSelectionStrategyOption)!)
                 : null;
             var maxFileSize = parseResult.GetValue(maxSizeOption)!;
+            var minify = parseResult.GetValue(minifyOption);
+            var stripComments = parseResult.GetValue(stripCommentsOption);
+            var preserveDocComments = parseResult.GetValue(preserveDocCommentsOption);
+            var commentStrategy = parseResult.GetValue(commentStrategyOption)!;
+
+            // The two comment switches do nothing on their own; say so instead of accepting them in silence.
+            if (!stripComments && !minify)
+            {
+                if (preserveDocComments)
+                {
+                    Console.Error.WriteLine("Warning: --preserve-doc-comments has no effect without --strip-comments or --minify.");
+                }
+
+                if (commentStrategy != CommentStrategyRequest.Auto)
+                {
+                    Console.Error.WriteLine("Warning: --comment-strategy has no effect without --strip-comments or --minify.");
+                }
+            }
+
+            // Resolve the strategy before any work: asking for ANTLR token channels without a maintained grammar is
+            // an error, and it must not quietly degrade into lexical scanning.
+            CommentStrippingPlan? commentStripPlan = null;
+            if (stripComments || minify)
+            {
+                if (!CommentStrippingPlanner.TryResolve(commentStrategy, GrammarInventory.Discover(), out var resolved, out var planError))
+                {
+                    Console.Error.WriteLine($"Error: {planError}");
+                    return 1;
+                }
+
+                commentStripPlan = resolved;
+            }
+
             var options = new RunAppOptions
             {
                 ProjectPath = parseResult.GetValue(projectPathsArgument)!,
@@ -310,7 +364,11 @@ public static class Program
                 ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
                 IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
                 IncludeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>(),
-                Minify = parseResult.GetValue(minifyOption),
+                Minify = minify,
+                StripComments = stripComments,
+                PreserveDocumentationComments = preserveDocComments,
+                CommentStrategy = commentStrategy,
+                CommentStripPlan = commentStripPlan,
                 TargetEncoding = targetEncoding,
                 MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
                 Format = parseResult.GetValue(formatOption)!,
@@ -362,6 +420,20 @@ public static class Program
         await using var scope = serviceProvider.CreateAsyncScope();
 
         var runner = scope.ServiceProvider.GetRequiredService<BundleAppRunner>();
-        return await runner.RunAsync(options);
+        var exitCode = await runner.RunAsync(options);
+
+        // Report which strategy actually ran and what it removed. Without this, "lexical scanning" and "ANTLR
+        // token channels" would be indistinguishable from the outside.
+        if (options.CommentStripPlan is not null)
+        {
+            var report = scope.ServiceProvider.GetRequiredService<CommentStrippingReport>();
+            Console.WriteLine(report.Describe());
+            foreach (var reason in report.FallbackReasons)
+            {
+                Console.Error.WriteLine($"Warning: comment stripping did not run for {reason}");
+            }
+        }
+
+        return exitCode;
     }
 }
