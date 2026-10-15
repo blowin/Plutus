@@ -23,6 +23,11 @@ public sealed record BundleLimitResult(
 /// </summary>
 public sealed class BundleLimits(FileSize maxFileSize, Tokens.TokenBudgetOptions? tokenBudget)
 {
+    /// <summary>True when a budget is configured, so callers know whether estimating is worth the work.</summary>
+    public bool EstimatesTokens => tokenBudget is not null;
+
+    public FileSize MaxFileSize => maxFileSize;
+
     public bool ExcludedBySize(long sizeInBytes) => sizeInBytes > maxFileSize;
 
     public string SizeExclusionReason(long sizeInBytes) =>

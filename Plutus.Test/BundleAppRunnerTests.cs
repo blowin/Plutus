@@ -75,7 +75,6 @@ public class BundleAppRunnerTests
             Arg.Is<IReadOnlyList<IFileInfo>>(roots => roots.Count == 1 && roots[0] == _root),
             Arg.Any<CancellationToken>());
         _bundler.LastDiffContext.Should().BeSameAs(context);
-        _bundler.LastDiffBudgetSummary.Should().BeSameAs(summary);
     }
 
     [Fact]
@@ -136,19 +135,16 @@ public class BundleAppRunnerTests
 
         public GitDiffContext? LastDiffContext { get; private set; }
 
-        public TokenBudgetSummary? LastDiffBudgetSummary { get; private set; }
 
         public override Task<int> RunBundleAsync(
             ProjectScanner projectScanner,
             IReadOnlyCollection<IFileInfo> roots,
             IFileInfo output,
             RunAppOptions options,
-            GitDiffContext? gitDiff = null,
-            TokenBudgetSummary? diffBudgetSummary = null)
+            GitDiffContext? gitDiff = null)
         {
             Invocations.Add(1);
             LastDiffContext = gitDiff;
-            LastDiffBudgetSummary = diffBudgetSummary;
             return Task.FromResult(0);
         }
     }

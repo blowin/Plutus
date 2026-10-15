@@ -36,6 +36,6 @@ public class BundleAppRunner(
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
 
         var projectScanner = new ProjectScanner(detailProvider, ignoreMatcher);
-        return await bundler.RunBundleAsync(projectScanner, roots, output, options, diffScope?.Context, diffScope?.Summary);
+        return await bundler.RunBundleAsync(projectScanner, roots, output, options, diffScope?.Context);
     }
 }

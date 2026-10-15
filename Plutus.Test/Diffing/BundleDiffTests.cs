@@ -164,7 +164,7 @@ public class MarkdownBundleWriterDiffTests
     {
         var writer = CreateWriter();
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), DiffContext());
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, DiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("## FILE: `src/Core.cs`");
@@ -178,7 +178,7 @@ public class MarkdownBundleWriterDiffTests
     {
         var writer = CreateWriter();
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096));
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output);
 
         ReadOutput().Should().NotContain("## Changes against");
     }
@@ -189,7 +189,7 @@ public class MarkdownBundleWriterDiffTests
         // The writer serializes the tree it is handed; restricting the tree is the scanner's responsibility.
         var writer = CreateWriter();
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), EmptyDiffContext());
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, EmptyDiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("No changed files were reported for this scope.");
@@ -202,7 +202,7 @@ public class MarkdownBundleWriterDiffTests
         var writer = CreateWriter();
         writer.IncludeFileContents = false;
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), DiffContext());
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, DiffContext());
 
         var result = ReadOutput();
         result.Should().Contain("# Project Bundle");
@@ -223,7 +223,7 @@ public class MarkdownBundleWriterDiffTests
         var writer = CreateWriter();
         writer.IncludeFileContents = false;
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096));
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output);
 
         var result = ReadOutput();
         result.Should().Contain("## Changed Files");
@@ -236,7 +236,7 @@ public class MarkdownBundleWriterDiffTests
     {
         var writer = CreateWriter();
 
-        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096));
+        await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output);
 
         var result = ReadOutput();
         result.Should().Contain("## File List");
@@ -246,7 +246,7 @@ public class MarkdownBundleWriterDiffTests
     }
 
     private MarkdownBundleWriter CreateWriter() =>
-        new(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        new(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
     private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 

@@ -29,9 +29,9 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task JsonWriter_WithDiffContext_ShouldEmitMetadataAndPerFileChunks()
     {
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
+        await writer.WriteAsync(Roots(), _output, CreateContext());
 
         var root = ParseJson().RootElement;
 
@@ -53,9 +53,9 @@ public class StructuredBundleWriterDiffTests
     public async Task JsonWriter_WhenAChunkWasOmitted_ShouldOmitItsPatchAndReportWhy()
     {
         var omitted = Chunk() with { SkipReason = "omitted by token budget (10 tokens; strategy: PathOrder)" };
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(omitted));
+        await writer.WriteAsync(Roots(), _output, CreateContext(omitted));
 
         var chunk = ParseJson().RootElement.GetProperty("Diff").GetProperty("Chunks").EnumerateArray().Single();
 
@@ -67,9 +67,9 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task JsonWriter_WithUntrackedChunks_ShouldKeepThemApartFromTrackedChunks()
     {
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(untracked: [Chunk("src/New.cs")]));
+        await writer.WriteAsync(Roots(), _output, CreateContext(untracked: [Chunk("src/New.cs")]));
 
         var diff = ParseJson().RootElement.GetProperty("Diff");
 
@@ -81,9 +81,9 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task JsonWriter_WithoutDiffContext_ShouldOmitTheDiffSection()
     {
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096));
+        await writer.WriteAsync(Roots(), _output);
 
         var root = ParseJson().RootElement;
 
@@ -94,12 +94,12 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task JsonWriter_WithFileContentsDisabled_ShouldOmitContentButKeepTheDiff()
     {
-        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier())
+        var writer = new JsonBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null))
         {
             IncludeFileContents = false
         };
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
+        await writer.WriteAsync(Roots(), _output, CreateContext());
 
         var root = ParseJson().RootElement;
         root.GetProperty("Files").EnumerateArray().Single().TryGetProperty("Content", out _).Should().BeFalse();
@@ -109,9 +109,9 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task XmlWriter_WithDiffContext_ShouldEmitMetadataAndPerFileChunks()
     {
-        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
+        await writer.WriteAsync(Roots(), _output, CreateContext());
 
         var document = ParseXml();
         var metadata = document.Root!.Element("Metadata")!;
@@ -133,9 +133,9 @@ public class StructuredBundleWriterDiffTests
     public async Task XmlWriter_WhenAChunkWasOmitted_ShouldReportTheReasonInsteadOfAPatch()
     {
         var omitted = Chunk() with { SkipReason = "diff is larger than max-file-size (2.0 MB > 1.0 MB)" };
-        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(omitted));
+        await writer.WriteAsync(Roots(), _output, CreateContext(omitted));
 
         var chunk = ParseXml().Root!.Element("Diff")!.Elements("Chunk").Single();
 
@@ -147,9 +147,9 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task XmlWriter_WithUntrackedChunks_ShouldKeepThemApartFromTrackedChunks()
     {
-        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(untracked: [Chunk("src/New.cs")]));
+        await writer.WriteAsync(Roots(), _output, CreateContext(untracked: [Chunk("src/New.cs")]));
 
         var diff = ParseXml().Root!.Element("Diff")!;
 
@@ -162,9 +162,9 @@ public class StructuredBundleWriterDiffTests
     public async Task XmlWriter_WhenPatchContainsCdataTerminator_ShouldStayWellFormed()
     {
         var hostile = Chunk() with { Text = "diff --git a/A.cs b/A.cs\n+content with ]]> inside" };
-        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext(hostile));
+        await writer.WriteAsync(Roots(), _output, CreateContext(hostile));
 
         ParseXml().Root!.Element("Diff")!.Elements("Chunk").Single().Element("Patch")!.Value.Should().Be(hostile.Text);
     }
@@ -172,12 +172,12 @@ public class StructuredBundleWriterDiffTests
     [Fact]
     public async Task XmlWriter_WithFileContentsDisabled_ShouldOmitContentButKeepTheDiff()
     {
-        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier())
+        var writer = new XmlBundleWriter(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null))
         {
             IncludeFileContents = false
         };
 
-        await writer.WriteAsync(Roots(), _output, FileSize.FromBytes(4096), CreateContext());
+        await writer.WriteAsync(Roots(), _output, CreateContext());
 
         var document = ParseXml();
         document.Root!.Element("Files")!.Elements("File").Single().Element("Content").Should().BeNull();

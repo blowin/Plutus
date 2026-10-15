@@ -13,19 +13,18 @@ public class XmlBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier)
-    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
+    BundleLimits bundleLimits)
+    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
 {
     public override string FormatExtension => "xml";
 
     protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary,
         GitDiffContext? gitDiff)
     {
-        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var includedFiles = files.Where(x => !x.IsSkipped).ToList();
         var xmlSettings = new XmlWriterSettings
         {
             Async = true,
@@ -43,7 +42,7 @@ public class XmlBundleWriter(
         await xmlWriter.WriteStartElementAsync(null, "Metadata", null);
         await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, includedFiles.Count.ToString());
         await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, includedFiles.Sum(x => x.Entry.File.Length).ToString());
-        await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, maxFileSize.ToString());
+        await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, Limits.MaxFileSize.ToString());
         if (gitDiff is not null)
         {
             await xmlWriter.WriteElementStringAsync(null, "DiffScoped", null, "true");

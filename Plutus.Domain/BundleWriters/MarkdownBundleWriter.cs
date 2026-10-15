@@ -13,18 +13,17 @@ public class MarkdownBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
+    BundleLimits bundleLimits) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
 {
     public override string FormatExtension => "md";
 
     protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary,
         GitDiffContext? gitDiff)
     {
-        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var includedFiles = files.Where(x => !x.IsSkipped).ToList();
         var totalSize = includedFiles.Sum(x => x.Entry.File.Length);
 
         await using var writer = FileInfoDetailProvider.CreateWriterForFile(output, Encoding);
@@ -44,7 +43,7 @@ public class MarkdownBundleWriter(
             writer.WriteLine($"- Total size: `{totalSize.HumanSize()}`");
         }
 
-        writer.WriteLine($"- Max file size: `{maxFileSize}`");
+        writer.WriteLine($"- Max file size: `{Limits.MaxFileSize}`");
         if (tokenBudgetSummary is { } tokenSummary)
         {
             writer.WriteLine($"- Token estimate method: `{tokenSummary.EstimatorMethod}`");
@@ -67,7 +66,7 @@ public class MarkdownBundleWriter(
         if (IncludeFileContents)
         {
             WriteDirectoryTree(writer, roots);
-            await WriteFileContentsAsync(writer, files, maxFileSize).ConfigureAwait(false);
+            await WriteFileContentsAsync(writer, files).ConfigureAwait(false);
         }
 
         if (gitDiff is not null)
@@ -99,11 +98,11 @@ public class MarkdownBundleWriter(
         }
     }
 
-    private async Task WriteFileContentsAsync(TextWriter writer, List<ProcessedFileContext> files, FileSize maxFileSize)
+    private async Task WriteFileContentsAsync(TextWriter writer, List<ProcessedFileContext> files)
     {
         foreach (var entry in files)
         {
-            if (entry.Entry.File.Length > maxFileSize || entry.IsSkipped)
+            if (entry.IsSkipped)
             {
                 continue;
             }

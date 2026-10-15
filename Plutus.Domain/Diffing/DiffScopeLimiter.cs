@@ -1,8 +1,7 @@
 using Microsoft.Extensions.FileProviders;
-using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 
-namespace Plutus.Domain;
+namespace Plutus.Domain.Diffing;
 
 /// <summary>Outcome of limiting a diff: the finished context plus the paths that were left out.</summary>
 public sealed record DiffScopeResult(
@@ -14,24 +13,31 @@ public sealed record DiffScopeResult(
 /// Turns a raw diff into the bundle's diff scope: maps repository paths onto the bundle roots, reduces every
 /// chunk to a limitable item and runs it through <see cref="BundleLimits"/>. Because each diff is its own
 /// item, one oversized or over-budget change is excluded on its own instead of discarding the change set.
-/// No I/O happens here; the caller supplies file sizes.
+/// No I/O happens here; the caller supplies the repository root and the file sizes.
 /// </summary>
-public sealed class DiffScopeLimiter(ChangedFileMapper changedFileMapper, BundleLimits limits)
+public sealed class DiffScopeLimiter(BundleLimits limits, bool ignorePathCase = true)
 {
     public DiffScopeResult Apply(
+        string repositoryRoot,
         string comparisonBase,
         IReadOnlyList<DiffChunk> trackedChunks,
         IReadOnlyList<DiffChunk> untrackedChunks,
         IReadOnlyList<IFileInfo> roots,
         Func<string, long>? fileSize = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentNullException.ThrowIfNull(comparisonBase);
         ArgumentNullException.ThrowIfNull(trackedChunks);
         ArgumentNullException.ThrowIfNull(untrackedChunks);
         ArgumentNullException.ThrowIfNull(roots);
 
+        // The mapper is built from the repository the caller actually found, never from the process working
+        // directory: bundling another project would otherwise relativize paths against the wrong root and
+        // silently exclude every file.
+        var mapper = new ChangedFileMapper(repositoryRoot, ignorePathCase);
+
         // Map first: limiting must only consider chunks this bundle will actually contain.
-        var mapped = changedFileMapper.Resolve(comparisonBase, trackedChunks, untrackedChunks, roots);
+        var mapped = mapper.Resolve(comparisonBase, trackedChunks, untrackedChunks, roots);
         var all = mapped.TrackedChunks.Concat(mapped.UntrackedChunks).ToArray();
 
         // The repository path identifies a chunk across mapping, so an exclusion can be reported back.

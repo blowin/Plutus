@@ -16,7 +16,5 @@ public interface IBundleWriter
     ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        FileSize maxFileSize,
-        GitDiffContext? gitDiff = null,
-        TokenBudgetSummary? diffBudgetSummary = null);
+        GitDiffContext? gitDiff = null);
 }

@@ -56,17 +56,17 @@ public static class ServiceCollectionExt
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
         services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
-        services.AddScoped<BundleLimits>(_ => new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget));
-        services.AddScoped<DiffScopeLimiter>(provider => new DiffScopeLimiter(
-            new ChangedFileMapper(Directory.GetCurrentDirectory()),
-            provider.GetRequiredService<BundleLimits>()));
+
+        // One limits service per payload: the bundle both carries source files and, in diff mode, diffs.
+        // The repository root is resolved per bundle by the provider, so it is passed to Apply rather than
+        // captured here.
+        services.AddScoped<BundleLimits>(_ => new BundleLimits(options.MaxFileSize, options.TokenBudget));
+        services.AddScoped<DiffScopeLimiter>(_ => new DiffScopeLimiter(
+            new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget)));
         services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
             ? new NullGitDiffContextProvider()
             : ActivatorUtilities.CreateInstance<GitDiffContextProvider>(provider));
         services.AddSingleton(options);
-        services.AddSingleton<ITokenBudgetApplier>(_ => options.TokenBudget is null
-            ? new NoOpTokenBudgetApplier()
-            : new TokenBudgetApplier(options.TokenBudget));
         services.AddSingleton(options.TargetEncoding);
 
         services.AddSingleton<ICodeMinifier>(provider =>

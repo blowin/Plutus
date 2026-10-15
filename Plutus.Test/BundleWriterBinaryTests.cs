@@ -26,7 +26,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8, new NoOpTokenBudgetApplier());
+        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
         var fileInfoOutput = new TestFileInfo
         {
@@ -48,7 +48,7 @@ public class BundleWriterBinaryTests
         };
 
         // Act
-        var action = async () => await writer.WriteAsync(roots, fileInfoOutput, FileSize.FromBytes(1024));
+        var action = async () => await writer.WriteAsync(roots, fileInfoOutput);
 
         // Assert
         await action.Should().NotThrowAsync();

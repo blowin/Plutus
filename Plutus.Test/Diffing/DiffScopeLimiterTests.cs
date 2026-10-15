@@ -12,7 +12,7 @@ public class DiffScopeLimiterTests
     [Fact]
     public void Apply_ShouldEstimateTokensForEveryChunk()
     {
-        var result = CreateLimiter().Apply("basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
+        var result = CreateLimiter().Apply("/repo", "basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
 
         result.Context.TrackedChunks.Should().ContainSingle().Which.EstimatedTokens.Should().BeGreaterThan(0);
         result.Summary.Should().BeNull();
@@ -24,6 +24,7 @@ public class DiffScopeLimiterTests
         var sizes = new Dictionary<string, long> { ["src/Small.cs"] = 100, ["src/Large.cs"] = 5000 };
 
         var result = CreateLimiter(maxFileSize: 1024).Apply(
+            "/repo",
             "basesha",
             [Chunk("src/Small.cs"), Chunk("src/Large.cs")],
             [],
@@ -43,6 +44,7 @@ public class DiffScopeLimiterTests
     public void Apply_WhenAFileNoLongerExists_ShouldKeepItsDiff()
     {
         var result = CreateLimiter(maxFileSize: 1).Apply(
+            "/repo",
             "basesha",
             [Chunk("src/Gone.cs")],
             [],
@@ -56,7 +58,7 @@ public class DiffScopeLimiterTests
     [Fact]
     public void Apply_WithoutAFileSizeResolver_ShouldNotApplyTheSizeLimit()
     {
-        var result = CreateLimiter(maxFileSize: 1).Apply("basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
+        var result = CreateLimiter(maxFileSize: 1).Apply("/repo", "basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
 
         result.Context.TrackedChunks.Should().ContainSingle().Which.IsSkipped.Should().BeFalse();
         result.Excluded.Should().BeEmpty();
@@ -66,7 +68,7 @@ public class DiffScopeLimiterTests
     public void Apply_WhenTheBudgetFits_ShouldReportTheSummaryWithoutOmissions()
     {
         var result = CreateLimiter(budget: new TokenBudgetOptions(10_000, TokenOverflowPolicy.Select))
-            .Apply("basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
+            .Apply("/repo", "basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
 
         result.Context.TrackedChunks.Should().ContainSingle().Which.IsSkipped.Should().BeFalse();
         result.Summary.Should().NotBeNull();
@@ -80,6 +82,7 @@ public class DiffScopeLimiterTests
         var budget = new TokenBudgetOptions(60, TokenOverflowPolicy.Select, TokenSelectionStrategy.LargestFirst);
 
         var result = CreateLimiter(budget: budget).Apply(
+            "/repo",
             "basesha",
             [Chunk("src/Small.cs"), Chunk("src/Large.cs", padding: 60)],
             [],
@@ -94,7 +97,7 @@ public class DiffScopeLimiterTests
     {
         var limiter = CreateLimiter(budget: new TokenBudgetOptions(1, TokenOverflowPolicy.Fail));
 
-        var act = () => limiter.Apply("basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
+        var act = () => limiter.Apply("/repo", "basesha", [Chunk("src/A.cs")], [], [Root("/repo")]);
 
         act.Should().Throw<TokenBudgetExceededException>().WithMessage("*exceeds --max-tokens*");
     }
@@ -103,7 +106,7 @@ public class DiffScopeLimiterTests
     public void Apply_ShouldLimitUntrackedChunksToo()
     {
         var result = CreateLimiter(budget: new TokenBudgetOptions(5, TokenOverflowPolicy.Select))
-            .Apply("basesha", [], [Chunk("src/New.cs", padding: 40)], [Root("/repo")]);
+            .Apply("/repo", "basesha", [], [Chunk("src/New.cs", padding: 40)], [Root("/repo")]);
 
         result.Context.UntrackedChunks.Should().ContainSingle().Which.IsSkipped.Should().BeTrue();
         result.Excluded.Should().Equal("src/New.cs");
@@ -113,26 +116,42 @@ public class DiffScopeLimiterTests
     public void Apply_WhenTheRootIsWrittenWithForwardSlashes_ShouldStillFindItsChunks()
     {
         // git reports the repository root with forward slashes, the file provider with backslashes.
-        var limiter = new DiffScopeLimiter(
-            new ChangedFileMapper(@"D:\repo", ignorePathCase: true),
-            new BundleLimits(FileSize.Parse("1M"), null));
+        var limiter = new DiffScopeLimiter(new BundleLimits(FileSize.Parse("1M"), null));
 
-        var result = limiter.Apply("basesha", [Chunk("src/A.cs")], [], [Root("D:/repo")]);
+        var result = limiter.Apply(@"D:\repo", "basesha", [Chunk("src/A.cs")], [], [Root("D:/repo")]);
 
         result.Context.TrackedPathsFor("D:/repo").Should().Equal("src/A.cs");
         result.Context.TrackedPathsFor(@"D:\repo").Should().Equal("src/A.cs");
     }
 
     [Fact]
+    public void Apply_WhenTheRepositoryRootIsNotTheWorkingDirectory_ShouldStillMapChunks()
+    {
+        // The repository root is a parameter, so bundling another project cannot relativize against the
+        // process working directory and silently drop every file.
+        var limiter = new DiffScopeLimiter(new BundleLimits(FileSize.Parse("1M"), null));
+
+        var result = limiter.Apply(
+            @"D:\elsewhere\other-repo",
+            "basesha",
+            [Chunk("src/A.cs")],
+            [],
+            [Root(@"D:\elsewhere\other-repo")]);
+
+        result.Context.TrackedPathsFor(@"D:\elsewhere\other-repo").Should().Equal("src/A.cs");
+        result.Excluded.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Apply_WithNullRoots_ShouldThrow()
     {
-        var act = () => CreateLimiter().Apply("basesha", [], [], null!);
+        var act = () => CreateLimiter().Apply("/repo", "basesha", [], [], null!);
 
         act.Should().Throw<ArgumentNullException>();
     }
 
     private static DiffScopeLimiter CreateLimiter(long maxFileSize = long.MaxValue, TokenBudgetOptions? budget = null) =>
-        new(new ChangedFileMapper("/repo"), new BundleLimits(FileSize.FromBytes(maxFileSize), budget));
+        new(new BundleLimits(FileSize.FromBytes(maxFileSize), budget));
 
     private static DiffChunk Chunk(string path, int padding = 0) =>
         new(path, path, ChangeKind.Modified, $"diff --git a/{path} b/{path}\n-old\n+new{string.Concat(Enumerable.Repeat("\n+pad", padding))}", 1, 1);

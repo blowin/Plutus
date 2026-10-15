@@ -14,8 +14,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
         RunAppOptions options,
-        GitDiffContext? gitDiff = null,
-        TokenBudgetSummary? diffBudgetSummary = null)
+        GitDiffContext? gitDiff = null)
     {
         if (output.IsDirectory)
         {
@@ -53,7 +52,7 @@ public class PlutusBundler(IFileInfoDetailProvider fileInfoDetailProvider, IRead
         try
         {
             bundleWriter.IncludeFileContents = options.IncludeFileContents;
-            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, options.MaxFileSize, gitDiff, diffBudgetSummary).ConfigureAwait(false);
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, gitDiff).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
         {

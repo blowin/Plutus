@@ -2,9 +2,8 @@ using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
-using Plutus.Infrastructure.Git;
 
-namespace Plutus.Infrastructure;
+namespace Plutus.Infrastructure.Git;
 
 /// <summary>
 /// Discovers the per-file diffs to bundle by running git, then hands the raw chunks to
@@ -78,6 +77,7 @@ public sealed class GitDiffContextProvider(
         try
         {
             return diffScopeLimiter.Apply(
+                workingDirectory,
                 comparisonBase,
                 trackedChunks,
                 untrackedChunks,

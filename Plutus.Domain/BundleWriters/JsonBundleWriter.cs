@@ -13,26 +13,25 @@ public class JsonBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     System.Text.Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier)
-    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
+    BundleLimits bundleLimits)
+    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
 {
     public override string FormatExtension => "json";
 
     protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
         TokenBudgetSummary? tokenBudgetSummary,
         GitDiffContext? gitDiff)
     {
-        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var includedFiles = files.Where(x => !x.IsSkipped).ToList();
         var jsonModel = new JsonBundleModel
         {
             Metadata = new BundleMetadata
             {
                 TotalFiles = includedFiles.Count,
                 TotalSizeInBytes = includedFiles.Sum(x => x.Entry.File.Length),
-                MaxFileSizeLimit = maxFileSize,
+                MaxFileSizeLimit = Limits.MaxFileSize,
                 DiffScoped = gitDiff is not null,
                 DiffComparisonBase = gitDiff?.ComparisonBase,
                 TokenEstimateMethod = tokenBudgetSummary?.EstimatorMethod,

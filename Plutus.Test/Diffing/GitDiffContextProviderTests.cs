@@ -353,7 +353,7 @@ public class GitDiffContextProviderTests
     }
 
     private static GitDiffContextProvider CreateProvider(IGitCommandExecutor executor, TokenBudgetOptions? budget = null) =>
-        new(executor, new DiffScopeLimiter(new ChangedFileMapper("/repo", ignorePathCase: true), new BundleLimits(FileSize.FromBytes(1024), budget)));
+        new(executor, new DiffScopeLimiter(new BundleLimits(FileSize.FromBytes(1024), budget), ignorePathCase: true));
 
     private static IFileInfo Root(string physicalPath)
     {

@@ -6,7 +6,6 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 
@@ -34,7 +33,7 @@ public class TokenBudgetTests
 
         var writer = new MarkdownBundleWriter(
             detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
-            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -49,8 +48,7 @@ public class TokenBudgetTests
 
         await writer.WriteAsync(
             [(new NullFileProvider(), "root", "root", root)],
-            output,
-            FileSize.FromBytes(1024));
+            output);
 
         var text = Encoding.UTF8.GetString(output.Stream.ToArray());
         text.Should().Contain("Token estimate method:").And.Contain("a.txt").And.Contain("b.txt");
@@ -71,7 +69,7 @@ public class TokenBudgetTests
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
             detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
-            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -88,7 +86,7 @@ public class TokenBudgetTests
         };
 
         await writer.WriteAsync(
-            [(new NullFileProvider(), "root", "root", root)], output, FileSize.FromBytes(1024));
+            [(new NullFileProvider(), "root", "root", root)], output);
 
         var text = Encoding.UTF8.GetString(output.Stream.ToArray());
         text.Should().Contain("AAAA").And.Contain("BBBB");
@@ -106,7 +104,7 @@ public class TokenBudgetTests
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
             detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
-            new TokenBudgetApplier(new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)));
         var file = CreateFile("a.txt", "AAAAA");
         var root = new ProjectNode
         {
@@ -118,33 +116,41 @@ public class TokenBudgetTests
         };
 
         var act = async () => await writer.WriteAsync(
-            [(new NullFileProvider(), "root", "root", root)], output, FileSize.FromBytes(1024));
+            [(new NullFileProvider(), "root", "root", root)], output);
 
         await act.Should().ThrowAsync<TokenBudgetExceededException>();
         output.Stream.Length.Should().Be(0);
     }
 
     [Fact]
-    public void SelectPolicy_UsesLongTotalsAndMarksOnlyBudgetOmissions()
+    public void SelectPolicy_UsesLongTotalsAndExcludesOnlyOverBudgetItems()
     {
-        var firstEntry = new BundleEntry("a.txt", CreateFile("a.txt", "a"));
-        var secondEntry = new BundleEntry("b.txt", CreateFile("b.txt", "b"));
-        var unreadableEntry = new BundleEntry("secret.txt", CreateFile("secret.txt", "x"));
-        var files = new List<ProcessedFileContext>
-        {
-            ProcessedFileContext.CreateSuccess(firstEntry, "text", "a", int.MaxValue),
-            ProcessedFileContext.CreateSuccess(secondEntry, "text", "b", int.MaxValue),
-            ProcessedFileContext.CreateSkipped(unreadableEntry, "text", "binary file")
-        };
-        var applier = new TokenBudgetApplier(new TokenBudgetOptions(10, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder));
+        // The budget now runs over limitable items, so a file without content is simply not one of them.
+        var limits = new BundleLimits(
+            FileSize.FromBytes(1024),
+            new TokenBudgetOptions(10, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder));
 
-        var result = applier.Apply(files);
+        var result = limits.Apply(
+        [
+            new BundleLimitItem("a.txt", "a.txt", 4, int.MaxValue),
+            new BundleLimitItem("b.txt", "b.txt", 4, int.MaxValue)
+        ]);
 
-        result.Summary!.CandidateTokens.Should().Be((long)int.MaxValue * 2);
-        result.Summary.SelectedTokens.Should().Be(0);
-        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "a.txt" && f.IsTokenBudgetOmitted);
-        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "b.txt" && f.IsTokenBudgetOmitted);
-        result.Files.Should().ContainSingle(f => f.Entry.RelativePath == "secret.txt" && f.IsSkipped && !f.IsTokenBudgetOmitted && f.SkipReason == "binary file");
+        result.CandidateTokens.Should().Be((long)int.MaxValue * 2);
+        result.SelectedTokens.Should().Be(0);
+        result.IncludedKeys.Should().BeEmpty();
+        result.Exclusions.Should().HaveCount(2)
+            .And.OnlyContain(exclusion => exclusion.Reason.Contains("omitted by token budget"));
+    }
+
+    [Fact]
+    public void SizeRule_ShouldReportTheContentPathReason()
+    {
+        var limits = new BundleLimits(FileSize.FromBytes(1024), null);
+
+        limits.ExcludedBySize(100).Should().BeFalse();
+        limits.ExcludedBySize(5000).Should().BeTrue();
+        limits.SizeExclusionReason(5000).Should().Be("file is larger than max-file-size (4.9 KB > 1.0 KB)");
     }
 
     private static IFileInfo CreateFile(string name, string content)
