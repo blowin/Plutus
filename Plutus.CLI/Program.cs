@@ -297,6 +297,10 @@ public static class Program
             diffIncludeUntrackedOption,
         };
 
+        // A subcommand, not an option: initializing a profile is a different job from bundling, with its own options
+        // and its own exit codes.
+        rootCommand.Subcommands.Add(InitCommand.Create(output));
+
         rootCommand.SetAction(async parseResult =>
         {
             var branch = parseResult.GetValue(branchOption);

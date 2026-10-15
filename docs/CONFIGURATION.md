@@ -12,6 +12,29 @@ dotnet run --project Plutus.CLI -- . --exclude-dirs bin obj node_modules dist --
 dotnet run --project Plutus.CLI -- .
 ```
 
+## Start from a template
+
+Nobody has to learn the schema by heart: `init` writes the whole profile with every key commented out, each one next
+to its command-line equivalent and its default.
+
+```bash
+dotnet run --project Plutus.CLI -- init
+```
+
+```text
+Profile template written: /repo/.plutusrc
+Every key is commented out, so the file changes nothing until you uncomment what you need.
+A run from this directory or below picks it up automatically; --no-profile ignores it.
+```
+
+The generated file is valid and inert: a run that finds it says so and reports that no key was used, so generating a
+template cannot change what a bundle contains. Uncomment what the repository needs, delete the rest.
+
+| Option | Default | Description |
+|---|---|---|
+| `-o`, `--output <path>` | `<current directory>/.plutusrc` | Where to write the template. |
+| `--force` | Off | Replace an existing profile instead of refusing to touch it. |
+
 ## Where the profile is found
 
 A run looks for `.plutusrc`, then `.plutusrc.json`, in this order:
@@ -155,5 +178,9 @@ signaturesOnly, stripComments, tokenOverflowPolicy, tokenSelectionStrategy, useD
 - `Plutus.Test/Configuration/RunOptionsResolverTests.cs` — defaults without a profile, profile values applied,
   explicit flags overriding (including turning a flag off), inclusive patterns from extensions, the profile-relative
   output path, token budget and diff limits from the profile, and the provenance the report prints.
+- `Plutus.Test/Configuration/ProfileTemplateTests.cs` — the generated template documents every key the loader
+  accepts and loads as a profile that sets nothing.
+- `Plutus.Test/Configuration/ProfileScaffolderTests.cs` — the write: template content, no byte-order mark, creating
+  the directory, refusing to replace an existing profile, `--force`, and a write failure reported as one.
 - `Plutus.Test/Diagnostics/RunReportWriterTests.cs` — the `Configuration` block, and that a run without a profile
   prints none.

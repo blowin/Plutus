@@ -8,6 +8,28 @@ plutus <project-path> [<project-path> ...] [options]
 
 When running from the repository, use `dotnet run --project Plutus.CLI -- <arguments>`.
 
+## Commands
+
+| Command | Description |
+|---|---|
+| *(default)* | Bundle the given project paths: `plutus <project-path> [<project-path> ...] [options]`. |
+| `init` | Write a commented `.plutusrc` profile template to start from instead of filling in the schema by hand. |
+
+```text
+plutus init [--output <path>] [--force]
+```
+
+`init` writes every profile key as a comment with its command-line equivalent and its default, so the generated file
+is valid and changes nothing until you uncomment what you need. It refuses to replace an existing profile unless
+`--force` is given, and `--output` writes somewhere other than `<current directory>/.plutusrc`. See
+[Configuration profiles](CONFIGURATION.md).
+
+```bash
+dotnet run --project Plutus.CLI -- init
+dotnet run --project Plutus.CLI -- init -o ci/plutus.ci.plutusrc
+dotnet run --project Plutus.CLI -- init --force
+```
+
 ## Options
 
 | Option | Default | Description |
