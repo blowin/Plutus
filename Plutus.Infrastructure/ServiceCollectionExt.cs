@@ -9,7 +9,6 @@ using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
 using Plutus.Domain.Structure;
-using Plutus.Domain.Tokens.Applier;
 using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;

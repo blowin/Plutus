@@ -6,7 +6,6 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test.Diffing;
 

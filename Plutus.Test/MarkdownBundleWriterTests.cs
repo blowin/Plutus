@@ -5,7 +5,6 @@ using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Minifier;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test;
 

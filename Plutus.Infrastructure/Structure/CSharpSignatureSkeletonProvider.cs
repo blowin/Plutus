@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Plutus.Domain;
 using Plutus.Domain.Structure;

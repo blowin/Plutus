@@ -4,7 +4,6 @@ using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
-using Plutus.Infrastructure;
 using Plutus.Infrastructure.Git;
 
 namespace Plutus.Test.Diffing;

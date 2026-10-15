@@ -1,5 +1,7 @@
 using System.CommandLine;
 using System.Text;
+using Plutus.CLI.Commands.Bundle;
+using Plutus.CLI.Commands.Init;
 using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure.Diagnostics;
 
@@ -25,17 +27,18 @@ public static class Program
         IRunOutput output = new ConsoleRunOutput();
 
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single document.");
-        rootCommand.Subcommands.Add(BundleCommand.Create(output));
+        Command bundleCommand = BundleCommand.Create(output);
+        rootCommand.Subcommands.Add(bundleCommand);
         rootCommand.Subcommands.Add(InitCommand.Create(output));
 
-        return await rootCommand.Parse(Normalize(rootCommand, args)).InvokeAsync().ConfigureAwait(false);
+        return await rootCommand.Parse(Normalize(bundleCommand, rootCommand, args)).InvokeAsync().ConfigureAwait(false);
     }
 
     /// <summary>
     /// Bundling used to be the root command, so <c>plutus . --format md</c> keeps working next to
     /// <c>plutus bundle . --format md</c>: a command line that does not name a command is read as the bundle command.
     /// </summary>
-    internal static string[] Normalize(RootCommand root, string[] args)
+    internal static string[] Normalize(Command bundleCommand, RootCommand root, string[] args)
     {
         if (args.Length == 0 || RootTokens.Contains(args[0]))
         {
@@ -43,6 +46,6 @@ public static class Program
         }
 
         var namesACommand = root.Subcommands.Any(command => string.Equals(command.Name, args[0], StringComparison.Ordinal));
-        return namesACommand ? args : ["bundle", .. args];
+        return namesACommand ? args : [bundleCommand.Name, .. args];
     }
 }

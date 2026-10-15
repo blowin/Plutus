@@ -3,7 +3,7 @@ using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Tokens;
 
-namespace Plutus.CLI;
+namespace Plutus.CLI.Commands.Bundle;
 
 /// <summary>
 /// The surface of the bundling command: its argument and every option, defined once and named, so the command itself
@@ -254,7 +254,6 @@ internal sealed class BundleOptions
         NoGitignore.Aliases.Add("--no-gitignore");
         Exclude.Aliases.Add("-e");
         Minify.Aliases.Add("-m");
-        CommentStrategy.AcceptOnlyFromAmong("auto", "lexical", "antlr");
         return this;
     }
 

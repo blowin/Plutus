@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Plutus.Domain.Comments;
 
 namespace Plutus.Test.Comments;
 

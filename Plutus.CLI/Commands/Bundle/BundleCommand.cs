@@ -5,7 +5,7 @@ using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure;
 
-namespace Plutus.CLI;
+namespace Plutus.CLI.Commands.Bundle;
 
 /// <summary>
 /// The <c>bundle</c> command: collect the given project paths into one document. It is a command object like
@@ -33,7 +33,6 @@ internal static class BundleCommand
         var branch = reader.Value(options.Branch);
         var commit = reader.Value(options.Commit);
         var diffFrom = reader.Value(options.DiffFrom);
-        var diffOnly = reader.Value(options.DiffOnly);
 
         if (Validate(branch, commit, diffFrom, reader.Value(options.DiffTo), output) is { } failure)
         {

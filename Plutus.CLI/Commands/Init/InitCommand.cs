@@ -1,10 +1,9 @@
 using System.CommandLine;
-using Plutus.Domain;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure;
 
-namespace Plutus.CLI;
+namespace Plutus.CLI.Commands.Init;
 
 /// <summary>
 /// The <c>init</c> command: writes a commented <c>.plutusrc</c> to start from, so nobody has to learn the schema by

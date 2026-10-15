@@ -4,7 +4,7 @@ using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure;
 using Plutus.Infrastructure.Diagnostics;
 
-namespace Plutus.CLI;
+namespace Plutus.CLI.Commands.Bundle;
 
 /// <summary>
 /// Runs one bundle: builds the container for the resolved options, runs it, and prints the report. The command object

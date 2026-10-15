@@ -1,10 +1,9 @@
 using System.CommandLine;
 using FluentAssertions;
 using Plutus.CLI;
-using Plutus.Domain;
+using Plutus.CLI.Commands.Bundle;
+using Plutus.CLI.Commands.Init;
 using Plutus.Domain.Comments;
-using Plutus.Domain.Diagnostics;
-using Plutus.Test.Fakes;
 
 namespace Plutus.Test.Cli;
 
@@ -100,10 +99,10 @@ public class CommandLineReaderTests
         // `plutus . --format md` predates the bundle command and keeps working; naming a command is the same thing.
         var root = RootCommand();
 
-        Program.Normalize(root, ["."]).Should().Equal("bundle", ".");
-        Program.Normalize(root, ["--format", "md", "."]).Should().Equal("bundle", "--format", "md", ".");
-        Program.Normalize(root, ["bundle", "."]).Should().Equal("bundle", ".");
-        Program.Normalize(root, ["init"]).Should().Equal("init");
+        Program.Normalize(root.Subcommands[0], root, ["."]).Should().Equal("bundle", ".");
+        Program.Normalize(root.Subcommands[0], root, ["--format", "md", "."]).Should().Equal("bundle", "--format", "md", ".");
+        Program.Normalize(root.Subcommands[0], root, ["bundle", "."]).Should().Equal("bundle", ".");
+        Program.Normalize(root.Subcommands[0], root, ["init"]).Should().Equal("init");
     }
 
     [Fact]
@@ -111,9 +110,9 @@ public class CommandLineReaderTests
     {
         var root = RootCommand();
 
-        Program.Normalize(root, []).Should().BeEmpty();
-        Program.Normalize(root, ["--help"]).Should().Equal("--help");
-        Program.Normalize(root, ["--version"]).Should().Equal("--version");
+        Program.Normalize(root.Subcommands[0], root, []).Should().BeEmpty();
+        Program.Normalize(root.Subcommands[0], root, ["--help"]).Should().Equal("--help");
+        Program.Normalize(root.Subcommands[0], root, ["--version"]).Should().Equal("--version");
     }
 
     private static RootCommand RootCommand()
