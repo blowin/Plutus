@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -12,25 +13,27 @@ public class JsonBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     System.Text.Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier)
-    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
+    BundleLimits bundleLimits)
+    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
 {
     public override string FormatExtension => "json";
 
     protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary)
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff)
     {
-        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var includedFiles = files.Where(x => !x.IsSkipped).ToList();
         var jsonModel = new JsonBundleModel
         {
             Metadata = new BundleMetadata
             {
                 TotalFiles = includedFiles.Count,
                 TotalSizeInBytes = includedFiles.Sum(x => x.Entry.File.Length),
-                MaxFileSizeLimit = maxFileSize,
+                MaxFileSizeLimit = Limits.MaxFileSize,
+                DiffScoped = gitDiff is not null,
+                DiffComparisonBase = gitDiff?.ComparisonBase,
                 TokenEstimateMethod = tokenBudgetSummary?.EstimatorMethod,
                 EstimatedSourceTokens = tokenBudgetSummary?.CandidateTokens,
                 SelectedSourceTokens = tokenBudgetSummary?.SelectedTokens,
@@ -46,9 +49,17 @@ public class JsonBundleWriter(
                 Language = f.Language,
                 IsSkipped = f.IsSkipped,
                 SkipReason = f.SkipReason,
-                Content = f.Content,
+                Content = IncludeFileContents ? f.Content : null,
                 EstimatedTokens = f.EstimatedTokens
-            }).ToList()
+            }).ToList(),
+            Diff = gitDiff is null
+                ? null
+                : new JsonDiffModel
+                {
+                    ComparisonBase = gitDiff.ComparisonBase,
+                    Chunks = gitDiff.TrackedChunks.Select(MapChunk).ToList(),
+                    UntrackedFiles = gitDiff.UntrackedChunks.Select(MapChunk).ToList()
+                }
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -80,11 +91,24 @@ public class JsonBundleWriter(
         return folder;
     }
 
+    private static JsonDiffChunkModel MapChunk(DiffChunk chunk) => new()
+    {
+        RelativePath = chunk.Path,
+        ChangeKind = chunk.Kind.ToString().ToLowerInvariant(),
+        AddedLines = chunk.AddedLines,
+        DeletedLines = chunk.DeletedLines,
+        EstimatedTokens = chunk.EstimatedTokens,
+        IsSkipped = chunk.IsSkipped,
+        SkipReason = chunk.SkipReason,
+        Diff = chunk.IsSkipped ? null : chunk.Text
+    };
+
     private class JsonBundleModel
     {
         public BundleMetadata Metadata { get; set; } = new();
         public List<JsonFolderNode> Roots { get; set; } = [];
         public List<JsonFileModel> Files { get; set; } = [];
+        public JsonDiffModel? Diff { get; set; }
     }
 
     private class BundleMetadata
@@ -92,12 +116,33 @@ public class JsonBundleWriter(
         public int TotalFiles { get; set; }
         public long TotalSizeInBytes { get; set; }
         public long MaxFileSizeLimit { get; set; }
+        public bool DiffScoped { get; set; }
+        public string? DiffComparisonBase { get; set; }
         public string? TokenEstimateMethod { get; set; }
         public long? EstimatedSourceTokens { get; set; }
         public long? SelectedSourceTokens { get; set; }
         public int? MaxTokens { get; set; }
         public string? TokenOverflowPolicy { get; set; }
         public string? TokenSelectionStrategy { get; set; }
+    }
+
+    private class JsonDiffModel
+    {
+        public string ComparisonBase { get; set; } = string.Empty;
+        public List<JsonDiffChunkModel> Chunks { get; set; } = [];
+        public List<JsonDiffChunkModel> UntrackedFiles { get; set; } = [];
+    }
+
+    private class JsonDiffChunkModel
+    {
+        public string RelativePath { get; set; } = string.Empty;
+        public string ChangeKind { get; set; } = string.Empty;
+        public int AddedLines { get; set; }
+        public int DeletedLines { get; set; }
+        public int EstimatedTokens { get; set; }
+        public bool IsSkipped { get; set; }
+        public string? SkipReason { get; set; }
+        public string? Diff { get; set; }
     }
 
     private class JsonFolderNode

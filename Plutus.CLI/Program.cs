@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
 
@@ -179,6 +180,48 @@ public static class Program
             DefaultValueFactory = _ => "md"
         };
 
+        var diffOnlyOption = new Option<bool>("--diff-only")
+        {
+            Description = "Emit the change itself instead of the source: the bundle keeps its header, the list of changed paths and the raw .diff, and omits all file contents. A raw .diff section is appended."
+        };
+
+        var diffFromOption = new Option<string?>("--diff-from")
+        {
+            Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
+            Validators =
+            {
+                result =>
+                {
+                    var target = result.GetValueOrDefault<string?>();
+                    if (target is not null && string.IsNullOrWhiteSpace(target))
+                    {
+                        result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
+                    }
+                }
+            }
+        };
+
+        var diffToOption = new Option<string?>("--diff-to")
+        {
+            Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
+            Validators =
+            {
+                result =>
+                {
+                    var target = result.GetValueOrDefault<string?>();
+                    if (target is not null && string.IsNullOrWhiteSpace(target))
+                    {
+                        result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
+                    }
+                }
+            }
+        };
+
+        var diffIncludeUntrackedOption = new Option<bool>("--diff-include-untracked")
+        {
+            Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
+        };
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
@@ -201,6 +244,10 @@ public static class Program
             maxTokensOption,
             tokenOverflowPolicyOption,
             tokenSelectionStrategyOption,
+            diffOnlyOption,
+            diffFromOption,
+            diffToOption,
+            diffIncludeUntrackedOption,
         };
 
         rootCommand.SetAction(async parseResult =>
@@ -209,10 +256,26 @@ public static class Program
             var commit = parseResult.GetValue(commitOption);
             var encodingName = parseResult.GetValue(encodingOption)!;
             var maxTokens = parseResult.GetValue(maxTokensOption);
+            var diffOnly = parseResult.GetValue(diffOnlyOption);
+            var diffFrom = parseResult.GetValue(diffFromOption);
+            var diffTo = parseResult.GetValue(diffToOption);
+            var diffIncludeUntracked = parseResult.GetValue(diffIncludeUntrackedOption);
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
                 Console.Error.WriteLine("Error: branch and commit cannot be used together.");
+                return 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(diffFrom) && (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit)))
+            {
+                Console.Error.WriteLine("Error: --diff-from cannot be used together with --branch or --commit.");
+                return 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(diffTo) && string.IsNullOrWhiteSpace(diffFrom))
+            {
+                Console.Error.WriteLine("Error: --diff-to requires --diff-from to define the other end of the range.");
                 return 1;
             }
 
@@ -227,6 +290,13 @@ public static class Program
                 return 1;
             }
 
+            var tokenBudgetOptions = maxTokens is { } tokenLimit
+                ? new TokenBudgetOptions(
+                    tokenLimit,
+                    parseResult.GetValue(tokenOverflowPolicyOption)!,
+                    parseResult.GetValue(tokenSelectionStrategyOption)!)
+                : null;
+            var maxFileSize = parseResult.GetValue(maxSizeOption)!;
             var options = new RunAppOptions
             {
                 ProjectPath = parseResult.GetValue(projectPathsArgument)!,
@@ -235,7 +305,7 @@ public static class Program
                 ExcludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>(),
                 UseDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption),
                 AllowDangerous = parseResult.GetValue(allowDangerousFilesOption),
-                MaxFileSize = parseResult.GetValue(maxSizeOption)!,
+                MaxFileSize = maxFileSize,
                 ExcludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>(),
                 ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
                 IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
@@ -246,12 +316,20 @@ public static class Program
                 Format = parseResult.GetValue(formatOption)!,
                 Branch = branch,
                 Commit = commit,
-                TokenBudget = maxTokens is { } tokenLimit
-                    ? new TokenBudgetOptions(
-                        tokenLimit,
-                        parseResult.GetValue(tokenOverflowPolicyOption)!,
-                        parseResult.GetValue(tokenSelectionStrategyOption)!)
+                TokenBudget = tokenBudgetOptions,
+                Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
+                    ? new GitDiffOptions
+                    {
+                        Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom,
+                        TargetTo = string.IsNullOrWhiteSpace(diffTo) ? null : diffTo,
+                        IncludeUntracked = diffIncludeUntracked,
+
+                        // The same limits the content path uses, so a diff cannot bypass them.
+                        MaxFileSize = maxFileSize,
+                        TokenBudget = tokenBudgetOptions
+                    }
                     : null,
+                IncludeFileContents = !diffOnly,
             };
 
             try

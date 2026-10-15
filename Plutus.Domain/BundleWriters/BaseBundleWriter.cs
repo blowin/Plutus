@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -11,20 +12,26 @@ public abstract class BaseBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier) : IBundleWriter
+    BundleLimits bundleLimits) : IBundleWriter
 {
+    private readonly BundleLimits _limits = bundleLimits;
+
     public abstract string FormatExtension { get; }
     public int MaxConcurrentFileReads { get; set; } = 8;
+    public bool IncludeFileContents { get; set; } = true;
 
     protected readonly IFileInfoDetailProvider FileInfoDetailProvider = fileInfoDetailProvider;
     protected readonly IMarkdownLanguageProvider MarkdownLanguageProvider = markdownLanguageProvider;
     protected readonly ICodeMinifier CodeMinifier = codeMinifier;
     protected readonly Encoding Encoding = encoding;
 
+    /// <summary>The limits this writer applies, so formats can report the same numbers the limits used.</summary>
+    protected BundleLimits Limits => _limits;
+
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        FileSize maxFileSize)
+        GitDiffContext? gitDiff = null)
     {
         FileInfoDetailProvider.CreateDirectoryForFile(output);
 
@@ -36,37 +43,84 @@ public abstract class BaseBundleWriter(
         using var semaphore = new SemaphoreSlim(MaxConcurrentFileReads);
 
         // ReSharper disable once AccessToDisposedClosure
-        var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e, maxFileSize));
+        var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e));
         var processedFiles = (await Task.WhenAll(processingTasks).ConfigureAwait(false)).ToList();
 
-        var tokenBudgetResult = tokenBudgetApplier.Apply(processedFiles);
-        var tokenBudgetOmittedPaths = tokenBudgetResult.Files
+        // The one shared limit step: size first, then the token budget, both from BundleLimits.
+        var limitResult = _limits.Apply(processedFiles.Select(ToLimitItem).ToArray());
+        var excluded = limitResult.Exclusions.ToDictionary(exclusion => exclusion.Key, exclusion => exclusion.Reason, StringComparer.Ordinal);
+        var limitedFiles = processedFiles
+            .Select(file => ApplyLimit(file, excluded, limitResult.IncludedKeys))
+            .ToList();
+
+        var tokenBudgetOmittedPaths = limitedFiles
             .Where(f => f.IsTokenBudgetOmitted)
             .Select(f => f.Entry.RelativePath)
             .ToHashSet(StringComparer.Ordinal);
-        var skippedPaths = tokenBudgetResult.Files
-            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && f.Entry.File.Length <= maxFileSize)
+        var skippedPaths = limitedFiles
+            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && !_limits.ExcludedBySize(f.Entry.File.Length))
             .Select(f => f.Entry.RelativePath)
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var root in roots)
         {
-            ApplyFileStatuses(root.ProjectNode, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
+            ApplyFileStatuses(root.ProjectNode, tokenBudgetOmittedPaths, skippedPaths);
         }
 
-        await WriteContentAsync(roots, output, tokenBudgetResult.Files, maxFileSize, tokenBudgetResult.Summary).ConfigureAwait(false);
+        await WriteContentAsync(roots, output, limitedFiles, _limits.CreateSummary(limitResult), gitDiff).ConfigureAwait(false);
         return entries;
     }
 
     protected abstract Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary);
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff);
 
-    private static void ApplyFileStatuses(
+    /// <summary>
+    /// Describes one processed file to the limits service. A file the writer itself had to skip has no
+    /// content to weigh, so it is ineligible by size and never takes part in the budget.
+    /// </summary>
+    private static BundleLimitItem ToLimitItem(ProcessedFileContext file) =>
+        new(
+            file.Entry.RelativePath,
+            file.Entry.RelativePath,
+            file.IsSkipped ? long.MaxValue : file.Entry.File.Length,
+            file.EstimatedTokens ?? 0);
+
+    /// <summary>
+    /// Writes back the decision the limits service made. A file the writer itself had to skip keeps its own
+    /// reason, which is more specific than a limit.
+    /// </summary>
+    private static ProcessedFileContext ApplyLimit(
+        ProcessedFileContext file,
+        Dictionary<string, string> excluded,
+        IReadOnlyList<string> includedKeys)
+    {
+        if (file.IsSkipped)
+        {
+            return file;
+        }
+
+        if (includedKeys.Contains(file.Entry.RelativePath))
+        {
+            return file;
+        }
+
+        var reason = excluded.GetValueOrDefault(file.Entry.RelativePath, "excluded by bundle limits");
+        var isSize = reason.Contains("max-file-size", StringComparison.Ordinal);
+
+        return file with
+        {
+            Content = null,
+            IsSkipped = true,
+            IsTokenBudgetOmitted = !isSize,
+            SkipReason = reason
+        };
+    }
+
+    private void ApplyFileStatuses(
         ProjectNode node,
-        FileSize maxFileSize,
         HashSet<string> tokenBudgetOmittedPaths,
         HashSet<string> skippedPaths)
     {
@@ -77,7 +131,7 @@ public abstract class BaseBundleWriter(
                 return;
             }
 
-            if (node.FileInfo is { } file && file.Length > maxFileSize)
+            if (_limits.ExcludedBySize(node.FileInfo?.Length ?? 0))
             {
                 node.Status = NodeStatus.OversizedFile;
             }
@@ -95,20 +149,20 @@ public abstract class BaseBundleWriter(
 
         foreach (var child in node.Children)
         {
-            ApplyFileStatuses(child, maxFileSize, tokenBudgetOmittedPaths, skippedPaths);
+            ApplyFileStatuses(child, tokenBudgetOmittedPaths, skippedPaths);
         }
     }
 
-    private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry, FileSize maxFileSize)
+    private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry)
     {
         await semaphore.WaitAsync().ConfigureAwait(false);
         try
         {
             var language = MarkdownLanguageProvider.GetLanguage(entry.File.Name);
 
-            if (entry.File.Length > maxFileSize)
+            if (_limits.ExcludedBySize(entry.File.Length))
             {
-                return ProcessedFileContext.CreateSkipped(entry, language, $"file is larger than max-file-size ({entry.File.Length.HumanSize()} > {maxFileSize})");
+                return ProcessedFileContext.CreateSkipped(entry, language, _limits.SizeExclusionReason(entry.File.Length));
             }
 
             var (content, reason) = await ReadTextSafeAsync(entry.File).ConfigureAwait(false);
@@ -118,7 +172,7 @@ public abstract class BaseBundleWriter(
             }
 
             var minifiedContent = CodeMinifier.Minify(content, language);
-            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, tokenBudgetApplier.IsEnabled ? TokenEstimator.Estimate(minifiedContent) : null);
+            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, _limits.EstimatesTokens ? TokenEstimator.Estimate(minifiedContent) : null);
         }
         finally
         {

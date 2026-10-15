@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 using Plutus.Domain.Tokens.Applier;
@@ -12,18 +13,18 @@ public class XmlBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    ITokenBudgetApplier tokenBudgetApplier)
-    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, tokenBudgetApplier)
+    BundleLimits bundleLimits)
+    : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
 {
     public override string FormatExtension => "xml";
 
     protected override async Task WriteContentAsync(List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
         List<ProcessedFileContext> files,
-        FileSize maxFileSize,
-        TokenBudgetSummary? tokenBudgetSummary)
+        TokenBudgetSummary? tokenBudgetSummary,
+        GitDiffContext? gitDiff)
     {
-        var includedFiles = files.Where(x => !x.IsSkipped && x.Entry.File.Length <= maxFileSize).ToList();
+        var includedFiles = files.Where(x => !x.IsSkipped).ToList();
         var xmlSettings = new XmlWriterSettings
         {
             Async = true,
@@ -41,7 +42,12 @@ public class XmlBundleWriter(
         await xmlWriter.WriteStartElementAsync(null, "Metadata", null);
         await xmlWriter.WriteElementStringAsync(null, "TotalFiles", null, includedFiles.Count.ToString());
         await xmlWriter.WriteElementStringAsync(null, "TotalSizeInBytes", null, includedFiles.Sum(x => x.Entry.File.Length).ToString());
-        await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, maxFileSize.ToString());
+        await xmlWriter.WriteElementStringAsync(null, "MaxFileSizeLimit", null, Limits.MaxFileSize.ToString());
+        if (gitDiff is not null)
+        {
+            await xmlWriter.WriteElementStringAsync(null, "DiffScoped", null, "true");
+            await xmlWriter.WriteElementStringAsync(null, "DiffComparisonBase", null, gitDiff.ComparisonBase);
+        }
         if (tokenBudgetSummary is { } tokenSummary)
         {
             await xmlWriter.WriteElementStringAsync(null, "TokenEstimateMethod", null, tokenSummary.EstimatorMethod);
@@ -79,7 +85,7 @@ public class XmlBundleWriter(
                 await xmlWriter.WriteAttributeStringAsync(null, "skipped", null, "true");
                 await xmlWriter.WriteAttributeStringAsync(null, "reason", null, file.SkipReason);
             }
-            else
+            else if (IncludeFileContents)
             {
                 await xmlWriter.WriteStartElementAsync(null, "Content", null);
                 await xmlWriter.WriteCDataAsync(file.Content ?? string.Empty);
@@ -89,9 +95,57 @@ public class XmlBundleWriter(
         }
         await xmlWriter.WriteEndElementAsync();
 
+        if (gitDiff is not null)
+        {
+            await WriteDiffAsync(xmlWriter, gitDiff);
+        }
+
         await xmlWriter.WriteEndElementAsync(); // End Bundle
         await xmlWriter.WriteEndDocumentAsync();
         await xmlWriter.FlushAsync();
+    }
+
+    private static async Task WriteDiffAsync(XmlWriter writer, GitDiffContext gitDiff)
+    {
+        await writer.WriteStartElementAsync(null, "Diff", null);
+        await writer.WriteAttributeStringAsync(null, "comparisonBase", null, gitDiff.ComparisonBase);
+
+        foreach (var chunk in gitDiff.TrackedChunks)
+        {
+            await WriteChunkAsync(writer, "Chunk", chunk);
+        }
+
+        foreach (var chunk in gitDiff.UntrackedChunks)
+        {
+            await WriteChunkAsync(writer, "UntrackedChunk", chunk);
+        }
+
+        await writer.WriteEndElementAsync();
+    }
+
+    private static async Task WriteChunkAsync(XmlWriter writer, string elementName, DiffChunk chunk)
+    {
+        await writer.WriteStartElementAsync(null, elementName, null);
+        await writer.WriteAttributeStringAsync(null, "path", null, chunk.Path);
+        await writer.WriteAttributeStringAsync(null, "change", null, chunk.Kind.ToString().ToLowerInvariant());
+        await writer.WriteAttributeStringAsync(null, "addedLines", null, chunk.AddedLines.ToString());
+        await writer.WriteAttributeStringAsync(null, "deletedLines", null, chunk.DeletedLines.ToString());
+        await writer.WriteAttributeStringAsync(null, "estimatedTokens", null, chunk.EstimatedTokens.ToString());
+
+        if (chunk.IsSkipped)
+        {
+            await writer.WriteAttributeStringAsync(null, "skipped", null, "true");
+            await writer.WriteAttributeStringAsync(null, "reason", null, chunk.SkipReason);
+        }
+        else
+        {
+            // Escaped text rather than CDATA, because a diff payload may itself contain the CDATA terminator.
+            await writer.WriteStartElementAsync(null, "Patch", null);
+            await writer.WriteStringAsync(chunk.Text);
+            await writer.WriteEndElementAsync();
+        }
+
+        await writer.WriteEndElementAsync();
     }
 
     private async Task WriteXmlNodeAsync(XmlWriter writer, ProjectNode node)

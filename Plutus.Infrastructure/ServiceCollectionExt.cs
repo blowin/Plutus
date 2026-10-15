@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens.Applier;
+using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
 
 namespace Plutus.Infrastructure;
@@ -53,10 +55,18 @@ public static class ServiceCollectionExt
         services.AddSingleton<IPathService, FileSystemPathService>();
         services.AddSingleton<IMarkdownLanguageProvider, MarkdownLanguageProvider>();
         services.AddSingleton<IAdditionalIgnoreMatcherProvider, AdditionalIgnoreMatcherProvider>();
+        services.AddSingleton<IGitCommandExecutor, ProcessGitCommandExecutor>();
+
+        // One limits service per payload: the bundle both carries source files and, in diff mode, diffs.
+        // The repository root is resolved per bundle by the provider, so it is passed to Apply rather than
+        // captured here.
+        services.AddScoped<BundleLimits>(_ => new BundleLimits(options.MaxFileSize, options.TokenBudget));
+        services.AddScoped<DiffScopeLimiter>(_ => new DiffScopeLimiter(
+            new BundleLimits(options.MaxFileSize, options.Diff?.TokenBudget)));
+        services.AddScoped<IGitDiffContextProvider>(provider => options.Diff is null
+            ? new NullGitDiffContextProvider()
+            : ActivatorUtilities.CreateInstance<GitDiffContextProvider>(provider));
         services.AddSingleton(options);
-        services.AddSingleton<ITokenBudgetApplier>(_ => options.TokenBudget is null
-            ? new NoOpTokenBudgetApplier()
-            : new TokenBudgetApplier(options.TokenBudget));
         services.AddSingleton(options.TargetEncoding);
 
         services.AddSingleton<ICodeMinifier>(provider =>

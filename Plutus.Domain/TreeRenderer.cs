@@ -21,11 +21,31 @@ public class TreeRenderer
 
             lines.Add($"{prefix}{branch}{child.Name}{GetNodeMarker(child)}");
 
-            if (child is { IsDirectory: true, Status: NodeStatus.Included })
+            // An excluded directory is still worth descending into when a change beneath it carries a limit
+            // marker: that marker is the only place the omitted change is reported.
+            if (child.IsDirectory && (child.Status == NodeStatus.Included || ContainsLimitMarker(child)))
             {
                 WalkNodes(child, nextPrefix, lines);
             }
         }
+    }
+
+    private static bool ContainsLimitMarker(ProjectNode node)
+    {
+        foreach (var child in node.Children)
+        {
+            if (!child.IsDirectory && child.Status is NodeStatus.OversizedFile or NodeStatus.TokenBudgetOmitted)
+            {
+                return true;
+            }
+
+            if (child.IsDirectory && ContainsLimitMarker(child))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GetNodeMarker(ProjectNode node) => node.Status switch
