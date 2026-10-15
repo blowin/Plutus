@@ -15,7 +15,8 @@ Plutus is organized as a .NET solution with separate CLI, domain, infrastructure
 
 ```mermaid
 flowchart TD
-    A[CLI arguments] --> B[Resolve local paths or remote repositories]
+    A[CLI arguments] --> A2[Find the .plutusrc profile and merge it with the stated flags]
+    A2 --> B[Resolve local paths or remote repositories]
     B --> C[Create file providers and project roots]
     C --> D[Resolve diff scope via git when requested]
     D --> E[Scan paths and build ProjectNode trees]
@@ -25,7 +26,7 @@ flowchart TD
     H --> I[Estimate source tokens when configured]
     I --> J[Apply fail, warn, or select policy]
     J --> K[Render Markdown, JSON, or XML]
-    K --> L[Report the comment strategy that answered]
+    K --> L[Report the configuration and the comment strategy that answered]
 ```
 
 ## Design notes
@@ -44,6 +45,9 @@ flowchart TD
 - **Discovery over dispatch:** language processors (`IMaintainedLanguageProcessor`) and structural providers (`ISignatureSkeletonProvider`) declare the language they serve and are registered by the container scanning for their interface. `LanguageMinifierCatalog` (a service) fills in every other language from the syntax table and rejects a language claimed twice, so no switch over language identifiers exists in the code.
 - **Language identity:** `LanguageId` is a normalized value type rather than a loose string, so lookups need no comparer, a misspelled identifier cannot silently miss a table entry, and the canonical spellings live in one place.
 - **One output target:** services report progress, warnings and errors through `IRunOutput` instead of writing to the console, and the bundler records its numbers in `BundleRunReport` instead of printing them. The host binds the target (`ConsoleRunOutput` for the CLI, `NullRunOutput` for a library caller or a test) and `IRunReportWriter` renders the whole run report in one place, so the wording, the alignment and the number culture cannot drift between layers.
+- **Configuration resolution:** `PlutusProfileLoader` finds and reads the `.plutusrc` profile of a run (the nearest file from the working directory up to the repository root, or an explicitly named one), `RunOptionsResolver` merges it with the flags the command line actually stated and with the built-in defaults, and `RunAppOptions.Profile` records which keys came from where so the report can print it. Reading each option as "stated or not stated" rather than "value or default" is what makes that precedence honest, and a profile problem fails the run before a single file is read. See [Configuration profiles](CONFIGURATION.md).
+- **One filesystem seam:** every existence check and every read goes through `Microsoft.Extensions.FileProviders` — wrapped as `FileProviderAccess`, built by `FileProviderAccessFactory` — so the profile search, the grammar inventory and the bundling itself see the same view of the files, and a test describes a tree (`InMemoryFileProvider`) instead of creating directories. Nothing in the domain calls `File` or `Directory` directly.
+- **One filesystem seam:** every existence check and every read goes through `Microsoft.Extensions.FileProviders` — wrapped as `FileProviderAccess`, built by `FileProviderAccessFactory` — so the profile search, the grammar inventory and the bundling itself see the same view of the files, and a test describes a tree (`InMemoryFileProvider`) instead of creating directories. Nothing in the domain calls `File` or `Directory` directly.
 - **Services over static helpers:** behavior lives in injectable classes — `LanguageCommentSyntaxTable`, `LexicalCommentStripper`, `LanguageMinifierCatalog`, `CodeMinifierFactory`, `CommentStrippingPlanner`, `GrammarInventoryLoader`, `RunReportWriter` — so a dependency is visible in a constructor signature, a test builds the object with exactly the collaborators it is about, and a host can substitute any of them. What stays static is data and value semantics: constants, immutable defaults (`CommentStripOptions.Default`, `SourceProcessingContext.Disabled`), the null-object `NullRunOutput.Instance`, pure identifier mapping (`CommentStrategyNames`) and validating factories for value types (`CodeTokenStream.TryCreate`).
 - **Dependency injection:** `Plutus.Infrastructure` registers the concrete services consumed by the CLI runner; `ServiceCollectionTests` builds the container with scope and build validation, so an unresolvable service or a lifetime mismatch fails a test rather than a run.
 

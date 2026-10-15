@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
@@ -21,15 +22,22 @@ public static class ServiceCollectionExt
     /// <summary>
     /// Registers the services of a run. <paramref name="runOutput"/> is the single target every service reports to;
     /// when it is omitted the run is silent, which is what a library caller or a test usually wants.
+    /// <paramref name="files"/> is the file access a run reads configuration through; when it is omitted one is built
+    /// for the working directory.
     /// </summary>
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         RunAppOptions options,
-        IRunOutput? runOutput = null)
+        IRunOutput? runOutput = null,
+        FileProviderAccess? files = null)
     {
         var output = runOutput ?? NullRunOutput.Instance;
         services.AddSingleton(output);
         services.AddSingleton<BundleRunReport>();
+        services.AddSingleton<FileProviderAccessFactory>();
+        services.AddSingleton(provider => files ?? provider.GetRequiredService<FileProviderAccessFactory>().CreateForWorkingDirectory());
+        services.AddSingleton<PlutusProfileLoader>();
+        services.AddSingleton<GrammarInventoryLoader>();
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
             AllowAutoRedirect = true,
@@ -93,7 +101,7 @@ public static class ServiceCollectionExt
         services.AddSingleton<ICommentStripObserver>(provider => provider.GetRequiredService<CommentStrippingReport>());
         services.AddSingleton<SignatureExtractionReport>();
         services.AddSingleton<ISignatureExtractionObserver>(provider => provider.GetRequiredService<SignatureExtractionReport>());
-        services.AddSingleton(new GrammarInventoryLoader().Discover());
+        services.AddSingleton(provider => provider.GetRequiredService<GrammarInventoryLoader>().Discover());
 
         // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
         // registers it. Adding a structural provider or a maintained language processor is a matter of writing the

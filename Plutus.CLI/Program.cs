@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Structure;
@@ -252,10 +253,22 @@ public static class Program
             Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
         };
 
+        var profileOption = new Option<string?>("--profile")
+        {
+            Description = "Path to a .plutusrc profile to use instead of searching for one. Overrides the PLUTUS_PROFILE environment variable."
+        };
+
+        var noProfileOption = new Option<bool>("--no-profile")
+        {
+            Description = "Ignore any .plutusrc profile (and PLUTUS_PROFILE) and run with the command line and built-in defaults only."
+        };
+
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
         {
             projectPathsArgument,
             outputOption,
+            profileOption,
+            noProfileOption,
             maxSizeOption,
             noGitignoreOption,
             branchOption,
@@ -288,12 +301,12 @@ public static class Program
         {
             var branch = parseResult.GetValue(branchOption);
             var commit = parseResult.GetValue(commitOption);
-            var encodingName = parseResult.GetValue(encodingOption)!;
             var maxTokens = parseResult.GetValue(maxTokensOption);
             var diffOnly = parseResult.GetValue(diffOnlyOption);
             var diffFrom = parseResult.GetValue(diffFromOption);
             var diffTo = parseResult.GetValue(diffToOption);
             var diffIncludeUntracked = parseResult.GetValue(diffIncludeUntrackedOption);
+            var noProfile = parseResult.GetValue(noProfileOption);
 
             if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
             {
@@ -313,39 +326,87 @@ public static class Program
                 return 1;
             }
 
-            Encoding targetEncoding;
-            try
+            // Configuration is read through one file access for the whole process: the profile search, the grammar
+            // inventory and the container all see the same filesystem, and none of them opens a file directly.
+            var fileProviderDetail = new PhysicianPlutusFileInfo();
+            var files = new FileProviderAccessFactory(fileProviderDetail).CreateForWorkingDirectory();
+            var profileLoader = new PlutusProfileLoader(files);
+            var grammarLoader = new GrammarInventoryLoader(files);
+
+            // The profile is found before anything runs: a profile that cannot be trusted is a failure, not a
+            // reason to fall back to the defaults without saying so.
+            var profilePath = parseResult.GetValue(profileOption) ?? Environment.GetEnvironmentVariable(PlutusProfileLoader.PathVariable);
+            if (noProfile && !string.IsNullOrWhiteSpace(profilePath))
             {
-                targetEncoding = Encoding.GetEncoding(encodingName);
+                output.Warning("--no-profile ignores --profile and the PLUTUS_PROFILE environment variable.");
             }
-            catch (ArgumentException)
+
+            var profileResult = profileLoader.Resolve(fileProviderDetail.GetCurrentDirectory(), profilePath, noProfile);
+            if (!profileResult.Succeeded)
             {
-                output.Error($"Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
+                output.Error(profileResult.Error!);
                 return 1;
             }
 
-            var tokenBudgetOptions = maxTokens is { } tokenLimit
-                ? new TokenBudgetOptions(
-                    tokenLimit,
-                    parseResult.GetValue(tokenOverflowPolicyOption)!,
-                    parseResult.GetValue(tokenSelectionStrategyOption)!)
-                : null;
-            var maxFileSize = parseResult.GetValue(maxSizeOption)!;
-            var minify = parseResult.GetValue(minifyOption);
-            var stripComments = parseResult.GetValue(stripCommentsOption);
-            var preserveDocComments = parseResult.GetValue(preserveDocCommentsOption);
-            var commentStrategy = parseResult.GetValue(commentStrategyOption)!;
-            var signaturesOnly = parseResult.GetValue(signaturesOnlyOption);
-
-            // The two comment switches do nothing on their own; say so instead of accepting them in silence.
-            if (!stripComments && !minify)
+            // Every option that can also come from a profile is read as "what the user typed", so the resolver can
+            // tell an explicit flag from an option that merely has a default.
+            var request = new RunOptionsRequest
             {
-                if (preserveDocComments)
+                ProjectPath = parseResult.GetValue(projectPathsArgument)!,
+                OutputPath = Explicit(parseResult, outputOption),
+                UseGitignore = ExplicitValue(parseResult, noGitignoreOption) is { } noGitignore ? !noGitignore : null,
+                Exclude = Explicit(parseResult, excludeOption),
+                UseDefaultExcludes = ExplicitValue(parseResult, useDefaultExcludesOption),
+                AllowDangerousFiles = ExplicitValue(parseResult, allowDangerousFilesOption),
+                MaxFileSize = ExplicitValue(parseResult, maxSizeOption),
+                ExcludeDirs = Explicit(parseResult, excludeDirsOption),
+                ExcludeFiles = Explicit(parseResult, excludeFilesOption),
+                IncludeDirs = Explicit(parseResult, includeDirsOption),
+                IncludeFiles = Explicit(parseResult, includeFilesOption),
+                Encoding = Explicit(parseResult, encodingOption),
+                MaxConcurrency = ExplicitValue(parseResult, maxConcurrencyOption),
+                Format = Explicit(parseResult, formatOption),
+                MaxTokens = maxTokens,
+                TokenOverflowPolicy = ExplicitValue(parseResult, tokenOverflowPolicyOption),
+                TokenSelectionStrategy = ExplicitValue(parseResult, tokenSelectionStrategyOption),
+                IncludeFileContents = diffOnly ? false : null,
+                Minify = ExplicitValue(parseResult, minifyOption),
+                StripComments = ExplicitValue(parseResult, stripCommentsOption),
+                PreserveDocComments = ExplicitValue(parseResult, preserveDocCommentsOption),
+                CommentStrategy = ExplicitValue(parseResult, commentStrategyOption),
+                SignaturesOnly = ExplicitValue(parseResult, signaturesOnlyOption),
+                Branch = branch,
+                Commit = commit,
+                Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
+                    ? new DiffRequest
+                    {
+                        From = diffFrom,
+                        To = diffTo,
+                        Only = diffOnly,
+                        IncludeUntracked = diffIncludeUntracked,
+                    }
+                    : null,
+            };
+
+            var resolution = new RunOptionsResolver().Resolve(request, profileResult.Profile, profileResult.Path);
+            if (!resolution.Succeeded)
+            {
+                output.Error(resolution.Error!);
+                return 1;
+            }
+
+            var options = resolution.Options!;
+
+            // The two comment switches do nothing on their own; say so instead of accepting them in silence. The
+            // values are the resolved ones, so a profile that sets them is reported the same way a flag is.
+            if (!options.StripComments && !options.Minify)
+            {
+                if (options.PreserveDocumentationComments)
                 {
                     output.Warning("--preserve-doc-comments has no effect without --strip-comments or --minify.");
                 }
 
-                if (commentStrategy != CommentStrategyRequest.Auto)
+                if (options.CommentStrategy != CommentStrategyRequest.Auto)
                 {
                     output.Warning("--comment-strategy has no effect without --strip-comments or --minify.");
                 }
@@ -353,61 +414,20 @@ public static class Program
 
             // Resolve the strategy before any work: asking for ANTLR token channels without a maintained grammar is
             // an error, and it must not quietly degrade into lexical scanning.
-            CommentStrippingPlan? commentStripPlan = null;
-            if (stripComments || minify)
+            if (options.StripComments || options.Minify)
             {
-                if (!new CommentStrippingPlanner().TryResolve(commentStrategy, new GrammarInventoryLoader().Discover(), out var resolved, out var planError))
+                if (!new CommentStrippingPlanner().TryResolve(options.CommentStrategy, grammarLoader.Discover(), out var resolved, out var planError))
                 {
                     output.Error(planError!);
                     return 1;
                 }
 
-                commentStripPlan = resolved;
+                options = options with { CommentStripPlan = resolved };
             }
-
-            var options = new RunAppOptions
-            {
-                ProjectPath = parseResult.GetValue(projectPathsArgument)!,
-                OutputPath = parseResult.GetValue(outputOption),
-                UseGitignore = !parseResult.GetValue(noGitignoreOption),
-                ExcludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>(),
-                UseDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption),
-                AllowDangerous = parseResult.GetValue(allowDangerousFilesOption),
-                MaxFileSize = maxFileSize,
-                ExcludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>(),
-                ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
-                IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
-                IncludeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>(),
-                Minify = minify,
-                StripComments = stripComments,
-                PreserveDocumentationComments = preserveDocComments,
-                CommentStrategy = commentStrategy,
-                CommentStripPlan = commentStripPlan,
-                SignaturesOnly = signaturesOnly,
-                TargetEncoding = targetEncoding,
-                MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
-                Format = parseResult.GetValue(formatOption)!,
-                Branch = branch,
-                Commit = commit,
-                TokenBudget = tokenBudgetOptions,
-                Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
-                    ? new GitDiffOptions
-                    {
-                        Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom,
-                        TargetTo = string.IsNullOrWhiteSpace(diffTo) ? null : diffTo,
-                        IncludeUntracked = diffIncludeUntracked,
-
-                        // The same limits the content path uses, so a diff cannot bypass them.
-                        MaxFileSize = maxFileSize,
-                        TokenBudget = tokenBudgetOptions
-                    }
-                    : null,
-                IncludeFileContents = !diffOnly,
-            };
 
             try
             {
-                return await RunAppAsync(options, output);
+                return await RunAppAsync(options, output, files);
             }
             catch (Exception ex)
             {
@@ -420,13 +440,24 @@ public static class Program
         return await Task.FromResult(await result.InvokeAsync()).ConfigureAwait(false);
     }
 
-    private static async Task<int> RunAppAsync(RunAppOptions options, IRunOutput output)
+    /// <summary>
+    /// A reference-typed option as the user typed it, or <c>null</c> when only the option's default filled it in.
+    /// This is what lets a profile apply to everything the command line did not state.
+    /// </summary>
+    private static T? Explicit<T>(ParseResult parseResult, Option<T> option) where T : class? =>
+        parseResult.GetResult(option) is { Implicit: false } ? parseResult.GetValue(option) : null;
+
+    /// <summary>The same for a value-typed option, including flags such as <c>--minify</c>.</summary>
+    private static T? ExplicitValue<T>(ParseResult parseResult, Option<T> option) where T : struct =>
+        parseResult.GetResult(option) is { Implicit: false } ? parseResult.GetValue(option) : null;
+
+    private static async Task<int> RunAppAsync(RunAppOptions options, IRunOutput output, FileProviderAccess files)
     {
         Console.OutputEncoding = options.TargetEncoding;
         Console.InputEncoding = options.TargetEncoding;
 
         var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options, output);
+        sc.AddInfrastructureServices(options, output, files);
         await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
         {
             ValidateScopes = true,

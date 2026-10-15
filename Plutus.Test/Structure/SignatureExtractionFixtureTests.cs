@@ -12,9 +12,7 @@ namespace Plutus.Test.Structure;
 /// </summary>
 public class SignatureExtractionFixtureTests
 {
-    private static string FixturePath => Path.Combine(AppContext.BaseDirectory, "Fixtures", "Structure", "Service.cs");
-
-    private static string Source => File.ReadAllText(FixturePath);
+    private static string Source => TestFiles.ReadFixture("Structure/Service.cs");
 
     [Fact]
     public void InterfaceAndAbstractSurface_IsKeptVerbatim()

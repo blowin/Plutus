@@ -1,15 +1,20 @@
 using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Test.Fakes;
 
 namespace Plutus.Test.Comments;
 
 /// <summary>
 /// The grammar inventory is what keeps ANTLR support honest: it is empty for this repository, a broken manifest
-/// fails loudly, and channel names resolve to numbers before anything is stripped.
+/// fails loudly, and channel names resolve to numbers before anything is stripped. The tree it reads lives in memory,
+/// so no test creates a directory or a file.
 /// </summary>
 public class GrammarInventoryTests
 {
+    /// <summary>The host path the in-memory provider pretends to be rooted at; only string operations use it.</summary>
+    private static readonly string Root = OperatingSystem.IsWindows() ? @"C:\plutus-grammar-tests" : "/plutus-grammar-tests";
+
     private const string ValidManifest = """
         {
           "grammars": [
@@ -29,7 +34,7 @@ public class GrammarInventoryTests
     [Fact]
     public void Discover_WithoutAManifest_ReportsAnEmptyInventoryAndWhereItLooked()
     {
-        var inventory = new GrammarInventoryLoader().Discover(Path.Combine(Path.GetTempPath(), "plutus-missing", "grammar-manifest.json"));
+        var inventory = Loader().Discover(At("missing/grammar-manifest.json"));
 
         inventory.HasGrammars.Should().BeFalse();
         inventory.LoadError.Should().BeNull();
@@ -39,7 +44,7 @@ public class GrammarInventoryTests
     [Fact]
     public void Parse_ResolvesNumericAndNamedChannels()
     {
-        var inventory = GrammarInventory.Parse(ValidManifest);
+        var inventory = GrammarInventory.Parse(ValidManifest, null, _ => true);
 
         inventory.LoadError.Should().BeNull();
         var entry = inventory.Entries.Should().ContainSingle().Subject;
@@ -53,7 +58,7 @@ public class GrammarInventoryTests
     [Fact]
     public void Parse_KeepsTheWrittenFormOfEveryChannel()
     {
-        var entry = GrammarInventory.Parse(ValidManifest).Entries.Single();
+        var entry = GrammarInventory.Parse(ValidManifest, null, _ => true).Entries.Single();
 
         entry.CommentChannels.Select(channel => channel.Raw).Should().Equal("1", "HIDDEN", "COMMENTS");
         entry.CommentChannels[0].Number.Should().Be(1);
@@ -68,7 +73,9 @@ public class GrammarInventoryTests
         var inventory = GrammarInventory.Parse(
             """
             { "grammars": [ { "language": "sql", "grammarFile": "SqlLexer.g4", "commentChannels": ["NOWHERE"] } ] }
-            """);
+            """,
+            null,
+            _ => true);
 
         inventory.HasGrammars.Should().BeFalse();
         inventory.LoadError.Should().Contain("NOWHERE");
@@ -80,50 +87,59 @@ public class GrammarInventoryTests
         var inventory = GrammarInventory.Parse(
             """
             { "grammars": [ { "language": "sql", "grammarFile": "SqlLexer.g4" } ] }
-            """);
+            """,
+            null,
+            _ => true);
 
         inventory.LoadError.Should().Contain("commentChannels");
     }
 
     [Fact]
-    public void Parse_ManifestWithoutAFileForTheGrammar_IsALoadError()
+    public void Load_ManifestWithoutAFileForTheGrammar_IsALoadError()
     {
-        var directory = Directory.CreateTempSubdirectory("plutus-grammar-");
-        var manifestPath = Path.Combine(directory.FullName, "grammar-manifest.json");
-        File.WriteAllText(manifestPath, ValidManifest);
+        // The manifest is there, the lexer it names is not: the inventory must refuse to pretend it is.
+        var loader = Loader(new InMemoryFileProvider().AddFile("grammars/grammar-manifest.json", ValidManifest));
 
-        var inventory = new GrammarInventoryLoader().Load(manifestPath);
+        var inventory = loader.Load(At("grammars/grammar-manifest.json"));
 
         inventory.LoadError.Should().Contain("not next to the manifest");
-        directory.Delete(recursive: true);
     }
 
     [Fact]
-    public void Parse_ManifestWithTheGrammarFileOnDisk_IsAccepted()
+    public void Load_ManifestWithTheGrammarFileBesideIt_IsAccepted()
     {
-        var directory = Directory.CreateTempSubdirectory("plutus-grammar-");
-        var manifestPath = Path.Combine(directory.FullName, "grammar-manifest.json");
-        File.WriteAllText(Path.Combine(directory.FullName, "SqlLexer.g4"), "lexer grammar SqlLexer;");
-        File.WriteAllText(manifestPath, ValidManifest);
+        var loader = Loader(new InMemoryFileProvider()
+            .AddFile("grammars/grammar-manifest.json", ValidManifest)
+            .AddFile("grammars/SqlLexer.g4", "lexer grammar SqlLexer;"));
 
-        var inventory = new GrammarInventoryLoader().Load(manifestPath);
+        var inventory = loader.Load(At("grammars/grammar-manifest.json"));
 
         inventory.LoadError.Should().BeNull();
         inventory.TryGet("SQL", out var entry).Should().BeTrue("language lookup is case-insensitive");
         entry.GrammarFile.Should().Be("SqlLexer.g4");
-        directory.Delete(recursive: true);
+    }
+
+    [Fact]
+    public void Load_ManifestWithAnAbsoluteGrammarPath_IsAccepted()
+    {
+        var lexer = At("elsewhere/SqlLexer.g4");
+        var loader = Loader(new InMemoryFileProvider()
+            .AddFile("elsewhere/SqlLexer.g4", "lexer grammar SqlLexer;")
+            .AddFile("grammars/grammar-manifest.json", ValidManifest.Replace("SqlLexer.g4", lexer.Replace("\\", "\\\\"))));
+
+        loader.Load(At("grammars/grammar-manifest.json")).LoadError.Should().BeNull();
     }
 
     [Fact]
     public void Parse_InvalidJson_IsReported()
     {
-        GrammarInventory.Parse("{ not json").LoadError.Should().Contain("not valid JSON");
+        GrammarInventory.Parse("{ not json", null, _ => true).LoadError.Should().Contain("not valid JSON");
     }
 
     [Fact]
     public void Parse_ManifestWithoutTheGrammarsArray_IsReported()
     {
-        GrammarInventory.Parse("{}").LoadError.Should().Contain("grammars");
+        GrammarInventory.Parse("{}", null, _ => true).LoadError.Should().Contain("grammars");
     }
 
     [Fact]
@@ -132,9 +148,9 @@ public class GrammarInventoryTests
         var variableBackup = Environment.GetEnvironmentVariable(GrammarInventory.ManifestPathVariable);
         try
         {
-            Environment.SetEnvironmentVariable(GrammarInventory.ManifestPathVariable, Path.Combine(Path.GetTempPath(), "plutus-missing-manifest.json"));
+            Environment.SetEnvironmentVariable(GrammarInventory.ManifestPathVariable, At("missing-manifest.json"));
 
-            var inventory = new GrammarInventoryLoader().Discover();
+            var inventory = Loader().Discover();
 
             inventory.HasGrammars.Should().BeFalse();
             inventory.LoadError.Should().Contain(GrammarInventory.ManifestPathVariable);
@@ -143,6 +159,19 @@ public class GrammarInventoryTests
         {
             Environment.SetEnvironmentVariable(GrammarInventory.ManifestPathVariable, variableBackup);
         }
+    }
+
+    [Fact]
+    public void Discover_ReadsTheShippedManifestFromTheProvider()
+    {
+        var loader = Loader(new InMemoryFileProvider()
+            .AddFile("grammars/grammar-manifest.json", ValidManifest)
+            .AddFile("grammars/SqlLexer.g4", "lexer grammar SqlLexer;"));
+
+        var inventory = loader.Load(At("grammars/grammar-manifest.json"));
+
+        inventory.HasGrammars.Should().BeTrue();
+        inventory.ManifestPath.Should().Be(At("grammars/grammar-manifest.json"));
     }
 
     [Fact]
@@ -155,8 +184,14 @@ public class GrammarInventoryTests
     [Fact]
     public void Description_ListsLanguageGrammarAndChannels()
     {
-        var inventory = GrammarInventory.Parse(ValidManifest);
+        var inventory = GrammarInventory.Parse(ValidManifest, null, _ => true);
 
         inventory.Describe().Should().Be("sql (SqlLexer.g4, channel(s) 1/HIDDEN/COMMENTS)");
     }
+
+    private static GrammarInventoryLoader Loader(InMemoryFileProvider? provider = null) =>
+        new(new FileProviderAccess(provider ?? new InMemoryFileProvider(), Root));
+
+    private static string At(string relativePath) =>
+        Path.Combine(Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
 }

@@ -197,6 +197,7 @@ The repository's GitHub Actions workflow runs restore, formatting verification, 
 ## Documentation
 
 - [CLI reference](docs/CLI.md)
+- [Configuration profiles (.plutusrc)](docs/CONFIGURATION.md)
 - [Comment stripping: languages, guarantees, limitations](docs/COMMENT_STRIPPING.md)
 - [Signature extraction: the structural pass](docs/SIGNATURE_EXTRACTION.md)
 - [ANTLR grammar inventory and channel mapping](docs/ANTLR_GRAMMAR_INVENTORY.md)

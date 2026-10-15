@@ -67,31 +67,10 @@ public class CommentStrippingDocumentationTests
     [Fact]
     public void Readme_LinksToTheCommentStrippingGuide()
     {
-        var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "README.md"));
+        var readme = TestFiles.ReadFromRepository("README.md");
 
         readme.Should().Contain("docs/COMMENT_STRIPPING.md");
     }
 
-    private static string ReadDocument(string fileName) =>
-        File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", fileName));
-
-    /// <summary>
-    /// Finds the repository root by walking up from the test output directory. The documentation tests only make
-    /// sense inside a checkout; anywhere else they are skipped rather than failed.
-    /// </summary>
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "Plutus.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new InvalidOperationException("The repository root could not be located from the test output directory.");
-    }
+    private static string ReadDocument(string fileName) => TestFiles.ReadFromRepository($"docs/{fileName}");
 }

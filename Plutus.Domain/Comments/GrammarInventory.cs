@@ -49,8 +49,12 @@ public sealed class GrammarInventory
     /// <summary>An inventory that cannot be used, with the reason. A run must not continue past this.</summary>
     public static GrammarInventory Unusable(string? manifestPath, string? error) => new([], manifestPath, error);
 
-    /// <summary>Parses a manifest and validates every entry against the filesystem.</summary>
-    public static GrammarInventory Parse(string json, string? manifestPath = null)
+    /// <summary>
+    /// Parses a manifest and validates every entry. <paramref name="grammarFileExists"/> answers for the files the
+    /// manifest names, so the inventory itself never touches a disk: the loader passes a check over its file provider,
+    /// and a test passes the tree it is describing.
+    /// </summary>
+    public static GrammarInventory Parse(string json, string? manifestPath, Func<string, bool> grammarFileExists)
     {
         JsonDocument document;
         try
@@ -94,7 +98,7 @@ public sealed class GrammarInventory
                     continue;
                 }
 
-                if (manifestPath is { } path && !GrammarFileExists(path, entry.GrammarFile))
+                if (manifestPath is { } path && !grammarFileExists(GrammarFilePath(path, entry.GrammarFile)))
                 {
                     errors.Add($"grammar '{entry.Language}' points at '{entry.GrammarFile}', which is not next to the manifest");
                     continue;
@@ -108,15 +112,16 @@ public sealed class GrammarInventory
         }
     }
 
-    private static bool GrammarFileExists(string manifestPath, string grammarFile)
+    /// <summary>The path a manifest entry refers to: its own path when rooted, otherwise next to the manifest.</summary>
+    public static string GrammarFilePath(string manifestPath, string grammarFile)
     {
         if (Path.IsPathRooted(grammarFile))
         {
-            return File.Exists(grammarFile);
+            return grammarFile;
         }
 
         var manifestDirectory = Path.GetDirectoryName(Path.GetFullPath(manifestPath));
-        return manifestDirectory is not null && File.Exists(Path.Combine(manifestDirectory, grammarFile));
+        return manifestDirectory is null ? grammarFile : Path.Combine(manifestDirectory, grammarFile);
     }
 
     public bool TryGet(LanguageId language, out GrammarInventoryEntry entry) => _byLanguage.TryGetValue(language, out entry!);

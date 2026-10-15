@@ -116,7 +116,9 @@ public class CommentStrippingInteractionTests
                 }
               ]
             }
-            """);
+            """,
+            null,
+            _ => true);
 
         var plan = Resolve(CommentStrategyRequest.Antlr, inventory);
         var report = new CommentStrippingReport(plan);
