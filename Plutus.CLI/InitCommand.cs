@@ -25,7 +25,7 @@ internal static class InitCommand
             Description = "Replace an existing profile instead of refusing to touch it."
         };
 
-        var command = new Command("init", "Write a .plutusrc profile with every option set to the value a run would use anyway, ready to edit. Takes no project path.")
+        var command = new Command("init", "Write a .plutusrc profile with every option set to the value a run would use anyway, ready to edit.")
         {
             pathOption,
             forceOption,

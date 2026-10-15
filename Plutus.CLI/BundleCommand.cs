@@ -8,24 +8,21 @@ using Plutus.Infrastructure;
 namespace Plutus.CLI;
 
 /// <summary>
-/// The default command: bundle the given project paths. It is a command object like <c>init</c>, so both live next to
-/// each other in the entry point, and its action is a short sequence of named steps — read what was stated, resolve
-/// the profile, resolve the comment strategy, run — instead of one long lambda.
+/// The <c>bundle</c> command: collect the given project paths into one document. It is a command object like
+/// <c>init</c>, so the tree has one entry per job and a new job is a new command, and its action is a short sequence
+/// of named steps — read what was stated, resolve the profile, resolve the comment strategy, run.
 /// </summary>
 internal static class BundleCommand
 {
-    public static RootCommand Create(IRunOutput output)
+    public static Command Create(IRunOutput output)
     {
         var options = new BundleOptions().WithAliases();
-        var command = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.");
+        var command = new Command("bundle", "Collect the given project paths into a single document.");
         command.Add(options.ProjectPath);
         foreach (var option in options.Options())
         {
             command.Add(option);
         }
-
-        // Subcommands, not options: another job with its own options and exit codes.
-        command.Subcommands.Add(InitCommand.Create(output));
 
         command.SetAction(parseResult => RunAsync(new CommandLineReader(parseResult), options, output));
         return command;

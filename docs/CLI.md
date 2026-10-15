@@ -1,9 +1,11 @@
 # CLI reference
 
-Plutus accepts one or more local project paths or supported remote repository URLs, followed by options.
+Plutus is one command per job. Bundling takes one or more local project paths or supported remote repository URLs,
+followed by options.
 
 ```text
-plutus <project-path> [<project-path> ...] [options]
+plutus bundle <project-path> [<project-path> ...] [options]
+plutus init [--output <path>] [--force]
 ```
 
 When running from the repository, use `dotnet run --project Plutus.CLI -- <arguments>`.
@@ -12,18 +14,21 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 
 | Command | Description |
 |---|---|
-| *(default)* | Bundle the given project paths: `plutus <project-path> [<project-path> ...] [options]`. |
+| `bundle` | Collect the given project paths into a single document. |
 | `init` | Write a `.plutusrc` profile with every option already in it, set to the value a run would use anyway. |
 
-```text
-plutus init [--output <path>] [--force]
+A command line that names no command is read as `bundle`, so the shorter `plutus <project-path> [options]` keeps
+working and both spellings mean the same thing:
+
+```bash
+dotnet run --project Plutus.CLI -- bundle ./my-project -o context.md
+dotnet run --project Plutus.CLI -- ./my-project -o context.md          # the same run
 ```
 
 `init` writes every profile key with the value a run would use anyway, so the generated file is a starting point to
 edit rather than a schema to learn, and generating it cannot change what a bundle contains. It refuses to replace an
-existing profile unless
-`--force` is given, and `--output` writes somewhere other than `<current directory>/.plutusrc`. See
-[Configuration profiles](CONFIGURATION.md).
+existing profile unless `--force` is given, and `--output` writes somewhere other than
+`<current directory>/.plutusrc`. See [Configuration profiles](CONFIGURATION.md).
 
 ```bash
 dotnet run --project Plutus.CLI -- init
@@ -32,6 +37,8 @@ dotnet run --project Plutus.CLI -- init --force
 ```
 
 ## Options
+
+The options below belong to `bundle`.
 
 | Option | Default | Description |
 |---|---|---|
@@ -85,10 +92,10 @@ An explicit flag always wins, and a flag replaces the profile's value for that k
 
 ```bash
 # The profile's excludeDirs, includeExtensions and format apply here
-dotnet run --project Plutus.CLI -- . -o context.md
+dotnet run --project Plutus.CLI -- bundle . -o context.md
 
 # ...and here --format json overrides the profile while its exclusions still apply
-dotnet run --project Plutus.CLI -- . -o context.json --format json
+dotnet run --project Plutus.CLI -- bundle . -o context.json --format json
 ```
 
 Every run that used a profile says so, together with the keys that decided the run and the ones the command line
@@ -109,19 +116,19 @@ The full schema, the search rules and the precedence are in [Configuration profi
 ### Bundle a local project
 
 ```bash
-dotnet run --project Plutus.CLI -- ./my-project -o ./my-project-context.md
+dotnet run --project Plutus.CLI -- bundle ./my-project -o ./my-project-context.md
 ```
 
 ### Include C# files and omit test directories
 
 ```bash
-dotnet run --project Plutus.CLI -- ./my-project --include-files "*.cs" --exclude-dirs "*Test*"
+dotnet run --project Plutus.CLI -- bundle ./my-project --include-files "*.cs" --exclude-dirs "*Test*"
 ```
 
 ### Exclude multiple generated or irrelevant paths
 
 ```bash
-dotnet run --project Plutus.CLI -- ./my-project \
+dotnet run --project Plutus.CLI -- bundle ./my-project \
   --exclude-dirs "bin" "obj" "node_modules" \
   --exclude-files "*.generated.cs" "*.min.js"
 ```
@@ -129,14 +136,14 @@ dotnet run --project Plutus.CLI -- ./my-project \
 ### Bundle more than one root
 
 ```bash
-dotnet run --project Plutus.CLI -- ./src ./tests -o ./combined-context.md
+dotnet run --project Plutus.CLI -- bundle ./src ./tests -o ./combined-context.md
 ```
 
 ### Choose a remote ref
 
 ```bash
-dotnet run --project Plutus.CLI -- "https://github.com/owner/repository" --branch "feature/new-parser"
-dotnet run --project Plutus.CLI -- "https://gitlab.com/group/subgroup/repository" --commit "a1b2c3d4e5f6789012345678901234567890abcd"
+dotnet run --project Plutus.CLI -- bundle "https://github.com/owner/repository" --branch "feature/new-parser"
+dotnet run --project Plutus.CLI -- bundle "https://gitlab.com/group/subgroup/repository" --commit "a1b2c3d4e5f6789012345678901234567890abcd"
 ```
 
 `--branch` and `--commit` are for remote repository inputs and are mutually exclusive. Plutus includes provider adapters for GitHub, GitLab, and Bitbucket. Access to private repositories is not documented as supported by the current public-URL download flow; do not assume authenticated access.
@@ -144,25 +151,25 @@ dotnet run --project Plutus.CLI -- "https://gitlab.com/group/subgroup/repository
 ### Set a size threshold and source-token budget
 
 ```bash
-dotnet run --project Plutus.CLI -- ./src --max-file-size 512K --max-tokens 80000 --token-overflow-policy select --token-selection-strategy path-order
+dotnet run --project Plutus.CLI -- bundle ./src --max-file-size 512K --max-tokens 80000 --token-overflow-policy select --token-selection-strategy path-order
 ```
 
 ### Change output format
 
 ```bash
-dotnet run --project Plutus.CLI -- ./src --format json -o ./artifacts/context.json
-dotnet run --project Plutus.CLI -- ./src --format xml -o ./artifacts/context.xml
+dotnet run --project Plutus.CLI -- bundle ./src --format json -o ./artifacts/context.json
+dotnet run --project Plutus.CLI -- bundle ./src --format xml -o ./artifacts/context.xml
 ```
 
 ### Bundle only what changed
 
 ```bash
-dotnet run --project Plutus.CLI -- . --diff-only -o ./artifacts/change-review.md
-dotnet run --project Plutus.CLI -- . --diff-only --diff-include-untracked -o ./artifacts/change-review-full.md
-dotnet run --project Plutus.CLI -- . --diff-from main -o ./artifacts/branch-context.md
-dotnet run --project Plutus.CLI -- . --diff-only --diff-from v1.0.0 --diff-to v1.1.0 -o ./artifacts/release-review.md
-dotnet run --project Plutus.CLI -- . --diff-from a1b2c3d --diff-to 9f8e7d6 -o ./artifacts/two-commits.md
-dotnet run --project Plutus.CLI -- . --diff-only --format json -o ./artifacts/change-review.json
+dotnet run --project Plutus.CLI -- bundle . --diff-only -o ./artifacts/change-review.md
+dotnet run --project Plutus.CLI -- bundle . --diff-only --diff-include-untracked -o ./artifacts/change-review-full.md
+dotnet run --project Plutus.CLI -- bundle . --diff-from main -o ./artifacts/branch-context.md
+dotnet run --project Plutus.CLI -- bundle . --diff-only --diff-from v1.0.0 --diff-to v1.1.0 -o ./artifacts/release-review.md
+dotnet run --project Plutus.CLI -- bundle . --diff-from a1b2c3d --diff-to 9f8e7d6 -o ./artifacts/two-commits.md
+dotnet run --project Plutus.CLI -- bundle . --diff-only --format json -o ./artifacts/change-review.json
 ```
 
 The flags answer different questions:
@@ -184,7 +191,7 @@ Only tracked content is visible to `git diff`, so by default a file that was nev
 `--max-file-size` and `--max-tokens` bound each diff independently, exactly as they bound whole files on the content path. A diff is the biggest thing a change bundle carries, so without this one huge change could make the artifact unusable.
 
 ```bash
-dotnet run --project Plutus.CLI -- . --diff-only --max-file-size 256K --max-tokens 60000 --token-overflow-policy select
+dotnet run --project Plutus.CLI -- bundle . --diff-only --max-file-size 256K --max-tokens 60000 --token-overflow-policy select
 ```
 
 A change that is left out is reported in place rather than dropped silently, and it does not take the rest of the change set with it:
@@ -203,9 +210,9 @@ The token budget uses the same policies and selection strategies as the content 
 carry a project's shape instead of its code:
 
 ```bash
-dotnet run --project Plutus.CLI -- ./src --signatures-only -o ./artifacts/api-surface.md
-dotnet run --project Plutus.CLI -- ./src --signatures-only --strip-comments
-dotnet run --project Plutus.CLI -- ./src --signatures-only --minify --include-files "*.cs"
+dotnet run --project Plutus.CLI -- bundle ./src --signatures-only -o ./artifacts/api-surface.md
+dotnet run --project Plutus.CLI -- bundle ./src --signatures-only --strip-comments
+dotnet run --project Plutus.CLI -- bundle ./src --signatures-only --minify --include-files "*.cs"
 ```
 
 ```csharp
@@ -252,9 +259,9 @@ raw-string, template, regex, or markup-attribute literals, and neither merges tw
 disappears.
 
 ```bash
-dotnet run --project Plutus.CLI -- ./src --strip-comments -o ./artifacts/context.md
-dotnet run --project Plutus.CLI -- ./src --strip-comments --preserve-doc-comments
-dotnet run --project Plutus.CLI -- ./src --minify --comment-strategy lexical
+dotnet run --project Plutus.CLI -- bundle ./src --strip-comments -o ./artifacts/context.md
+dotnet run --project Plutus.CLI -- bundle ./src --strip-comments --preserve-doc-comments
+dotnet run --project Plutus.CLI -- bundle ./src --minify --comment-strategy lexical
 ```
 
 The default for documentation comments is explicit: **they are removed** unless `--preserve-doc-comments` is

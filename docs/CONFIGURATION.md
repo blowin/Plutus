@@ -5,11 +5,11 @@ stops being a list of exclusions:
 
 ```bash
 # Without a profile
-dotnet run --project Plutus.CLI -- . --exclude-dirs bin obj node_modules dist --exclude-files "*.g.cs" \
+dotnet run --project Plutus.CLI -- bundle . --exclude-dirs bin obj node_modules dist --exclude-files "*.g.cs" \
   --include-files "*.cs" "*.razor" --format md -o artifacts/context.md
 
 # With one
-dotnet run --project Plutus.CLI -- .
+dotnet run --project Plutus.CLI -- bundle .
 ```
 
 ## Start from a template
@@ -117,7 +117,7 @@ flag to be honest about it) and is not implemented.
 An option that is a flag can also be turned off explicitly, which is what overrides a profile that enables it:
 
 ```bash
-dotnet run --project Plutus.CLI -- . --minify false   # the profile says minify: true
+dotnet run --project Plutus.CLI -- bundle . --minify false   # the profile says minify: true
 ```
 
 ## Schema

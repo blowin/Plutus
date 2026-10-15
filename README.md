@@ -36,13 +36,13 @@ git clone https://github.com/<OWNER>/<REPOSITORY>.git
 cd <REPOSITORY>
 dotnet restore Plutus.sln
 dotnet build Plutus.sln -c Release
-dotnet run --project Plutus.CLI -- ./path/to/project
+dotnet run --project Plutus.CLI -- bundle ./path/to/project
 ```
 
 Replace `<OWNER>/<REPOSITORY>` with the actual GitHub repository path. The command writes a Markdown bundle to the current working directory by default. For a more predictable output path, specify `-o`:
 
 ```bash
-dotnet run --project Plutus.CLI -- ./path/to/project -o ./artifacts/project-context.md
+dotnet run --project Plutus.CLI -- bundle ./path/to/project -o ./artifacts/project-context.md
 ```
 
 ### Run the published executable

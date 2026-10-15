@@ -11,6 +11,10 @@ namespace Plutus.CLI;
 /// </summary>
 public static class Program
 {
+    /// <summary>Tokens that belong to the command tree itself and are never read as a project path.</summary>
+    private static readonly IReadOnlySet<string> RootTokens =
+        new HashSet<string>(StringComparer.Ordinal) { "--help", "-h", "-?", "/?", "--version" };
+
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
@@ -20,7 +24,25 @@ public static class Program
         // happened is printed in exactly one place.
         IRunOutput output = new ConsoleRunOutput();
 
-        var rootCommand = BundleCommand.Create(output);
-        return await rootCommand.Parse(args).InvokeAsync().ConfigureAwait(false);
+        var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single document.");
+        rootCommand.Subcommands.Add(BundleCommand.Create(output));
+        rootCommand.Subcommands.Add(InitCommand.Create(output));
+
+        return await rootCommand.Parse(Normalize(rootCommand, args)).InvokeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Bundling used to be the root command, so <c>plutus . --format md</c> keeps working next to
+    /// <c>plutus bundle . --format md</c>: a command line that does not name a command is read as the bundle command.
+    /// </summary>
+    internal static string[] Normalize(RootCommand root, string[] args)
+    {
+        if (args.Length == 0 || RootTokens.Contains(args[0]))
+        {
+            return args;
+        }
+
+        var namesACommand = root.Subcommands.Any(command => string.Equals(command.Name, args[0], StringComparison.Ordinal));
+        return namesACommand ? args : ["bundle", .. args];
     }
 }
