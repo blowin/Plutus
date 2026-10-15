@@ -14,9 +14,9 @@ public static class BundleDiff
     {
         ArgumentNullException.ThrowIfNull(diff);
 
-        var builder = new StringBuilder();
-        builder.Append("## Changes against `").Append(diff.ComparisonBase).Append('`').Append('\n');
-        builder.Append('\n');
+        var builder = new StringBuilder(1024);
+        builder.Append("## Changes against `").Append(diff.ComparisonBase).Append('`').AppendLine();
+        builder.AppendLine();
 
         AppendUntrackedFiles(builder, diff);
         AppendRawDiff(builder, diff, changedFilesHeading);
@@ -34,14 +34,14 @@ public static class BundleDiff
             return;
         }
 
-        builder.Append("New files git does not track yet (").Append(diff.UntrackedFiles.Count).Append("), generated diffs below:").Append('\n');
-        builder.Append('\n');
+        builder.Append("New files git does not track yet (").Append(diff.UntrackedFiles.Count).Append("), generated diffs below:").AppendLine();
+        builder.AppendLine();
         foreach (var path in diff.UntrackedFiles)
         {
-            builder.Append("- `").Append(path).Append('`').Append('\n');
+            builder.Append("- `").Append(path).Append('`').AppendLine();
         }
 
-        builder.Append('\n');
+        builder.AppendLine();
     }
 
     private static void AppendRawDiff(StringBuilder builder, GitDiffContext diff, string changedFilesHeading)
@@ -50,13 +50,13 @@ public static class BundleDiff
 
         if (diff.Files.Count == 0 && string.IsNullOrWhiteSpace(combinedDiff))
         {
-            builder.Append("No changed files were reported for this scope.").Append('\n');
+            builder.Append("No changed files were reported for this scope.").AppendLine();
             return;
         }
 
         if (diff.Files.Count > 0)
         {
-            builder.Append(changedFilesHeading).Append(' ').Append(diff.Files.Count).Append(" file(s).").Append('\n');
+            builder.Append(changedFilesHeading).Append(' ').Append(diff.Files.Count).Append(" file(s).").AppendLine();
         }
 
         if (string.IsNullOrWhiteSpace(combinedDiff))
@@ -64,17 +64,17 @@ public static class BundleDiff
             return;
         }
 
-        builder.Append('\n');
-        builder.Append("### Raw diff").Append('\n');
-        builder.Append('\n');
-        builder.Append(BuildFence(combinedDiff)).Append("diff").Append('\n');
+        builder.AppendLine();
+        builder.Append("### Raw diff").AppendLine();
+        builder.AppendLine();
+        builder.Append(BuildFence(combinedDiff)).Append("diff").AppendLine();
         builder.Append(combinedDiff);
         if (!combinedDiff.EndsWith('\n'))
         {
-            builder.Append('\n');
+            builder.AppendLine();
         }
 
-        builder.Append(BuildFence(combinedDiff)).Append('\n');
+        builder.Append(BuildFence(combinedDiff)).AppendLine();
     }
 
     /// <summary>Joins the tracked diff and the generated untracked diffs into one block for a single fence.</summary>

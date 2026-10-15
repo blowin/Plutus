@@ -41,7 +41,7 @@ public class BundleDiffTests
     [Fact]
     public void RenderSection_WhenDiffTextIsWhitespaceOnly_ShouldOmitTheRawDiffBlock()
     {
-        var diff = CreateContext("abc123", "   \n  ", File("src/A.cs"));
+        var diff = CreateContext("abc123", $"   {Environment.NewLine}  ", File("src/A.cs"));
 
         var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
 
@@ -52,24 +52,24 @@ public class BundleDiffTests
     [Fact]
     public void RenderSection_WhenDiffContainsAFence_ShouldUseALongerOuterFence()
     {
-        const string rawDiff = "diff --git a/A.cs b/A.cs\n+```csharp\n";
+        string rawDiff = $"diff --git a/A.cs b/A.cs{Environment.NewLine}+```csharp{Environment.NewLine}";
 
         var markdown = BundleDiff.RenderSection(CreateContext("abc123", rawDiff, File("A.cs")), "Bundle scope is limited to");
 
         markdown.Should().Contain("````diff");
         markdown.Should().Contain("````");
-        markdown.Should().NotContain("\n```diff");
+        markdown.Should().NotContain($"{Environment.NewLine}```diff");
     }
 
     [Fact]
     public void RenderSection_WhenDiffDoesNotEndWithNewLine_ShouldStillCloseTheFence()
     {
-        const string rawDiff = "diff --git a/A.cs b/A.cs\n+last line without newline";
+        string rawDiff = $"diff --git a/A.cs b/A.cs{Environment.NewLine}+last line without newline";
 
         var markdown = BundleDiff.RenderSection(CreateContext("abc123", rawDiff, File("A.cs")), "Bundle scope is limited to");
 
-        markdown.Should().EndWith("```\n");
-        markdown.Should().Contain("+last line without newline\n```");
+        markdown.Should().EndWith($"```{Environment.NewLine}");
+        markdown.Should().Contain($"+last line without newline{Environment.NewLine}```");
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class BundleDiffTests
         var diff = CreateContext("abc123", "diff --git a/A.cs b/A.cs", File("A.cs")) with
         {
             UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
+            UntrackedRawText = $"diff --git a/src/New.cs b/src/New.cs{Environment.NewLine}new file mode 100644"
         };
         var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
 
@@ -94,7 +94,7 @@ public class BundleDiffTests
         var diff = CreateContext("abc123", string.Empty) with
         {
             UntrackedFiles = ["src/New.cs"],
-            UntrackedRawText = "diff --git a/src/New.cs b/src/New.cs\nnew file mode 100644"
+            UntrackedRawText = $"diff --git a/src/New.cs b/src/New.cs{Environment.NewLine}new file mode 100644"
         };
 
         var markdown = BundleDiff.RenderSection(diff, "Bundle scope is limited to");
@@ -154,7 +154,7 @@ public class MarkdownBundleWriterDiffTests
         var writer = CreateWriter();
         var diff = CreateContext(
             "abc123",
-            "diff --git a/src/Core.cs b/src/Core.cs\n-old\n+new",
+            $"diff --git a/src/Core.cs b/src/Core.cs{Environment.NewLine}-old{Environment.NewLine}+new",
             new ChangedFile("src/Core.cs", ChangeKind.Modified));
 
         await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
@@ -196,7 +196,7 @@ public class MarkdownBundleWriterDiffTests
     {
         var writer = CreateWriter();
         writer.IncludeFileContents = false;
-        var diff = CreateContext("abc123", "diff --git a/src/Core.cs b/src/Core.cs\n-old\n+new", new ChangedFile("src/Core.cs", ChangeKind.Modified));
+        var diff = CreateContext("abc123", $"diff --git a/src/Core.cs b/src/Core.cs{Environment.NewLine}-old{Environment.NewLine}+new", new ChangedFile("src/Core.cs", ChangeKind.Modified));
 
         await writer.WriteAsync(Roots(Root("Core.cs", "src/Core.cs")), _output, FileSize.FromBytes(4096), diff);
 
