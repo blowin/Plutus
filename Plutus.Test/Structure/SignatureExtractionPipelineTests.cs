@@ -4,6 +4,7 @@ using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Structure;
+using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Test.Structure;
 
@@ -33,7 +34,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Create_WithSignaturesOnly_ReplacesBodiesAndLeavesCommentsAlone()
     {
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true));
+        var minifier = TestSourceProcessing.Create(Options(signatures: true));
 
         var result = minifier.Minify(ClassWithComment, LanguageId.CSharp);
 
@@ -45,7 +46,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Create_WithSignaturesAndStripComments_RemovesCommentsFirstAndThenTheBodies()
     {
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true, strip: true));
+        var minifier = TestSourceProcessing.Create(Options(signatures: true, strip: true));
 
         var result = minifier.Minify(ClassWithComment, LanguageId.CSharp);
 
@@ -56,7 +57,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Create_WithSignaturesAndMinify_CollapsesWhitespaceAfterTheStructuralPass()
     {
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true, minify: true));
+        var minifier = TestSourceProcessing.Create(Options(signatures: true, minify: true));
 
         var result = minifier.Minify("public class Sample\n{\n\n\n    public void M()\n    {\n        Work();\n    }\n}\n", LanguageId.CSharp);
 
@@ -70,7 +71,7 @@ public class SignatureExtractionPipelineTests
     {
         const string python = "def add(a, b):\n    return a + b\n";
 
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true));
+        var minifier = TestSourceProcessing.Create(Options(signatures: true));
 
         minifier.Minify(python, "python").Should().Be(python);
     }
@@ -80,7 +81,7 @@ public class SignatureExtractionPipelineTests
     {
         const string source = "whatever this is\n";
 
-        CodeMinifierFactory.Create(Options(signatures: true)).Minify(source, "lua").Should().Be(source);
+        TestSourceProcessing.Create(Options(signatures: true)).Minify(source, "lua").Should().Be(source);
     }
 
     [Fact]
@@ -89,7 +90,7 @@ public class SignatureExtractionPipelineTests
         var report = new SignatureExtractionReport();
         var context = CodeMinifierFactory.CreateContext(
             Options(signatures: true),
-            signatureProviders: SignatureSkeletonProviders.Maintained(),
+            signatureProviders: MaintainedSignatureProviders.All(),
             signatureObserver: report);
         var minifier = CodeMinifierFactory.Create(Options(signatures: true), context);
 
@@ -120,7 +121,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Extractor_WithoutAProviderForTheLanguage_ReportsItInsteadOfGuessing()
     {
-        var extractor = new SignatureSkeletonExtractor(SignatureSkeletonProviders.Maintained());
+        var extractor = new SignatureSkeletonExtractor(MaintainedSignatureProviders.All());
 
         var result = extractor.Extract("def add(a, b):\n    return a + b\n", LanguageId.Python, SignatureExtractionOptions.Default);
 
@@ -134,12 +135,14 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void MaintainedProviders_MatchTheDiscoverableImplementations()
     {
-        var discovered = typeof(ISignatureSkeletonProvider).Assembly
+        // The container discovers providers by interface; the list a host without a container uses must be the same
+        // set. That the domain ships none of them is asserted by ArchitectureTests.
+        var discovered = typeof(MaintainedSignatureProviders).Assembly
             .GetTypes()
             .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(ISignatureSkeletonProvider).IsAssignableFrom(type))
             .ToHashSet();
 
-        SignatureSkeletonProviders.Maintained().Select(provider => provider.GetType())
+        MaintainedSignatureProviders.All().Select(provider => provider.GetType())
             .Should().BeEquivalentTo(discovered);
     }
 

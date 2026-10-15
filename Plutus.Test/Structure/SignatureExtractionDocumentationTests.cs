@@ -2,6 +2,7 @@ using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Structure;
+using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Test.Structure;
 
@@ -28,7 +29,7 @@ public class SignatureExtractionDocumentationTests
     {
         var guide = ReadDocument("SIGNATURE_EXTRACTION.md");
 
-        foreach (var provider in SignatureSkeletonProviders.Maintained())
+        foreach (var provider in MaintainedSignatureProviders.All())
         {
             guide.Should().Contain($"`{provider.Language.Value}`", "the supported-language table must list {provider.Language}");
             guide.Should().Contain(provider.Name, "the table must name the provider that answers");

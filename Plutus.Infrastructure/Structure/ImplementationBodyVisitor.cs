@@ -1,8 +1,9 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Plutus.Domain.Structure;
 
-namespace Plutus.Domain.Structure;
+namespace Plutus.Infrastructure.Structure;
 
 /// <summary>
 /// One implementation body that must be replaced, expressed as the inclusive token span that carries it together

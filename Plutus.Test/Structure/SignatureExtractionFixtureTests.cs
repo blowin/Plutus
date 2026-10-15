@@ -2,6 +2,7 @@ using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Structure;
+using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Test.Structure;
 
@@ -76,7 +77,7 @@ public class SignatureExtractionFixtureTests
     public void CombinedWithMinify_TheSkeletonIsCompact()
     {
         var options = Options(signatures: true, minify: true);
-        var minifier = CodeMinifierFactory.Create(options);
+        var minifier = TestSourceProcessing.Create(options);
 
         var result = minifier.Minify(Source, LanguageId.CSharp);
 
@@ -88,7 +89,7 @@ public class SignatureExtractionFixtureTests
     [Fact]
     public void CombinedWithStripComments_TheSkeletonCarriesNoComments()
     {
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true, strip: true));
+        var minifier = TestSourceProcessing.Create(Options(signatures: true, strip: true));
 
         var result = minifier.Minify(Source, LanguageId.CSharp);
 

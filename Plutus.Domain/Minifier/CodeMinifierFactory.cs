@@ -42,7 +42,9 @@ public static class CodeMinifierFactory
                                  PreserveDocumentationComments = options.PreserveDocumentationComments,
                              };
 
-        var providers = signatureProviders?.ToList() ?? SignatureSkeletonProviders.Maintained();
+        // Providers are supplied by the host: the domain describes what a skeleton is and never depends on a
+        // parser, so a context built without providers simply has no structural support.
+        var providers = signatureProviders?.ToList() ?? [];
 
         return new SourceProcessingContext
         {

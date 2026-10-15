@@ -41,9 +41,12 @@ bodies changed" a property of the implementation rather than a promise.
 |---|---|---|---|
 | C# | `csharp` | `roslyn-csharp` | Roslyn syntax tree (`Microsoft.CodeAnalysis.CSharp`) |
 
-A language without a provider is passed through **unchanged**, and the run reports it (`without a provider=N`);
+Providers live in the infrastructure layer (`Plutus.Infrastructure.Structure`): the domain describes what a skeleton
+is — the provider contract, the token stream, the rewriter, the summaries — and never references a parser. A
+language without a provider is passed through **unchanged**, and the run reports it (`without a provider=N`);
 nothing is approximated with a text heuristic. Adding a language means implementing `ISignatureSkeletonProvider`
-for it; the container discovers the implementation by interface, so no dispatch table has to be edited.
+in the infrastructure layer; the container discovers the implementation by interface, so no dispatch table has to be
+edited.
 
 ## What is cut, and what survives
 

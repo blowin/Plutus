@@ -1,8 +1,9 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Plutus.Domain.Structure;
 
-namespace Plutus.Domain.Structure;
+namespace Plutus.Infrastructure.Structure;
 
 /// <summary>
 /// Projects a Roslyn syntax tree into the language-neutral <see cref="CodeTokenStream"/> the rewriter works on.

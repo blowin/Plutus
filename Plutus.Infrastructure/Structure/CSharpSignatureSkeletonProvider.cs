@@ -1,8 +1,10 @@
 using System.Collections.Frozen;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Plutus.Domain;
+using Plutus.Domain.Structure;
 
-namespace Plutus.Domain.Structure;
+namespace Plutus.Infrastructure.Structure;
 
 /// <summary>
 /// Signature extraction for C#, backed by the Roslyn syntax tree: the file is parsed with the real C# parser, a

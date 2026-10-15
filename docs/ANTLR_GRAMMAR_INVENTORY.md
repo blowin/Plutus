@@ -113,6 +113,7 @@ that exists, the honest description of `--strip-comments` is "language-aware lex
 |---|---|---|
 | Mechanism | Hand-written lexical scanner | Roslyn syntax tree (`CSharpSyntaxWalker`) |
 | Rewriting | Text spans with separator and line-ending rules | Token spans through `TokenStreamRewriter` |
+| Where it lives | Domain (`Plutus.Domain.Comments`) | Contract in Domain; the Roslyn provider in `Plutus.Infrastructure.Structure` |
 | Why not ANTLR | A comment lexer needs no grammar | The C# grammar would have to be vendored, generated (a JRE toolchain) and kept current with the language — while Roslyn is the C# parser, ships as a package, and is error-tolerant by design |
 | Seam | `ICommentChannelLexer` + `GrammarInventory` | `ISignatureSkeletonProvider` + `ITokenStreamRewriter` |
 

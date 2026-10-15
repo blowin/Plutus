@@ -12,6 +12,7 @@ using Plutus.Domain.Tokens.Applier;
 using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
+using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Infrastructure;
 
@@ -95,7 +96,7 @@ public static class ServiceCollectionExt
 
         // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
         // registers it. Adding a structural provider or a maintained language processor is a matter of writing the
-        // class.
+        // class — and because providers live in this assembly, the domain stays free of any parser.
         services.Scan(scan =>
         {
             scan.FromAssemblyOf<CSharpSignatureSkeletonProvider>()
@@ -103,15 +104,15 @@ public static class ServiceCollectionExt
                 .As<ISignatureSkeletonProvider>()
                 .WithSingletonLifetime();
 
-            scan.FromAssemblyOf<CSharpLanguageMinifier>()
-                .AddClasses(classes => classes.AssignableTo<IMaintainedLanguageProcessor>())
-                .As<ILanguageMinifier>()
-                .WithSingletonLifetime();
-
             // A grammar-backed lexer would be registered by the same rule; today the scan finds none.
             scan.FromAssemblyOf<CSharpSignatureSkeletonProvider>()
                 .AddClasses(classes => classes.AssignableTo<ICommentChannelLexer>())
                 .As<ICommentChannelLexer>()
+                .WithSingletonLifetime();
+
+            scan.FromAssemblyOf<CSharpLanguageMinifier>()
+                .AddClasses(classes => classes.AssignableTo<IMaintainedLanguageProcessor>())
+                .As<ILanguageMinifier>()
                 .WithSingletonLifetime();
         });
 

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.Structure;
+using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Test.Structure;
 
