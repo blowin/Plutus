@@ -14,8 +14,8 @@ dotnet run --project Plutus.CLI -- .
 
 ## Start from a template
 
-Nobody has to learn the schema by heart: `init` writes the whole profile with every key commented out, each one next
-to its command-line equivalent and its default.
+Nobody has to learn the schema by heart: `init` writes a profile with every supported key already in it, set to the
+value a run would use anyway, so filling it in means editing values instead of writing JSON from memory.
 
 ```bash
 dotnet run --project Plutus.CLI -- init
@@ -23,12 +23,43 @@ dotnet run --project Plutus.CLI -- init
 
 ```text
 Profile template written: /repo/.plutusrc
-Every key is commented out, so the file changes nothing until you uncomment what you need.
+Every supported key is present with the value a run would use anyway; edit what this repository needs.
 A run from this directory or below picks it up automatically; --no-profile ignores it.
 ```
 
-The generated file is valid and inert: a run that finds it says so and reports that no key was used, so generating a
-template cannot change what a bundle contains. Uncomment what the repository needs, delete the rest.
+```jsonc
+{
+  "includeFiles": [],
+  "includeDirs": [],
+  "includeExtensions": [],
+  "exclude": [],
+  "excludeDirs": ["bin", "obj", "node_modules", "dist", ".vs"],
+  "excludeFiles": [],
+  "useGitignore": true,
+  "useDefaultExcludes": true,
+  "allowDangerousFiles": false,
+  "output": null,
+  "format": "md",
+  "encoding": "utf-8",
+  "maxFileSize": "1M",
+  "maxTokens": null,
+  "tokenOverflowPolicy": "fail",
+  "tokenSelectionStrategy": "path-order",
+  "maxConcurrency": 8,
+  "includeFileContents": true,
+  "minify": false,
+  "stripComments": false,
+  "preserveDocComments": false,
+  "commentStrategy": "auto",
+  "signaturesOnly": false
+}
+```
+
+Because the values are the ones a run would have used anyway, generating the file cannot change what a bundle
+contains — a run that finds it prints the profile and reports no key it had to take from it. The one thing the
+starter states outright is `excludeDirs` with the junk trees that `useDefaultExcludes` already skips, because
+excluding generated and vendored directories is what a profile is usually for. `null` means "not set": leave it, or
+put a value in.
 
 | Option | Default | Description |
 |---|---|---|
@@ -68,6 +99,15 @@ happened:
 ```text
 Configuration
   profile  /repo/.plutusrc — applied: excludeDirs, includeExtensions; overridden by the command line: format
+```
+
+`applied` lists the keys that stated something other than the built-in default — the ones that decided the run. A
+key that merely restates the default is counted as `restated defaults: N` instead of being listed, which is what
+keeps the report readable for a generated profile that states every key:
+
+```text
+Configuration
+  profile  /repo/.plutusrc — applied: excludeDirs; restated defaults: 13; overridden by the command line: output
 ```
 
 So `--exclude-dirs node_modules` in a repository whose profile lists `bin`, `obj`, `node_modules` and `dist` means
@@ -178,8 +218,10 @@ signaturesOnly, stripComments, tokenOverflowPolicy, tokenSelectionStrategy, useD
 - `Plutus.Test/Configuration/RunOptionsResolverTests.cs` — defaults without a profile, profile values applied,
   explicit flags overriding (including turning a flag off), inclusive patterns from extensions, the profile-relative
   output path, token budget and diff limits from the profile, and the provenance the report prints.
-- `Plutus.Test/Configuration/ProfileTemplateTests.cs` — the generated template documents every key the loader
-  accepts and loads as a profile that sets nothing.
+- `Plutus.Test/Configuration/ProfileTemplateTests.cs` — the generated template writes every key the loader accepts,
+  comes back unchanged through the loader, and states the values a run would use anyway.
+- `Plutus.Test/Cli/CommandLineReaderTests.cs` — the "stated or not stated" distinction the precedence depends on
+  (including `--minify false` and `--no-gitignore`), and the command surface: bundling with an `init` subcommand.
 - `Plutus.Test/Configuration/ProfileScaffolderTests.cs` — the write: template content, no byte-order mark, creating
   the directory, refusing to replace an existing profile, `--force`, and a write failure reported as one.
 - `Plutus.Test/Diagnostics/RunReportWriterTests.cs` — the `Configuration` block, and that a run without a profile

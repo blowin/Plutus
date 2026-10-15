@@ -25,7 +25,7 @@ internal static class InitCommand
             Description = "Replace an existing profile instead of refusing to touch it."
         };
 
-        var command = new Command("init", "Write a commented .plutusrc profile template to start from. Takes no project path.")
+        var command = new Command("init", "Write a .plutusrc profile with every option set to the value a run would use anyway, ready to edit. Takes no project path.")
         {
             pathOption,
             forceOption,
@@ -49,7 +49,7 @@ internal static class InitCommand
             }
 
             output.Info($"Profile template written: {result.Path}");
-            output.Info("Every key is commented out, so the file changes nothing until you uncomment what you need.");
+            output.Info("Every supported key is present with the value a run would use anyway; edit what this repository needs.");
             output.Info("A run from this directory or below picks it up automatically; --no-profile ignores it.");
             return 0;
         });

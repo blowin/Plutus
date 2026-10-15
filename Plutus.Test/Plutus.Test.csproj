@@ -23,7 +23,8 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Plutus.Domain\Plutus.Domain.csproj" />
+      <ProjectReference Include="..\Plutus.CLI\Plutus.CLI.csproj" />
+    <ProjectReference Include="..\Plutus.Domain\Plutus.Domain.csproj" />
       <ProjectReference Include="..\Plutus.Infrastructure\Plutus.Infrastructure.csproj" />
     </ItemGroup>
 

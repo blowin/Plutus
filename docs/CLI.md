@@ -13,14 +13,15 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | Command | Description |
 |---|---|
 | *(default)* | Bundle the given project paths: `plutus <project-path> [<project-path> ...] [options]`. |
-| `init` | Write a commented `.plutusrc` profile template to start from instead of filling in the schema by hand. |
+| `init` | Write a `.plutusrc` profile with every option already in it, set to the value a run would use anyway. |
 
 ```text
 plutus init [--output <path>] [--force]
 ```
 
-`init` writes every profile key as a comment with its command-line equivalent and its default, so the generated file
-is valid and changes nothing until you uncomment what you need. It refuses to replace an existing profile unless
+`init` writes every profile key with the value a run would use anyway, so the generated file is a starting point to
+edit rather than a schema to learn, and generating it cannot change what a bundle contains. It refuses to replace an
+existing profile unless
 `--force` is given, and `--output` writes somewhere other than `<current directory>/.plutusrc`. See
 [Configuration profiles](CONFIGURATION.md).
 
@@ -90,12 +91,16 @@ dotnet run --project Plutus.CLI -- . -o context.md
 dotnet run --project Plutus.CLI -- . -o context.json --format json
 ```
 
-Every run that used a profile says so, together with the keys it supplied and the ones the command line replaced:
+Every run that used a profile says so, together with the keys that decided the run and the ones the command line
+replaced:
 
 ```text
 Configuration
   profile  /repo/.plutusrc — applied: excludeDirs, includeExtensions; overridden by the command line: format
 ```
+
+`applied` names the keys that stated something other than the default; keys that merely restate a default are counted
+(`restated defaults: 13`), so a generated profile that lists every option does not bury the settings that matter.
 
 The full schema, the search rules and the precedence are in [Configuration profiles](CONFIGURATION.md).
 

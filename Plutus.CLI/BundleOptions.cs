@@ -1,0 +1,294 @@
+using System.CommandLine;
+using Plutus.Domain;
+using Plutus.Domain.Comments;
+using Plutus.Domain.Tokens;
+
+namespace Plutus.CLI;
+
+/// <summary>
+/// The surface of the bundling command: its argument and every option, defined once and named, so the command itself
+/// only lists them and the action reads them through <see cref="CommandLineReader"/> instead of juggling locals.
+/// </summary>
+internal sealed class BundleOptions
+{
+    public Argument<List<string>> ProjectPath { get; } = new("project-path")
+    {
+        Description = "Path to the target project directory or GitHub repository URL.",
+        Arity = ArgumentArity.OneOrMore,
+    };
+
+    public Option<string?> Output { get; } = new("--output")
+    {
+        Description = "Output bundle file. Default: <folder-name>_bundle.md"
+    };
+
+    public Option<string?> Profile { get; } = new("--profile")
+    {
+        Description = "Path to a .plutusrc profile to use instead of searching for one. Overrides the PLUTUS_PROFILE environment variable."
+    };
+
+    public Option<bool> NoProfile { get; } = new("--no-profile")
+    {
+        Description = "Ignore any .plutusrc profile (and PLUTUS_PROFILE) and run with the command line and built-in defaults only."
+    };
+
+    public Option<FileSize> MaxFileSize { get; } = new("--max-file-size")
+    {
+        Description = "Max file size to include (e.g., 512K, 1M, 2MB).",
+        DefaultValueFactory = _ => FileSize.Parse("1M"),
+        CustomParser = result =>
+        {
+            if (result.Tokens.Count != 1)
+            {
+                result.AddError($"{result.Argument.Name} should have 1 file size");
+                return default;
+            }
+
+            try
+            {
+                return FileSize.Parse(result.Tokens.First().Value);
+            }
+            catch (Exception exception)
+            {
+                result.AddError(exception.Message);
+                return default;
+            }
+        }
+    };
+
+    public Option<bool> NoGitignore { get; } = new("--no-gitignore")
+    {
+        Description = "Do not read root .gitignore"
+    };
+
+    public Option<string?> Branch { get; } = new("--branch")
+    {
+        Description = "Remote branch or tag to download. Cannot be used together with --commit."
+    };
+
+    public Option<string?> Commit { get; } = new("--commit")
+    {
+        Description = "Specific remote commit hash to download. Cannot be used together with --branch.",
+        Validators =
+        {
+            result =>
+            {
+                var commit = result.GetValueOrDefault<string?>() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(commit) && !System.Text.RegularExpressions.Regex.IsMatch(commit, "^(?:[0-9a-fA-F]{7,40})$"))
+                {
+                    result.AddError("Error: --commit must be a hexadecimal Git commit hash (7–40 characters).");
+                }
+            }
+        }
+    };
+
+    public Option<List<string>> Exclude { get; } = new("--exclude")
+    {
+        Description = "Global gitignore-style wildcard patterns to exclude BOTH files and directories. Can be repeated",
+        AllowMultipleArgumentsPerToken = true
+    };
+
+    public Option<List<string>> ExcludeFiles { get; } = new("--exclude-files")
+    {
+        Description = "Gitignore-style wildcard patterns targeting strictly FILES for exclusion. Useful for ignoring specific file names or extensions across the entire project graph",
+        AllowMultipleArgumentsPerToken = true
+    };
+
+    public Option<List<string>> ExcludeDirs { get; } = new("--exclude-dirs")
+    {
+        Description = "Gitignore-style wildcard patterns targeting strictly DIRECTORIES for exclusion. Matches the target directory name or absolute tree path at any nesting level",
+        AllowMultipleArgumentsPerToken = true
+    };
+
+    public Option<List<string>> IncludeFiles { get; } = new("--include-files")
+    {
+        Description = "Inverted gitignore-style filters. Explicitly isolates and restricts processing strictly to FILES that match these patterns. When active, all other unmatched files are omitted by default",
+        AllowMultipleArgumentsPerToken = true
+    };
+
+    public Option<List<string>> IncludeDirs { get; } = new("--include-dirs")
+    {
+        Description = "Inverted gitignore-style filters. Explicitly restricts scanning paths strictly to DIRECTORIES that match these patterns. Allows you to whitelist and isolate processing to specific module trees",
+        AllowMultipleArgumentsPerToken = true
+    };
+
+    public Option<bool> UseDefaultExcludes { get; } = new("--use-default-excludes")
+    {
+        Description = "Use default built-in junk exclusions.",
+        DefaultValueFactory = _ => true
+    };
+
+    public Option<bool> AllowDangerousFiles { get; } = new("--allow-dangerous-files")
+    {
+        Description = "Include files normally treated as dangerous (.env, keys, etc.)."
+    };
+
+    public Option<bool> Minify { get; } = new("--minify")
+    {
+        Description = "Minify source code (remove comments and extra whitespace) for supported languages before bundling."
+    };
+
+    public Option<bool> StripComments { get; } = new("--strip-comments")
+    {
+        Description = "Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation and line endings are preserved, and a space is inserted when removing a comment would join two tokens."
+    };
+
+    public Option<bool> PreserveDocComments { get; } = new("--preserve-doc-comments")
+    {
+        Description = "Keep documentation comments (///, //!, /** */, /*! */) when stripping or minifying. Off by default: documentation comments are removed like any other comment."
+    };
+
+    public Option<CommentStrategyRequest> CommentStrategy { get; } = new("--comment-strategy")
+    {
+        Description = "How comments are located: auto (ANTLR token channels where a project-maintained grammar exists, lexical scanning elsewhere), lexical (language-aware character scanner), antlr (requires a project-maintained grammar; fails when none exists).",
+        DefaultValueFactory = _ => CommentStrategyRequest.Auto
+    };
+
+    public Option<bool> SignaturesOnly { get; } = new("--signatures-only")
+    {
+        Description = "Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, => expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of --strip-comments and --minify."
+    };
+
+    public Option<string> Encoding { get; } = new("--encoding")
+    {
+        Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
+        DefaultValueFactory = _ => "utf-8"
+    };
+
+    public Option<int> MaxConcurrency { get; } = new("--max-concurrency")
+    {
+        Description = "Limit maximum concurrent file processing I/O tasks bound by a semaphore.",
+        DefaultValueFactory = _ => 8,
+        Validators =
+        {
+            result =>
+            {
+                var value = result.GetValueOrDefault<int>();
+                if (value < 1)
+                {
+                    result.AddError($"The {result.Option.Name} option must be at least 1.");
+                }
+            }
+        }
+    };
+
+    public Option<string> Format { get; } = new("--format")
+    {
+        Description = "Target serialization configuration format architecture (md, json, xml).",
+        DefaultValueFactory = _ => "md"
+    };
+
+    public Option<int?> MaxTokens { get; } = new("--max-tokens")
+    {
+        Description = "Target source-token budget using an offline heuristic.",
+        Validators =
+        {
+            result =>
+            {
+                if (result.GetValueOrDefault<int?>() is <= 0)
+                {
+                    result.AddError("--max-tokens must be greater than zero.");
+                }
+            }
+        }
+    };
+
+    public Option<TokenOverflowPolicy> OverflowPolicy { get; } = new("--token-overflow-policy")
+    {
+        Description = "Budget overflow behavior: fail, warn, or select.",
+        DefaultValueFactory = _ => TokenOverflowPolicy.Fail
+    };
+
+    public Option<TokenSelectionStrategy> SelectionStrategy { get; } = new("--token-selection-strategy")
+    {
+        Description = "Deterministic file selection strategy for policy 'select': path-order or largest-first.",
+        DefaultValueFactory = _ => TokenSelectionStrategy.PathOrder,
+    };
+
+    public Option<bool> DiffOnly { get; } = new("--diff-only")
+    {
+        Description = "Emit the change itself instead of the source: the bundle keeps its header, the list of changed paths and the raw .diff, and omits all file contents. A raw .diff section is appended."
+    };
+
+    public Option<string?> DiffFrom { get; } = new("--diff-from")
+    {
+        Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
+        Validators =
+        {
+            result =>
+            {
+                var target = result.GetValueOrDefault<string?>();
+                if (target is not null && string.IsNullOrWhiteSpace(target))
+                {
+                    result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
+                }
+            }
+        }
+    };
+
+    public Option<string?> DiffTo { get; } = new("--diff-to")
+    {
+        Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
+        Validators =
+        {
+            result =>
+            {
+                var target = result.GetValueOrDefault<string?>();
+                if (target is not null && string.IsNullOrWhiteSpace(target))
+                {
+                    result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
+                }
+            }
+        }
+    };
+
+    public Option<bool> DiffIncludeUntracked { get; } = new("--diff-include-untracked")
+    {
+        Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
+    };
+
+    /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
+    public BundleOptions WithAliases()
+    {
+        Output.Aliases.Add("-o");
+        NoGitignore.Aliases.Add("--no-gitignore");
+        Exclude.Aliases.Add("-e");
+        Minify.Aliases.Add("-m");
+        CommentStrategy.AcceptOnlyFromAmong("auto", "lexical", "antlr");
+        return this;
+    }
+
+    /// <summary>Every option the command accepts, in the order the help lists it.</summary>
+    public IEnumerable<Option> Options()
+    {
+        yield return Output;
+        yield return Profile;
+        yield return NoProfile;
+        yield return MaxFileSize;
+        yield return NoGitignore;
+        yield return Branch;
+        yield return Commit;
+        yield return Exclude;
+        yield return ExcludeFiles;
+        yield return ExcludeDirs;
+        yield return IncludeFiles;
+        yield return IncludeDirs;
+        yield return UseDefaultExcludes;
+        yield return AllowDangerousFiles;
+        yield return Minify;
+        yield return StripComments;
+        yield return PreserveDocComments;
+        yield return CommentStrategy;
+        yield return SignaturesOnly;
+        yield return Encoding;
+        yield return MaxConcurrency;
+        yield return Format;
+        yield return MaxTokens;
+        yield return OverflowPolicy;
+        yield return SelectionStrategy;
+        yield return DiffOnly;
+        yield return DiffFrom;
+        yield return DiffTo;
+        yield return DiffIncludeUntracked;
+    }
+}

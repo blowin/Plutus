@@ -76,8 +76,9 @@ public sealed class RunReportWriter : IRunReportWriter
     }
 
     /// <summary>
-    /// Which profile configured the run, and which of its keys survived the command line. A preset that stopped
-    /// applying is otherwise invisible, and a silent preset is worse than a long command line.
+    /// Which profile configured the run, which of its keys decided anything, and which the command line replaced. A
+    /// preset that stopped applying is otherwise invisible, and a silent preset is worse than a long command line.
+    /// Keys the profile restates at their default value are counted, not listed: they are not what decided the run.
     /// </summary>
     private void WriteConfiguration()
     {
@@ -90,6 +91,11 @@ public sealed class RunReportWriter : IRunReportWriter
         if (profile.AppliedKeys.Count > 0)
         {
             parts.Add($"applied: {string.Join(", ", profile.AppliedKeys)}");
+        }
+
+        if (profile.DefaultedKeys.Count > 0)
+        {
+            parts.Add($"restated defaults: {profile.DefaultedKeys.Count}");
         }
 
         if (profile.OverriddenKeys.Count > 0)

@@ -68,6 +68,29 @@ public class RunReportWriterTests
     }
 
     [Fact]
+    public void Write_WithAProfileThatRestatesDefaults_CountsThemInsteadOfListingThem()
+    {
+        // A generated profile states every key, so listing the ones that merely repeat the default would bury the
+        // setting that actually decided the run.
+        var output = new RecordingRunOutput();
+        var options = Options() with
+        {
+            Profile = new ProfileProvenance
+            {
+                Path = "/repo/.plutusrc",
+                AppliedKeys = ["excludeDirs"],
+                DefaultedKeys = ["format", "encoding", "maxFileSize"],
+                OverriddenKeys = ["output"],
+            },
+        };
+
+        Writer(output, options, Bundle()).Write();
+
+        output.Lines.Should().Contain(
+            "  profile  /repo/.plutusrc — applied: excludeDirs; restated defaults: 3; overridden by the command line: output");
+    }
+
+    [Fact]
     public void Write_WithAProfileWhoseKeysWereAllReplaced_SaysSo()
     {
         var output = new RecordingRunOutput();

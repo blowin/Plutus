@@ -113,10 +113,11 @@ public sealed class RunOptionsResolver
             return DefaultMaxFileSize;
         }
 
-        provenance.Apply("maxFileSize");
         try
         {
-            return FileSize.Parse(stated);
+            var size = FileSize.Parse(stated);
+            provenance.Apply("maxFileSize", differsFromDefault: size != DefaultMaxFileSize);
+            return size;
         }
         catch (Exception exception)
         {
@@ -140,13 +141,13 @@ public sealed class RunOptionsResolver
         var patterns = new List<string>();
         if (profile?.IncludeFiles is { Count: > 0 } stated)
         {
-            provenance.Apply("includeFiles");
+            provenance.Apply("includeFiles", differsFromDefault: true);
             patterns.AddRange(stated);
         }
 
         if (profile?.IncludeExtensions is { Count: > 0 } extensions)
         {
-            provenance.Apply("includeExtensions");
+            provenance.Apply("includeExtensions", differsFromDefault: true);
             patterns.AddRange(extensions.Select(ToIncludePattern));
         }
 
@@ -170,7 +171,7 @@ public sealed class RunOptionsResolver
             return null;
         }
 
-        provenance.Apply("output");
+        provenance.Apply("output", differsFromDefault: true);
         var directory = provenance.Path is null
             ? null
             : System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(provenance.Path));
@@ -194,7 +195,10 @@ public sealed class RunOptionsResolver
     {
         var name = fromCommandLine ?? fromProfile ?? DefaultEncoding;
         provenance.OverrideIfStated("encoding", fromCommandLine is not null && fromProfile is not null);
-        provenance.ApplyIf("encoding", fromCommandLine is null && fromProfile is not null);
+        provenance.ApplyIf(
+            "encoding",
+            fromCommandLine is null && fromProfile is not null,
+            differsFromDefault: fromProfile is not null && !string.Equals(fromProfile, DefaultEncoding, StringComparison.OrdinalIgnoreCase));
 
         try
         {
@@ -220,7 +224,7 @@ public sealed class RunOptionsResolver
 
         if (fromProfile is { } profileValue)
         {
-            provenance.Apply(key);
+            provenance.Apply(key, differsFromDefault: !EqualityComparer<T>.Default.Equals(profileValue, fallback));
             return profileValue;
         }
 
@@ -237,7 +241,7 @@ public sealed class RunOptionsResolver
 
         if (!string.IsNullOrWhiteSpace(fromProfile))
         {
-            provenance.Apply(key);
+            provenance.Apply(key, differsFromDefault: !string.Equals(fromProfile, fallback, StringComparison.OrdinalIgnoreCase));
             return fromProfile;
         }
 
@@ -258,7 +262,7 @@ public sealed class RunOptionsResolver
 
         if (fromProfile is { Count: > 0 })
         {
-            provenance.Apply(key);
+            provenance.Apply(key, differsFromDefault: true);
             return [.. fromProfile];
         }
 
@@ -269,23 +273,35 @@ public sealed class RunOptionsResolver
     private sealed class Provenance(string? path)
     {
         private readonly List<string> _applied = [];
+        private readonly List<string> _defaulted = [];
         private readonly List<string> _overridden = [];
 
         public string? Path { get; } = path;
 
-        public void Apply(string key)
+        /// <summary>
+        /// Records a key the profile supplied. A value equal to the built-in default is recorded separately: the
+        /// report is about what decided the run, and a starter profile that restates every default would otherwise
+        /// bury the keys that matter.
+        /// </summary>
+        public void Apply(string key, bool differsFromDefault = true)
         {
-            if (Path is not null && !_applied.Contains(key))
+            if (Path is null)
             {
-                _applied.Add(key);
+                return;
+            }
+
+            var bucket = differsFromDefault ? _applied : _defaulted;
+            if (!bucket.Contains(key))
+            {
+                bucket.Add(key);
             }
         }
 
-        public void ApplyIf(string key, bool condition)
+        public void ApplyIf(string key, bool condition, bool differsFromDefault = true)
         {
             if (condition)
             {
-                Apply(key);
+                Apply(key, differsFromDefault);
             }
         }
 
@@ -298,6 +314,14 @@ public sealed class RunOptionsResolver
         }
 
         public ProfileProvenance? Build() =>
-            Path is null ? null : new ProfileProvenance { Path = Path, AppliedKeys = _applied, OverriddenKeys = _overridden };
+            Path is null
+                ? null
+                : new ProfileProvenance
+                {
+                    Path = Path,
+                    AppliedKeys = _applied,
+                    DefaultedKeys = _defaulted,
+                    OverriddenKeys = _overridden,
+                };
     }
 }

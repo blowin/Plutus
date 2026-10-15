@@ -91,8 +91,11 @@ public sealed record ProfileProvenance
 {
     public required string Path { get; init; }
 
-    /// <summary>Keys the profile set and the run used.</summary>
+    /// <summary>Keys the profile set to something other than the built-in default, so they decided the run.</summary>
     public IReadOnlyList<string> AppliedKeys { get; init; } = [];
+
+    /// <summary>Keys the profile set to the value a run would have used anyway.</summary>
+    public IReadOnlyList<string> DefaultedKeys { get; init; } = [];
 
     /// <summary>Keys the profile set and an explicit flag replaced.</summary>
     public IReadOnlyList<string> OverriddenKeys { get; init; } = [];

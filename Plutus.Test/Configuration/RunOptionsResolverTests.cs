@@ -212,7 +212,28 @@ public class RunOptionsResolverTests
         var options = new RunOptionsResolver().Resolve(CommandLine(), profile, ProfilePath()).Options!;
 
         options.TargetEncoding.WebName.Should().Be("utf-8");
-        options.Profile!.AppliedKeys.Should().Contain("encoding");
+        options.Profile!.DefaultedKeys.Should().Contain("encoding", "the profile restates the default encoding");
+    }
+
+    [Fact]
+    public void Resolve_AKeyStatedAtItsDefault_IsReportedSeparatelyFromTheOnesThatDecidedTheRun()
+    {
+        // A starter profile states every key; only the ones that differ from the default decided anything, and the
+        // report says which is which instead of burying the real settings in a list of restated defaults.
+        var profile = new PlutusProfile
+        {
+            Format = "md",
+            MaxConcurrency = 8,
+            IncludeFileContents = true,
+            ExcludeDirs = ["bin"],
+            MaxFileSize = "2M",
+        };
+
+        var provenance = new RunOptionsResolver().Resolve(CommandLine(), profile, ProfilePath()).Options!.Profile!;
+
+        provenance.AppliedKeys.Should().Equal("maxFileSize", "excludeDirs");
+        provenance.DefaultedKeys.Should().Equal("maxConcurrency", "format", "includeFileContents");
+        provenance.OverriddenKeys.Should().BeEmpty();
     }
 
     [Fact]
