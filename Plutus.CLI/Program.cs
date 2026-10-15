@@ -1,443 +1,48 @@
 using System.CommandLine;
 using System.Text;
-using Microsoft.Extensions.DependencyInjection;
-using Plutus.Domain;
-using Plutus.Domain.Comments;
 using Plutus.Domain.Diagnostics;
-using Plutus.Domain.Diffing;
-using Plutus.Domain.Structure;
-using Plutus.Domain.Tokens;
-using Plutus.Infrastructure;
 using Plutus.Infrastructure.Diagnostics;
 
 namespace Plutus.CLI;
 
 /// <summary>
-/// Project bundler: collects source files into a single Markdown document.
+/// The entry point: one output target for the whole process, one command tree, and nothing else. What the commands do
+/// lives in <see cref="BundleCommand"/> and <see cref="InitCommand"/>.
 /// </summary>
 public static class Program
 {
+    /// <summary>Tokens that belong to the command tree itself and are never read as a project path.</summary>
+    private static readonly IReadOnlySet<string> RootTokens =
+        new HashSet<string>(StringComparer.Ordinal) { "--help", "-h", "-?", "/?", "--version" };
+
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-        // One output target for the whole run: services report through this, so no layer below decides how a run
-        // reads, and the report of what happened is printed in exactly one place.
+        // Services report through this one target, so no layer below decides how a run reads and the report of what
+        // happened is printed in exactly one place.
         IRunOutput output = new ConsoleRunOutput();
 
-        var projectPathsArgument = new Argument<List<string>>("project-path")
-        {
-            Description = "Path to the target project directory or GitHub repository URL.",
-            Arity = ArgumentArity.OneOrMore,
-        };
+        var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single document.");
+        rootCommand.Subcommands.Add(BundleCommand.Create(output));
+        rootCommand.Subcommands.Add(InitCommand.Create(output));
 
-        var outputOption = new Option<string?>("--output")
-        {
-            Description = "Output bundle file. Default: <folder-name>_bundle.md"
-        };
-        outputOption.Aliases.Add("-o");
-
-        var maxSizeOption = new Option<FileSize>("--max-file-size")
-        {
-            Description = "Max file size to include (e.g., 512K, 1M, 2MB).",
-            DefaultValueFactory = _ => FileSize.Parse("1M"),
-            CustomParser = r =>
-            {
-                if (r.Tokens.Count != 1)
-                {
-                    r.AddError($"{r.Argument.Name} should have 1 file size");
-                    return default;
-                }
-
-                try
-                {
-                    return FileSize.Parse(r.Tokens.First().Value);
-                }
-                catch (Exception e)
-                {
-                    r.AddError(e.Message);
-                    return default;
-                }
-            }
-        };
-
-        var branchOption = new Option<string?>("--branch")
-        {
-            Description = "Remote branch or tag to download. Cannot be used together with --commit."
-        };
-
-        var commitOption = new Option<string?>("--commit")
-        {
-            Description = "Specific remote commit hash to download. Cannot be used together with --branch.",
-            Validators =
-            {
-                result =>
-                {
-                    var commit = result.GetValueOrDefault<string?>() ?? string.Empty;
-                    if (!string.IsNullOrWhiteSpace(commit) && !System.Text.RegularExpressions.Regex.IsMatch(commit, "^(?:[0-9a-fA-F]{7,40})$"))
-                    {
-                        result.AddError("Error: --commit must be a hexadecimal Git commit hash (7–40 characters).");
-                    }
-                }
-            }
-        };
-
-        var noGitignoreOption = new Option<bool>("--no-gitignore")
-        {
-            Description = "Do not read root .gitignore"
-        };
-
-        var excludeOption = new Option<List<string>>("--exclude")
-        {
-            Description = "Global gitignore-style wildcard patterns to exclude BOTH files and directories. Can be repeated",
-            AllowMultipleArgumentsPerToken = true
-        };
-        excludeOption.Aliases.Add("-e");
-
-        var excludeFilesOption = new Option<List<string>>("--exclude-files")
-        {
-            Description = "Gitignore-style wildcard patterns targeting strictly FILES for exclusion. Useful for ignoring specific file names or extensions across the entire project graph",
-            AllowMultipleArgumentsPerToken = true
-        };
-
-        var excludeDirsOption = new Option<List<string>>("--exclude-dirs")
-        {
-            Description = "Gitignore-style wildcard patterns targeting strictly DIRECTORIES for exclusion. Matches the target directory name or absolute tree path at any nesting level",
-            AllowMultipleArgumentsPerToken = true
-        };
-
-        var includeFilesOption = new Option<List<string>>("--include-files")
-        {
-            Description = "Inverted gitignore-style filters. Explicitly isolates and restricts processing strictly to FILES that match these patterns. When active, all other unmatched files are omitted by default",
-            AllowMultipleArgumentsPerToken = true
-        };
-
-        var includeDirsOption = new Option<List<string>>("--include-dirs")
-        {
-            Description = "Inverted gitignore-style filters. Explicitly restricts scanning paths strictly to DIRECTORIES that match these patterns. Allows you to whitelist and isolate processing to specific module trees",
-            AllowMultipleArgumentsPerToken = true
-        };
-
-        var useDefaultExcludesOption = new Option<bool>("--use-default-excludes")
-        {
-            Description = "Use default built-in junk exclusions.",
-            DefaultValueFactory = _ => true
-        };
-
-        var allowDangerousFilesOption = new Option<bool>("--allow-dangerous-files")
-        {
-            Description = "Include files normally treated as dangerous (.env, keys, etc.)."
-        };
-
-        var minifyOption = new Option<bool>("--minify")
-        {
-            Description = "Minify source code (remove comments and extra whitespace) for supported languages before bundling."
-        };
-        minifyOption.Aliases.Add("-m");
-
-        var stripCommentsOption = new Option<bool>("--strip-comments")
-        {
-            Description = "Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation and line endings are preserved, and a space is inserted when removing a comment would join two tokens."
-        };
-
-        var preserveDocCommentsOption = new Option<bool>("--preserve-doc-comments")
-        {
-            Description = "Keep documentation comments (///, //!, /** */, /*! */) when stripping or minifying. Off by default: documentation comments are removed like any other comment."
-        };
-
-        var commentStrategyOption = new Option<CommentStrategyRequest>("--comment-strategy")
-        {
-            Description = "How comments are located: auto (ANTLR token channels where a project-maintained grammar exists, lexical scanning elsewhere), lexical (language-aware character scanner), antlr (requires a project-maintained grammar; fails when none exists).",
-            DefaultValueFactory = _ => CommentStrategyRequest.Auto
-        };
-        commentStrategyOption.AcceptOnlyFromAmong("auto", "lexical", "antlr");
-
-        var signaturesOnlyOption = new Option<bool>("--signatures-only")
-        {
-            Description = "Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, => expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of --strip-comments and --minify."
-        };
-
-        var encodingOption = new Option<string>("--encoding")
-        {
-            Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
-            DefaultValueFactory = _ => "utf-8"
-        };
-        var maxConcurrencyOption = new Option<int>("--max-concurrency")
-        {
-            Description = "Limit maximum concurrent file processing I/O tasks bound by a semaphore.",
-            DefaultValueFactory = _ => 8,
-            Validators =
-            {
-                result =>
-                {
-                    var value = result.GetValueOrDefault<int>();
-                    if (value < 1)
-                    {
-                        result.AddError($"The {result.Option.Name} option must be at least 1.");
-                    }
-                }
-            }
-        };
-        var maxTokensOption = new Option<int?>("--max-tokens")
-        {
-            Description = "Target source-token budget using an offline heuristic."
-        };
-        maxTokensOption.Validators.Add(result =>
-        {
-            var value = result.GetValueOrDefault<int?>();
-            if (value is <= 0)
-            {
-                result.AddError("--max-tokens must be greater than zero.");
-            }
-        });
-
-        var tokenOverflowPolicyOption = new Option<TokenOverflowPolicy>("--token-overflow-policy")
-        {
-            Description = "Budget overflow behavior: fail, warn, or select.",
-            DefaultValueFactory = _ => TokenOverflowPolicy.Fail
-        };
-
-        var tokenSelectionStrategyOption = new Option<TokenSelectionStrategy>("--token-selection-strategy")
-        {
-            Description = "Deterministic file selection strategy for policy 'select': path-order or largest-first.",
-            DefaultValueFactory = _ => TokenSelectionStrategy.PathOrder,
-        };
-
-        var formatOption = new Option<string>("--format")
-        {
-            Description = "Target serialization configuration format architecture (md, json, xml).",
-            DefaultValueFactory = _ => "md"
-        };
-
-        var diffOnlyOption = new Option<bool>("--diff-only")
-        {
-            Description = "Emit the change itself instead of the source: the bundle keeps its header, the list of changed paths and the raw .diff, and omits all file contents. A raw .diff section is appended."
-        };
-
-        var diffFromOption = new Option<string?>("--diff-from")
-        {
-            Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
-            Validators =
-            {
-                result =>
-                {
-                    var target = result.GetValueOrDefault<string?>();
-                    if (target is not null && string.IsNullOrWhiteSpace(target))
-                    {
-                        result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
-                    }
-                }
-            }
-        };
-
-        var diffToOption = new Option<string?>("--diff-to")
-        {
-            Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
-            Validators =
-            {
-                result =>
-                {
-                    var target = result.GetValueOrDefault<string?>();
-                    if (target is not null && string.IsNullOrWhiteSpace(target))
-                    {
-                        result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
-                    }
-                }
-            }
-        };
-
-        var diffIncludeUntrackedOption = new Option<bool>("--diff-include-untracked")
-        {
-            Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
-        };
-
-        var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single Markdown document.")
-        {
-            projectPathsArgument,
-            outputOption,
-            maxSizeOption,
-            noGitignoreOption,
-            branchOption,
-            commitOption,
-            excludeOption,
-            excludeFilesOption,
-            excludeDirsOption,
-            includeFilesOption,
-            includeDirsOption,
-            useDefaultExcludesOption,
-            allowDangerousFilesOption,
-            minifyOption,
-            stripCommentsOption,
-            preserveDocCommentsOption,
-            commentStrategyOption,
-            signaturesOnlyOption,
-            encodingOption,
-            maxConcurrencyOption,
-            formatOption,
-            maxTokensOption,
-            tokenOverflowPolicyOption,
-            tokenSelectionStrategyOption,
-            diffOnlyOption,
-            diffFromOption,
-            diffToOption,
-            diffIncludeUntrackedOption,
-        };
-
-        rootCommand.SetAction(async parseResult =>
-        {
-            var branch = parseResult.GetValue(branchOption);
-            var commit = parseResult.GetValue(commitOption);
-            var encodingName = parseResult.GetValue(encodingOption)!;
-            var maxTokens = parseResult.GetValue(maxTokensOption);
-            var diffOnly = parseResult.GetValue(diffOnlyOption);
-            var diffFrom = parseResult.GetValue(diffFromOption);
-            var diffTo = parseResult.GetValue(diffToOption);
-            var diffIncludeUntracked = parseResult.GetValue(diffIncludeUntrackedOption);
-
-            if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
-            {
-                output.Error("branch and commit cannot be used together.");
-                return 1;
-            }
-
-            if (!string.IsNullOrWhiteSpace(diffFrom) && (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit)))
-            {
-                output.Error("--diff-from cannot be used together with --branch or --commit.");
-                return 1;
-            }
-
-            if (!string.IsNullOrWhiteSpace(diffTo) && string.IsNullOrWhiteSpace(diffFrom))
-            {
-                output.Error("--diff-to requires --diff-from to define the other end of the range.");
-                return 1;
-            }
-
-            Encoding targetEncoding;
-            try
-            {
-                targetEncoding = Encoding.GetEncoding(encodingName);
-            }
-            catch (ArgumentException)
-            {
-                output.Error($"Unsupported encoding name '{encodingName}'. Examples: utf-8, windows-1251.");
-                return 1;
-            }
-
-            var tokenBudgetOptions = maxTokens is { } tokenLimit
-                ? new TokenBudgetOptions(
-                    tokenLimit,
-                    parseResult.GetValue(tokenOverflowPolicyOption)!,
-                    parseResult.GetValue(tokenSelectionStrategyOption)!)
-                : null;
-            var maxFileSize = parseResult.GetValue(maxSizeOption)!;
-            var minify = parseResult.GetValue(minifyOption);
-            var stripComments = parseResult.GetValue(stripCommentsOption);
-            var preserveDocComments = parseResult.GetValue(preserveDocCommentsOption);
-            var commentStrategy = parseResult.GetValue(commentStrategyOption)!;
-            var signaturesOnly = parseResult.GetValue(signaturesOnlyOption);
-
-            // The two comment switches do nothing on their own; say so instead of accepting them in silence.
-            if (!stripComments && !minify)
-            {
-                if (preserveDocComments)
-                {
-                    output.Warning("--preserve-doc-comments has no effect without --strip-comments or --minify.");
-                }
-
-                if (commentStrategy != CommentStrategyRequest.Auto)
-                {
-                    output.Warning("--comment-strategy has no effect without --strip-comments or --minify.");
-                }
-            }
-
-            // Resolve the strategy before any work: asking for ANTLR token channels without a maintained grammar is
-            // an error, and it must not quietly degrade into lexical scanning.
-            CommentStrippingPlan? commentStripPlan = null;
-            if (stripComments || minify)
-            {
-                if (!new CommentStrippingPlanner().TryResolve(commentStrategy, new GrammarInventoryLoader().Discover(), out var resolved, out var planError))
-                {
-                    output.Error(planError!);
-                    return 1;
-                }
-
-                commentStripPlan = resolved;
-            }
-
-            var options = new RunAppOptions
-            {
-                ProjectPath = parseResult.GetValue(projectPathsArgument)!,
-                OutputPath = parseResult.GetValue(outputOption),
-                UseGitignore = !parseResult.GetValue(noGitignoreOption),
-                ExcludePatterns = parseResult.GetValue(excludeOption) ?? new List<string>(),
-                UseDefaultExcludes = parseResult.GetValue(useDefaultExcludesOption),
-                AllowDangerous = parseResult.GetValue(allowDangerousFilesOption),
-                MaxFileSize = maxFileSize,
-                ExcludeDirPatterns = parseResult.GetValue(excludeDirsOption) ?? new List<string>(),
-                ExcludeFilePatterns = parseResult.GetValue(excludeFilesOption) ?? new List<string>(),
-                IncludeDirPatterns = parseResult.GetValue(includeDirsOption) ?? new List<string>(),
-                IncludeFilePatterns = parseResult.GetValue(includeFilesOption) ?? new List<string>(),
-                Minify = minify,
-                StripComments = stripComments,
-                PreserveDocumentationComments = preserveDocComments,
-                CommentStrategy = commentStrategy,
-                CommentStripPlan = commentStripPlan,
-                SignaturesOnly = signaturesOnly,
-                TargetEncoding = targetEncoding,
-                MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
-                Format = parseResult.GetValue(formatOption)!,
-                Branch = branch,
-                Commit = commit,
-                TokenBudget = tokenBudgetOptions,
-                Diff = diffOnly || !string.IsNullOrWhiteSpace(diffFrom)
-                    ? new GitDiffOptions
-                    {
-                        Target = string.IsNullOrWhiteSpace(diffFrom) ? null : diffFrom,
-                        TargetTo = string.IsNullOrWhiteSpace(diffTo) ? null : diffTo,
-                        IncludeUntracked = diffIncludeUntracked,
-
-                        // The same limits the content path uses, so a diff cannot bypass them.
-                        MaxFileSize = maxFileSize,
-                        TokenBudget = tokenBudgetOptions
-                    }
-                    : null,
-                IncludeFileContents = !diffOnly,
-            };
-
-            try
-            {
-                return await RunAppAsync(options, output);
-            }
-            catch (Exception ex)
-            {
-                output.Error(ex.Message);
-                return 1;
-            }
-        });
-
-        var result = rootCommand.Parse(args);
-        return await Task.FromResult(await result.InvokeAsync()).ConfigureAwait(false);
+        return await rootCommand.Parse(Normalize(rootCommand, args)).InvokeAsync().ConfigureAwait(false);
     }
 
-    private static async Task<int> RunAppAsync(RunAppOptions options, IRunOutput output)
+    /// <summary>
+    /// Bundling used to be the root command, so <c>plutus . --format md</c> keeps working next to
+    /// <c>plutus bundle . --format md</c>: a command line that does not name a command is read as the bundle command.
+    /// </summary>
+    internal static string[] Normalize(RootCommand root, string[] args)
     {
-        Console.OutputEncoding = options.TargetEncoding;
-        Console.InputEncoding = options.TargetEncoding;
-
-        var sc = new ServiceCollection();
-        sc.AddInfrastructureServices(options, output);
-        await using var serviceProvider = sc.BuildServiceProvider(new ServiceProviderOptions
+        if (args.Length == 0 || RootTokens.Contains(args[0]))
         {
-            ValidateScopes = true,
-            ValidateOnBuild = true
-        });
-        await using var scope = serviceProvider.CreateAsyncScope();
+            return args;
+        }
 
-        var exitCode = await scope.ServiceProvider.GetRequiredService<BundleAppRunner>().RunAsync(options);
-
-        scope.ServiceProvider.GetRequiredService<IRunReportWriter>().Write();
-
-        return exitCode;
+        var namesACommand = root.Subcommands.Any(command => string.Equals(command.Name, args[0], StringComparison.Ordinal));
+        return namesACommand ? args : ["bundle", .. args];
     }
 }

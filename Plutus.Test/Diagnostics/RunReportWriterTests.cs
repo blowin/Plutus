@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Structure;
 using Plutus.Infrastructure.Diagnostics;
@@ -38,6 +39,79 @@ public class RunReportWriterTests
         Writer(output, Options(), new BundleRunReport()).Write();
 
         output.Lines.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Write_WithAProfile_StatesWhichKeysItSuppliedAndWhichTheCommandLineReplaced()
+    {
+        var output = new RecordingRunOutput();
+        var options = Options() with
+        {
+            Profile = new ProfileProvenance
+            {
+                Path = "/repo/.plutusrc",
+                AppliedKeys = ["excludeDirs", "includeExtensions"],
+                OverriddenKeys = ["format"],
+            },
+        };
+
+        Writer(output, options, Bundle()).Write();
+
+        output.Lines.Should().Equal(
+            string.Empty,
+            "Configuration",
+            "  profile  /repo/.plutusrc — applied: excludeDirs, includeExtensions; overridden by the command line: format",
+            "Bundle created:  /tmp/out.md",
+            "Files included:  12",
+            "Total size:      2.4 KB",
+            "Elapsed time:    0.42s (420 ms)");
+    }
+
+    [Fact]
+    public void Write_WithAProfileThatRestatesDefaults_CountsThemInsteadOfListingThem()
+    {
+        // A generated profile states every key, so listing the ones that merely repeat the default would bury the
+        // setting that actually decided the run.
+        var output = new RecordingRunOutput();
+        var options = Options() with
+        {
+            Profile = new ProfileProvenance
+            {
+                Path = "/repo/.plutusrc",
+                AppliedKeys = ["excludeDirs"],
+                DefaultedKeys = ["format", "encoding", "maxFileSize"],
+                OverriddenKeys = ["output"],
+            },
+        };
+
+        Writer(output, options, Bundle()).Write();
+
+        output.Lines.Should().Contain(
+            "  profile  /repo/.plutusrc — applied: excludeDirs; restated defaults: 3; overridden by the command line: output");
+    }
+
+    [Fact]
+    public void Write_WithAProfileWhoseKeysWereAllReplaced_SaysSo()
+    {
+        var output = new RecordingRunOutput();
+        var options = Options() with
+        {
+            Profile = new ProfileProvenance { Path = "/repo/.plutusrc", OverriddenKeys = ["format"] },
+        };
+
+        Writer(output, options, Bundle()).Write();
+
+        output.Lines.Should().Contain("  profile  /repo/.plutusrc — overridden by the command line: format");
+    }
+
+    [Fact]
+    public void Write_WithoutAProfile_PrintsNoConfigurationBlock()
+    {
+        var output = new RecordingRunOutput();
+
+        Writer(output, Options(), Bundle()).Write();
+
+        output.Lines.Should().NotContain("Configuration");
     }
 
     [Fact]

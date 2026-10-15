@@ -62,28 +62,10 @@ public class SignatureExtractionDocumentationTests
     {
         ReadDocument("CLI.md").Should().Contain("--signatures-only");
 
-        var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "README.md"));
+        var readme = TestFiles.ReadFromRepository("README.md");
         readme.Should().Contain("docs/SIGNATURE_EXTRACTION.md");
         readme.Should().Contain("--signatures-only");
     }
 
-    private static string ReadDocument(string fileName) =>
-        File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", fileName));
-
-    /// <summary>Finds the repository root by walking up from the test output directory.</summary>
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "Plutus.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new InvalidOperationException("The repository root could not be located from the test output directory.");
-    }
+    private static string ReadDocument(string fileName) => TestFiles.ReadFromRepository($"docs/{fileName}");
 }

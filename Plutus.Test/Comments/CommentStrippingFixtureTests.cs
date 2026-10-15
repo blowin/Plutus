@@ -12,10 +12,7 @@ namespace Plutus.Test.Comments;
 /// </summary>
 public class CommentStrippingFixtureTests
 {
-    private static string FixturePath(string name) =>
-        Path.Combine(AppContext.BaseDirectory, "Fixtures", "Comments", name);
-
-    private static string ReadFixture(string name) => File.ReadAllText(FixturePath(name));
+    private static string ReadFixture(string name) => TestFiles.ReadFixture($"Comments/{name}");
 
     public static TheoryData<string, string> Fixtures()
     {
@@ -292,7 +289,8 @@ public class CommentStrippingFixtureTests
     }
 
     /// <summary>
-    /// Writes the stripped source to a temporary file and runs an available parser over it. Returns <c>true</c>
+    /// Writes the stripped source to a temporary file and runs an available parser over it: an external compiler can
+    /// only be handed a real file, which is the one place in these tests that must use the disk. Returns <c>true</c>
     /// when the parser accepted it, <c>false</c> when it rejected it, and <c>null</c> when the tool is not
     /// installed, in which case the assertions that do not need a compiler still apply.
     /// </summary>

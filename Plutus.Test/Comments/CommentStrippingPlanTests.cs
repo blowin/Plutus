@@ -60,7 +60,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_AntlrWithAGrammar_SelectsTokenChannels()
     {
-        var inventory = GrammarInventory.Parse(SqlGrammarManifest);
+        var inventory = GrammarInventory.Parse(SqlGrammarManifest, null, _ => true);
 
         new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Antlr, inventory, out var plan, out var error)
             .Should().BeTrue();
@@ -74,7 +74,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_AutoWithAGrammar_KeepsLexicalForEverythingElseButListsTheGrammar()
     {
-        var inventory = GrammarInventory.Parse(SqlGrammarManifest);
+        var inventory = GrammarInventory.Parse(SqlGrammarManifest, null, _ => true);
 
         new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Auto, inventory, out var plan, out _).Should().BeTrue();
 
@@ -88,7 +88,7 @@ public class CommentStrippingPlanTests
     [InlineData(CommentStrategyRequest.Antlr)]
     public void Resolve_BrokenManifest_FailsInsteadOfSilentlyDegrading(CommentStrategyRequest request)
     {
-        var inventory = GrammarInventory.Parse("{ \"grammars\": [ { \"language\": \"sql\" } ] }");
+        var inventory = GrammarInventory.Parse("{ \"grammars\": [ { \"language\": \"sql\" } ] }", null, _ => true);
 
         var resolved = new CommentStrippingPlanner().TryResolve(request, inventory, out _, out var error);
 
@@ -99,7 +99,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_BrokenManifest_StillAllowsExplicitLexicalScanning()
     {
-        var inventory = GrammarInventory.Parse("{ not json");
+        var inventory = GrammarInventory.Parse("{ not json", null, _ => true);
 
         new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Lexical, inventory, out var plan, out var error)
             .Should().BeTrue();

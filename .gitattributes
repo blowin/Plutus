@@ -1,0 +1,21 @@
+# The repository stores text with LF, which .editorconfig states and `dotnet format --verify-no-changes`
+# enforces. Without this file the line endings of a checkout follow each machine's core.autocrlf, so the same
+# file can appear modified and a formatting check can fail for reasons that have nothing to do with the change.
+* text=auto eol=lf
+
+# Files that Windows tools expect with CRLF are stored with LF and checked out with CRLF.
+*.sln text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries and fixtures are left exactly as they are.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.pfx binary

@@ -1,5 +1,6 @@
 using System.Text;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Configuration;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
@@ -60,6 +61,12 @@ public record RunAppOptions
 
     /// <summary>When set, the bundle is restricted to files changed relative to this diff scope.</summary>
     public GitDiffOptions? Diff { get; init; }
+
+    /// <summary>
+    /// The <c>.plutusrc</c> profile this run was configured from, when one was found, together with the keys it
+    /// supplied. It makes the configuration of a run reportable instead of implicit.
+    /// </summary>
+    public ProfileProvenance? Profile { get; init; }
 
     /// <summary>
     /// When <c>false</c> the bundle carries only metadata, the changed-path list and the raw diff, which is
