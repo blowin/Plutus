@@ -16,7 +16,8 @@ public static class LanguageCommentSyntaxRegistry
 {
     private static readonly IReadOnlyList<LanguageCommentSyntax> Canonical;
     private static readonly FrozenDictionary<string, LanguageCommentSyntax> ByLanguage;
-    private static readonly IReadOnlyList<string> OrderedLanguages;
+    private static readonly IReadOnlyList<string> OrderedNames;
+    private static readonly IReadOnlyList<LanguageId> OrderedLanguages;
 
     static LanguageCommentSyntaxRegistry()
     {
@@ -33,14 +34,21 @@ public static class LanguageCommentSyntaxRegistry
         }
 
         ByLanguage = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-        OrderedLanguages = map.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
+        OrderedNames = map.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
+        OrderedLanguages = OrderedNames.Select(LanguageId.Parse).ToArray();
     }
 
-    /// <summary>Every accepted language identifier, aliases included, in ordinal order.</summary>
-    public static IReadOnlyList<string> Languages => OrderedLanguages;
+    /// <summary>Every accepted language, aliases included, in ordinal order.</summary>
+    public static IReadOnlyList<LanguageId> Languages => OrderedLanguages;
+
+    /// <summary>The same identifiers as their canonical spellings, for diagnostics and documentation tests.</summary>
+    public static IReadOnlyList<string> LanguageNames => OrderedNames;
 
     /// <summary>The canonical definitions only. Used by tests and by the documentation matrix.</summary>
     public static IReadOnlyCollection<LanguageCommentSyntax> Definitions => Canonical;
+
+    public static bool TryGet(LanguageId language, out LanguageCommentSyntax syntax) =>
+        ByLanguage.TryGetValue(language.Value, out syntax!);
 
     public static bool TryGet(string? language, out LanguageCommentSyntax syntax)
     {
@@ -54,7 +62,11 @@ public static class LanguageCommentSyntaxRegistry
         return false;
     }
 
+    public static LanguageCommentSyntax? Find(LanguageId language) => TryGet(language, out var syntax) ? syntax : null;
+
     public static LanguageCommentSyntax? Find(string? language) => TryGet(language, out var syntax) ? syntax : null;
+
+    public static bool IsSupported(LanguageId language) => ByLanguage.ContainsKey(language.Value);
 
     public static bool IsSupported(string? language) => TryGet(language, out _);
 

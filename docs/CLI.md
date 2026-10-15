@@ -24,6 +24,7 @@ When running from the repository, use `dotnet run --project Plutus.CLI -- <argum
 | `--strip-comments` | Off | Remove comments only, for languages with a maintained comment syntax. Whitespace, indentation, and line endings are preserved, and a space is inserted when removing a comment would otherwise join two tokens. See [Comment stripping](COMMENT_STRIPPING.md). |
 | `--preserve-doc-comments` | Off | Keep documentation comments (`///`, `//!`, `/** */`, `/*! */`) while stripping or minifying. Off by default: documentation comments are removed like any other comment. No effect without `--strip-comments` or `--minify`. |
 | `--comment-strategy <auto\|lexical\|antlr>` | `auto` | How comments are located. `auto` uses ANTLR token channels for languages a project-maintained grammar covers and lexical scanning elsewhere; `lexical` forces the character scanner; `antlr` requires a maintained grammar and fails when none exists (no silent fallback). See [ANTLR grammar inventory](ANTLR_GRAMMAR_INVENTORY.md). |
+| `--signatures-only` | Off | Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, `=>` expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of `--strip-comments` and `--minify`. See [Signature extraction](SIGNATURE_EXTRACTION.md). |
 | `--no-gitignore` | Off | Do not read the root `.gitignore`. |
 | `--use-default-excludes` | On | Use built-in exclusions for common generated/junk paths. |
 | `--exclude <pattern...>` / `-e` | None | Global gitignore-style patterns that can exclude files and directories. Can be repeated. |
@@ -133,6 +134,46 @@ Diff omitted: omitted by token budget (60000 tokens; strategy: PathOrder)
 ```
 
 The token budget uses the same policies and selection strategies as the content path (`fail`, `warn`, `select`; `path-order`, `largest-first`), and the bundle header reports the diff numbers. `--exclude`/`--include` filters and sensitive-file protection apply to the diff scope as well.
+
+## Signature extraction
+
+`--signatures-only` replaces implementation bodies with a structural `;` using a real parse tree, so a bundle can
+carry a project's shape instead of its code:
+
+```bash
+dotnet run --project Plutus.CLI -- ./src --signatures-only -o ./artifacts/api-surface.md
+dotnet run --project Plutus.CLI -- ./src --signatures-only --strip-comments
+dotnet run --project Plutus.CLI -- ./src --signatures-only --minify --include-files "*.cs"
+```
+
+```csharp
+public sealed class WidgetService : IWidgetService
+{
+    private readonly Dictionary<string, Widget> _widgets = new();
+
+    public WidgetService(IEnumerable<Widget> widgets);
+
+    public int Count;
+
+    public Widget? Find(string id);
+
+    public string Describe<T>(T value) where T : notnull;
+}
+```
+
+Declarations, attributes, documentation comments, generic parameters and constraints survive. Interface members,
+abstract members, auto-properties and field initializers are already signatures or are part of the contract, so they
+are left alone. Only C# has a provider today; any other language is passed through unchanged and counted in the run
+report:
+
+```text
+Signature extraction: files=12; bodies stripped=48 (method 30, property 9, accessor 6, constructor 3); providers: roslyn-csharp=10; without a provider=2; files with parse diagnostics=0 (0 diagnostic(s)); fallbacks=0
+```
+
+The order is always comments, then signatures, then whitespace, so `--signatures-only` composes with
+`--strip-comments`, `--preserve-doc-comments` and `--minify`. The output is a skeleton for reading and for model
+context, not compilable code; details, guarantees and limitations are in
+[Signature extraction](SIGNATURE_EXTRACTION.md).
 
 ## Comment stripping
 

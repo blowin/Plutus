@@ -15,7 +15,7 @@ public sealed record CommentStrippingPlan
     public required string Rationale { get; init; }
 
     /// <summary>Languages that will use ANTLR token channels because a maintained grammar covers them.</summary>
-    public IReadOnlyList<string> GrammarBackedLanguages { get; init; } = [];
+    public IReadOnlyList<LanguageId> GrammarBackedLanguages { get; init; } = [];
 
     public CommentStripOptions ToOptions(bool preserveDocumentationComments) => new()
     {
@@ -66,7 +66,8 @@ public static class CommentStrippingPlanner
             return false;
         }
 
-        var grammarLanguages = inventory.Entries.Select(entry => entry.Language).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // LanguageId normalizes its value, so plain Distinct is already case-insensitive.
+        var grammarLanguages = inventory.Entries.Select(entry => entry.Language).Distinct().ToList();
 
         switch (request)
         {

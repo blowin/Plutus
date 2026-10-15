@@ -4,79 +4,75 @@ using Plutus.Domain.Minifier.Languages;
 namespace Plutus.Domain.Minifier;
 
 /// <summary>
-/// Builds the set of language processors for a run: one entry per language in
-/// <see cref="LanguageCommentSyntaxRegistry"/>, each carrying the strategy that answers for it. A language backed
-/// by a maintained ANTLR grammar gets the token-channel stripper; every other language gets lexical scanning.
+/// Composes the language processors of a run. Which processor answers for a language is decided by the processors
+/// themselves — each declares its languages — so there is no switch over identifiers here and adding a language is
+/// a matter of declaring it, not of editing a dispatch table.
 /// </summary>
 public static class LanguageMinifierCatalog
 {
-    public static IReadOnlyList<ILanguageMinifier> Create(
-        CommentStripOptions? options = null,
-        SourceProcessingMode mode = SourceProcessingMode.Minify,
-        ICommentStripObserver? observer = null,
-        CommentStrippingPlan? plan = null,
-        GrammarInventory? inventory = null,
-        IReadOnlyDictionary<string, ICommentChannelLexer>? channelLexers = null)
+    /// <summary>
+    /// The processors that carry language-specific behavior beyond the syntax table. The dependency container
+    /// discovers the same set by scanning for <see cref="ILanguageMinifier"/> implementations.
+    /// </summary>
+    public static IReadOnlyList<ILanguageMinifier> Maintained(SourceProcessingContext? context = null) =>
+    [
+        new CSharpLanguageMinifier(context),
+        new GoLanguageMinifier(context),
+        new JavaLanguageMinifier(context),
+        new JavaScriptLanguageMinifier(context),
+        new PhpLanguageMinifier(context),
+        new RustLanguageMinifier(context),
+        new SqlLanguageMinifier(context),
+        new StyleLanguageMinifier(context),
+        new HtmlLanguageMinifier(context),
+    ];
+
+    /// <summary>
+    /// Fills in every language declared by the syntax registry that no maintained processor claims. The result is
+    /// exactly one processor per language, and a language claimed twice is an error rather than a silent winner.
+    /// </summary>
+    public static IReadOnlyList<ILanguageMinifier> Compose(
+        IEnumerable<ILanguageMinifier> maintained,
+        SourceProcessingContext? context = null)
     {
-        var grammarBacked = plan?.GrammarBackedLanguages ?? [];
-        var minifiers = new List<ILanguageMinifier>();
+        var effective = context ?? SourceProcessingContext.Default;
+        var result = new List<ILanguageMinifier>();
+        var claimed = new HashSet<LanguageId>();
+
+        foreach (var minifier in maintained)
+        {
+            foreach (var language in minifier.Languages)
+            {
+                if (!claimed.Add(language))
+                {
+                    throw new InvalidOperationException(
+                        $"Two language processors claim '{language}': '{minifier.Description}'.");
+                }
+            }
+
+            result.Add(minifier);
+        }
 
         foreach (var language in LanguageCommentSyntaxRegistry.Languages)
         {
-            var stripper = ResolveStripper(language, grammarBacked, inventory, channelLexers);
-            minifiers.Add(Create(language, options, mode, stripper, observer));
+            if (claimed.Add(language))
+            {
+                result.Add(new SyntaxLanguageMinifier(language, Describe(language), effective));
+            }
         }
 
-        return minifiers;
+        return result;
     }
 
-    /// <summary>
-    /// Picks the stripper for one language. ANTLR token channels are used only when the plan names the language
-    /// and the inventory ships both a grammar and a lexer for it; anything else is lexical scanning.
-    /// </summary>
-    public static ICommentStripper ResolveStripper(
-        string language,
-        IReadOnlyCollection<string> grammarBackedLanguages,
-        GrammarInventory? inventory,
-        IReadOnlyDictionary<string, ICommentChannelLexer>? channelLexers)
+    /// <summary>The complete processor set: maintained processors plus a generic one for every other language.</summary>
+    public static IReadOnlyList<ILanguageMinifier> Create(SourceProcessingContext? context = null) =>
+        Compose(Maintained(context), context);
+
+    /// <summary>Description shown for a language that has no dedicated processor.</summary>
+    public static string Describe(LanguageId language)
     {
-        var isGrammarBacked = grammarBackedLanguages.Contains(language, StringComparer.OrdinalIgnoreCase);
-        if (isGrammarBacked
-            && inventory is not null && inventory.TryGet(language, out var grammar)
-            && channelLexers is not null && channelLexers.TryGetValue(language, out var lexer))
-        {
-            return new AntlrCommentChannelStripper(grammar, lexer);
-        }
-
-        return LexicalCommentStripper.Instance;
+        var syntax = LanguageCommentSyntaxRegistry.Find(language);
+        var displayName = syntax?.DisplayName ?? language.Value;
+        return $"{displayName} processor (lexical comment scanner)";
     }
-
-    /// <summary>Description shown for a language that has no dedicated minifier class.</summary>
-    public static string Describe(string language, SourceProcessingMode mode)
-    {
-        var displayName = LanguageCommentSyntaxRegistry.Find(language)?.DisplayName ?? language;
-        return mode == SourceProcessingMode.StripComments
-            ? $"{displayName} Comment Stripper (lexical scanner)"
-            : $"{displayName} Minifier (lexical comment scanner, collapses blank lines)";
-    }
-
-    private static ILanguageMinifier Create(
-        string language,
-        CommentStripOptions? options,
-        SourceProcessingMode mode,
-        ICommentStripper stripper,
-        ICommentStripObserver? observer) => language switch
-        {
-            "csharp" => new CSharpLanguageMinifier(options, mode, stripper, observer),
-            "go" => new GoLanguageMinifier(options, mode, stripper, observer),
-            "java" => new JavaLanguageMinifier(options, mode, stripper, observer),
-            "php" => new PhpLanguageMinifier(options, mode, stripper, observer),
-            "rust" => new RustLanguageMinifier(options, mode, stripper, observer),
-            "sql" => new SqlLanguageMinifier(options, mode, stripper, observer),
-            "javascript" or "typescript" or "jsx" or "tsx" or "mjs" or "cjs" =>
-                new JavaScriptLanguageMinifier(language, options, mode, stripper, observer),
-            "css" or "scss" or "sass" or "less" => new StyleLanguageMinifier(language, options, mode, stripper, observer),
-            "html" or "htm" => new HtmlLanguageMinifier(language, options, mode, stripper, observer),
-            _ => new SyntaxLanguageMinifier(language, Describe(language, mode), options, mode, stripper, observer),
-        };
 }

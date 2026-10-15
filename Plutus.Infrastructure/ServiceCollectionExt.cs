@@ -5,6 +5,8 @@ using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
+using Plutus.Domain.Minifier.Languages;
+using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens.Applier;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
@@ -71,16 +73,56 @@ public static class ServiceCollectionExt
         services.AddSingleton(options.TargetEncoding);
 
         // Source processing. The comment strategy was resolved by the CLI against the grammars the project
-        // actually maintains, so this composition only has to honor it; the report it writes is printed after the
-        // run, which is what makes the selected strategy observable.
+        // actually maintains, so this composition only has to honor it; the reports it writes are printed after the
+        // run, which is what makes the selected strategy and the structural pass observable.
         services.AddSingleton(_ => new CommentStrippingReport(
             options.CommentStripPlan ?? DisabledCommentPlan));
-        services.AddSingleton<ICodeMinifier>(provider =>
+        services.AddSingleton<SignatureExtractionReport>();
+        services.AddSingleton<ISignatureExtractionObserver>(provider => provider.GetRequiredService<SignatureExtractionReport>());
+        services.AddSingleton(GrammarInventory.Discover());
+
+        // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
+        // registers it. Adding a structural provider or a maintained language processor is a matter of writing the
+        // class.
+        services.Scan(scan =>
         {
-            var op = provider.GetRequiredService<RunAppOptions>();
-            var report = provider.GetRequiredService<CommentStrippingReport>();
-            return CodeMinifierFactory.Create(op, report, op.CommentStripPlan);
+            scan.FromAssemblyOf<CSharpSignatureSkeletonProvider>()
+                .AddClasses(classes => classes.AssignableTo<ISignatureSkeletonProvider>())
+                .As<ISignatureSkeletonProvider>()
+                .WithSingletonLifetime();
+
+            scan.FromAssemblyOf<CSharpLanguageMinifier>()
+                .AddClasses(classes => classes.AssignableTo<IMaintainedLanguageProcessor>())
+                .As<ILanguageMinifier>()
+                .WithSingletonLifetime();
+
+            // A grammar-backed lexer would be registered by the same rule; today the scan finds none.
+            scan.FromAssemblyOf<CSharpSignatureSkeletonProvider>()
+                .AddClasses(classes => classes.AssignableTo<ICommentChannelLexer>())
+                .As<ICommentChannelLexer>()
+                .WithSingletonLifetime();
         });
+
+        services.AddSingleton<IReadOnlyDictionary<LanguageId, ICommentChannelLexer>>(provider => provider
+            .GetServices<ICommentChannelLexer>()
+            .ToDictionary(lexer => lexer.Language));
+
+        services.AddSingleton<ISignatureSkeletonExtractor>(provider => new SignatureSkeletonExtractor(
+            provider.GetServices<ISignatureSkeletonProvider>(),
+            provider.GetRequiredService<ISignatureExtractionObserver>()));
+
+        services.AddSingleton(provider => CodeMinifierFactory.CreateContext(
+            provider.GetRequiredService<RunAppOptions>(),
+            provider.GetRequiredService<RunAppOptions>().CommentStripPlan,
+            provider.GetRequiredService<GrammarInventory>(),
+            provider.GetRequiredService<IReadOnlyDictionary<LanguageId, ICommentChannelLexer>>(),
+            provider.GetRequiredService<CommentStrippingReport>(),
+            provider.GetServices<ISignatureSkeletonProvider>(),
+            provider.GetRequiredService<ISignatureExtractionObserver>()));
+
+        services.AddSingleton<ICodeMinifier>(provider => CodeMinifierFactory.Create(
+            provider.GetRequiredService<RunAppOptions>(),
+            provider.GetRequiredService<SourceProcessingContext>()));
 
         return services;
     }

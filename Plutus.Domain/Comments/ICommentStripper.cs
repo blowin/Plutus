@@ -8,5 +8,5 @@ public interface ICommentStripper
 {
     CommentStripStrategy Strategy { get; }
 
-    CommentStripResult Strip(string source, string language, CommentStripOptions options);
+    CommentStripResult Strip(string source, LanguageId language, CommentStripOptions options);
 }

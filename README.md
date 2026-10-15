@@ -19,6 +19,7 @@ Plutus collects project files, applies configurable filters, and writes a single
 - **Choose a format** — emit Markdown for people and LLMs, or JSON/XML for downstream tools.
 - **Optional source minification** — remove comments and extra whitespace for supported languages before bundling.
 - **Comment stripping that respects literals** — a language-aware scanner removes comments without touching string, raw-string, template, regex, or markup-attribute contents, without merging adjacent tokens, and without moving line endings.
+- **Signature-only bundles** — replace implementation bodies with a structural terminator using a real parse tree, so a bundle can carry a project's API surface instead of its code.
 - **Testable architecture** — scanning and bundling are built around file-provider abstractions, with a separate CLI, domain, and infrastructure layer.
 
 ## Quick start
@@ -106,6 +107,22 @@ implied by the language. `--comment-strategy antlr` requests real ANTLR token-ch
 than falling back while no grammar is maintained. Supported languages, guarantees, and limitations are in the
 [comment-stripping guide](docs/COMMENT_STRIPPING.md).
 
+### Bundle only the API surface
+
+```bash
+plutus ./src --signatures-only                              # declarations stay, implementation bodies become ';'
+plutus ./src --signatures-only --strip-comments              # and no comments either
+plutus ./src --signatures-only --minify --include-files "*.cs"
+```
+
+`--signatures-only` parses each supported file with its own parser (C# today) and replaces method bodies, `=>`
+expression bodies and property accessor bodies with a structural terminator, keeping attributes, documentation
+comments, generics and `where` constraints. A body is identified from the parse tree, never by matching braces in
+text, and each replacement is applied as a token-span rewrite with conflict detection, so the file is either
+rewritten exactly where intended or left alone with a reason. Languages without a provider are passed through
+unchanged and counted in the run report. The result is a skeleton for reading, not compilable code — see the
+[signature-extraction guide](docs/SIGNATURE_EXTRACTION.md).
+
 ### Keep the estimated source-token count within a budget
 
 ```bash
@@ -138,6 +155,7 @@ The full option reference, defaults, and filtering examples live in **[docs/CLI.
 | `--strip-comments` | Remove comments only; whitespace and line endings stay as they are. |
 | `--preserve-doc-comments` | Keep documentation comments (`///`, `/** */`, …) while stripping. Off by default. |
 | `--comment-strategy <auto\|lexical\|antlr>` | Choose how comments are located; `antlr` requires a project-maintained grammar. |
+| `--signatures-only` | Replace implementation bodies with a structural terminator, keeping declarations and signatures. |
 
 ## Output formats
 
@@ -153,7 +171,7 @@ For format details and guidance on consuming the output programmatically, see [d
 2. **Resolve the diff scope** — with `--diff-only`/`--diff-from`, ask git for the changed paths (plus untracked files when requested) and limit every later step to them.
 3. **Build the project tree** — scan entries through file-provider abstractions and create a tree used by both the renderer and bundle writers.
 4. **Filter paths** — apply the diff scope, default junk exclusions, `.gitignore` (unless disabled), and user include/exclude patterns.
-5. **Read and process files** — skip oversized files, detect obvious binary content, decode text using the selected encoding, and optionally strip comments or minify supported source languages.
+5. **Read and process files** — skip oversized files, detect obvious binary content, decode text using the selected encoding, and optionally strip comments, extract signatures, or minify supported source languages.
 6. **Apply token policy** — if `--max-tokens` is configured, estimate eligible source content and apply `fail`, `warn`, or deterministic `select` behavior.
 7. **Serialize the bundle** — write Markdown, JSON, or XML; with `--diff-only`, omit file contents and emit the change itself.
 
@@ -180,6 +198,7 @@ The repository's GitHub Actions workflow runs restore, formatting verification, 
 
 - [CLI reference](docs/CLI.md)
 - [Comment stripping: languages, guarantees, limitations](docs/COMMENT_STRIPPING.md)
+- [Signature extraction: the structural pass](docs/SIGNATURE_EXTRACTION.md)
 - [ANTLR grammar inventory and channel mapping](docs/ANTLR_GRAMMAR_INVENTORY.md)
 - [Token budget behavior and estimator limitations](docs/TOKEN_BUDGET.md)
 - [Output formats](docs/OUTPUT_FORMATS.md)

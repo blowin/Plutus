@@ -47,7 +47,7 @@ public sealed record GrammarChannelRef(string Raw, int? Number, string? Name)
 /// </summary>
 public sealed record GrammarInventoryEntry
 {
-    public required string Language { get; init; }
+    public required LanguageId Language { get; init; }
 
     public required string GrammarFile { get; init; }
 
@@ -106,7 +106,7 @@ public sealed record GrammarInventoryEntry
 
         return new GrammarInventoryEntry
         {
-            Language = language,
+            Language = LanguageId.Parse(language),
             GrammarFile = grammarFile,
             LexerClass = element.TryGetProperty("lexerClass", out var lexerElement) ? lexerElement.GetString() : null,
             CommentTokenTypes = ReadStringArray(element, "commentTokenTypes"),

@@ -1,8 +1,17 @@
 namespace Plutus.Domain.Minifier;
 
-public sealed class AliasLanguageMinifier(string aliasLanguage, ILanguageMinifier originalMinifier) : ILanguageMinifier
+/// <summary>
+/// Presents another processor under an additional language identifier. The comment syntax registry already maps
+/// aliases to a shared description, so this exists for callers that need a distinct processor entry rather than a
+/// distinct syntax.
+/// </summary>
+public sealed class AliasLanguageMinifier(LanguageId alias, ILanguageMinifier original) : ILanguageMinifier
 {
-    public string Language => aliasLanguage;
-    public string Description => $"{originalMinifier.Description} (Alias for {originalMinifier.Language})";
-    public string Minify(string sourceCode) => originalMinifier.Minify(sourceCode);
+    public IReadOnlyCollection<LanguageId> Languages => [alias];
+
+    public string Description => $"{original.Description} (alias for {original.Languages.First()})";
+
+    public string Minify(string sourceCode) => original.Minify(sourceCode, alias);
+
+    public string Minify(string sourceCode, LanguageId language) => original.Minify(sourceCode, language);
 }

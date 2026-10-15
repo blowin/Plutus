@@ -86,14 +86,15 @@ public class CommentStrippingInteractionTests
     {
         var plan = Resolve(CommentStrategyRequest.Auto, GrammarInventory.Empty);
         var report = new CommentStrippingReport(plan);
-        var minifier = CodeMinifierFactory.Create(Options(strip: true, plan: plan), report, plan);
+        var options = Options(strip: true, plan: plan);
+        var minifier = CodeMinifierFactory.Create(options, Context(options, plan, report));
 
         minifier.Minify("// comment\ncode();\n", "csharp");
 
         report.IsActive.Should().BeTrue();
         report.FilesProcessed.Should().Be(1);
         report.RemovedComments.Should().Be(1);
-        report.StrategiesByLanguage.Should().ContainKey("csharp").WhoseValue.Should().Be("Lexical");
+        report.StrategiesByLanguage.Should().ContainKey(LanguageId.CSharp).WhoseValue.Should().Be("Lexical");
         report.Describe().Should().Contain("strategy=lexical").And.Contain("files=1");
     }
 
@@ -117,21 +118,29 @@ public class CommentStrippingInteractionTests
 
         var plan = Resolve(CommentStrategyRequest.Antlr, inventory);
         var report = new CommentStrippingReport(plan);
-        var lexer = new StubChannelLexer("sql");
-        var minifiers = CompositeCodeMinifier.CreateFull(
-            plan.ToOptions(false),
-            SourceProcessingMode.StripComments,
-            report,
+        var lexer = new StubChannelLexer(LanguageId.Sql);
+        var options = Options(strip: true, plan: plan);
+        var minifiers = CompositeCodeMinifier.CreateFull(Context(
+            options,
             plan,
+            report,
             inventory,
-            new Dictionary<string, ICommentChannelLexer> { ["sql"] = lexer });
+            new Dictionary<LanguageId, ICommentChannelLexer> { [LanguageId.Sql] = lexer }));
 
-        minifiers.Minify("SELECT 1; -- comment", "sql").Should().Be("SELECT 1; ");
-        minifiers.Minify("a(); // comment", "csharp").Should().Be("a(); ");
+        minifiers.Minify("SELECT 1; -- comment", LanguageId.Sql).Should().Be("SELECT 1; ");
+        minifiers.Minify("a(); // comment", LanguageId.CSharp).Should().Be("a(); ");
 
-        report.StrategiesByLanguage["sql"].Should().Be("AntlrTokenChannel");
-        report.StrategiesByLanguage["csharp"].Should().Be("Lexical");
+        report.StrategiesByLanguage[LanguageId.Sql].Should().Be("AntlrTokenChannel");
+        report.StrategiesByLanguage[LanguageId.CSharp].Should().Be("Lexical");
     }
+
+    private static SourceProcessingContext Context(
+        RunAppOptions options,
+        CommentStrippingPlan plan,
+        ICommentStripObserver? observer = null,
+        GrammarInventory? inventory = null,
+        IReadOnlyDictionary<LanguageId, ICommentChannelLexer>? lexers = null) =>
+        CodeMinifierFactory.CreateContext(options, plan, inventory, lexers, observer);
 
     private static RunAppOptions Options(bool minify = false, bool strip = false, bool preserve = false, CommentStrippingPlan? plan = null) => new()
     {
@@ -167,9 +176,9 @@ public class CommentStrippingInteractionTests
     /// A minimal lexer that reports one line comment per <c>--</c>, which is enough to prove that the channel path
     /// is wired and observable.
     /// </summary>
-    private sealed class StubChannelLexer(string language) : ICommentChannelLexer
+    private sealed class StubChannelLexer(LanguageId language) : ICommentChannelLexer
     {
-        public string Language { get; } = language;
+        public LanguageId Language { get; } = language;
 
         public IReadOnlyList<CommentChannelToken> Tokenize(string source)
         {

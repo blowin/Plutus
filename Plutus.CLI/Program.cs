@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 using Plutus.Infrastructure;
 
@@ -146,6 +147,11 @@ public static class Program
         };
         commentStrategyOption.AcceptOnlyFromAmong("auto", "lexical", "antlr");
 
+        var signaturesOnlyOption = new Option<bool>("--signatures-only")
+        {
+            Description = "Reduce supported files to their signatures: a parse-tree pass replaces implementation bodies (method bodies, => expression bodies, property accessor bodies) with a structural terminator, keeping declarations, attributes, generics and constraints. Independent of --strip-comments and --minify."
+        };
+
         var encodingOption = new Option<string>("--encoding")
         {
             Description = "Target text encoding for reading, writing, and logging (e.g., utf-8, windows-1251, koi8-r).",
@@ -259,6 +265,7 @@ public static class Program
             stripCommentsOption,
             preserveDocCommentsOption,
             commentStrategyOption,
+            signaturesOnlyOption,
             encodingOption,
             maxConcurrencyOption,
             formatOption,
@@ -322,6 +329,7 @@ public static class Program
             var stripComments = parseResult.GetValue(stripCommentsOption);
             var preserveDocComments = parseResult.GetValue(preserveDocCommentsOption);
             var commentStrategy = parseResult.GetValue(commentStrategyOption)!;
+            var signaturesOnly = parseResult.GetValue(signaturesOnlyOption);
 
             // The two comment switches do nothing on their own; say so instead of accepting them in silence.
             if (!stripComments && !minify)
@@ -369,6 +377,7 @@ public static class Program
                 PreserveDocumentationComments = preserveDocComments,
                 CommentStrategy = commentStrategy,
                 CommentStripPlan = commentStripPlan,
+                SignaturesOnly = signaturesOnly,
                 TargetEncoding = targetEncoding,
                 MaxConcurrency = parseResult.GetValue(maxConcurrencyOption),
                 Format = parseResult.GetValue(formatOption)!,
@@ -431,6 +440,18 @@ public static class Program
             foreach (var reason in report.FallbackReasons)
             {
                 Console.Error.WriteLine($"Warning: comment stripping did not run for {reason}");
+            }
+        }
+
+        // A structural pass is reported the same way, so a bundle that claims to carry signatures states which
+        // provider produced them and how many bodies it cut.
+        if (options.SignaturesOnly)
+        {
+            var report = scope.ServiceProvider.GetRequiredService<SignatureExtractionReport>();
+            Console.WriteLine(report.Describe());
+            foreach (var reason in report.FallbackReasons)
+            {
+                Console.Error.WriteLine($"Warning: signature extraction did not run for {reason}");
             }
         }
 

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Minifier;
 
@@ -123,11 +124,9 @@ public class LanguageCommentCoverageTests
     [Fact]
     public void Registry_SupportedLanguagesAreOfferedByTheCatalog()
     {
-        var catalog = CompositeCodeMinifier.CreateFull().SupportedMinifiers
-            .Select(minifier => minifier.Language)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var catalog = CompositeCodeMinifier.CreateFull();
 
-        LanguageCommentSyntaxRegistry.Languages.Should().BeSubsetOf(catalog);
+        LanguageCommentSyntaxRegistry.Languages.Should().BeSubsetOf(catalog.SupportedLanguages);
     }
 
     [Fact]
@@ -135,8 +134,29 @@ public class LanguageCommentCoverageTests
     {
         var catalog = CompositeCodeMinifier.CreateFull();
 
-        catalog.SupportedMinifiers.Should().NotContain(minifier => minifier.Language == "yaml");
+        catalog.SupportedLanguages.Should().NotContain(LanguageId.Parse("yaml"));
         catalog.Minify("value # text", "yaml").Should().Be("value # text");
+    }
+
+    [Fact]
+    public void Registry_EveryLanguageNameIsADeclaredLanguageId()
+    {
+        // The table may only use spellings this project declares, so a language cannot be invented in passing.
+        LanguageCommentSyntaxRegistry.LanguageNames.Should().BeSubsetOf(LanguageId.All.Select(id => id.Value));
+    }
+
+    [Fact]
+    public void Registry_DeclaredProcessorsCoverExactlyTheMaintainedProcessorSet()
+    {
+        // The container discovers processors by interface; the catalog lists them. Both must be the same set.
+        var discovered = typeof(IMaintainedLanguageProcessor).Assembly
+            .GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(IMaintainedLanguageProcessor).IsAssignableFrom(type))
+            .ToHashSet();
+
+        var maintained = LanguageMinifierCatalog.Maintained().Select(minifier => minifier.GetType()).ToHashSet();
+
+        maintained.Should().BeEquivalentTo(discovered);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Text;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain;
@@ -34,6 +35,15 @@ public record RunAppOptions
 
     /// <summary>What <c>--comment-strategy</c> asked for, before it is resolved against the grammar inventory.</summary>
     public CommentStrategyRequest CommentStrategy { get; init; } = CommentStrategyRequest.Auto;
+
+    /// <summary>
+    /// Reduce every supported file to its signatures (<c>--signatures-only</c>): a parse-tree pass replaces
+    /// implementation bodies with a structural terminator. Independent of the comment flags.
+    /// </summary>
+    public bool SignaturesOnly { get; init; }
+
+    /// <summary>How the structural pass writes a stripped body. Defaults to a semicolon.</summary>
+    public SignatureExtractionOptions SignatureOptions { get; init; } = SignatureExtractionOptions.Default;
 
     /// <summary>
     /// The strategy resolved for this run, or <c>null</c> when no comment processing was requested. Resolving it

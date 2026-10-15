@@ -14,14 +14,14 @@ namespace Plutus.Domain.Comments;
 /// </summary>
 public sealed class GrammarInventory
 {
-    private readonly Dictionary<string, GrammarInventoryEntry> _byLanguage;
+    private readonly Dictionary<LanguageId, GrammarInventoryEntry> _byLanguage;
 
     private GrammarInventory(IReadOnlyList<GrammarInventoryEntry> entries, string? manifestPath, string? loadError)
     {
         Entries = entries;
         ManifestPath = manifestPath;
         LoadError = loadError;
-        _byLanguage = entries.ToDictionary(entry => entry.Language, StringComparer.OrdinalIgnoreCase);
+        _byLanguage = entries.ToDictionary(entry => entry.Language);
     }
 
     /// <summary>No maintained grammars. This is the state of the repository today.</summary>
@@ -149,7 +149,19 @@ public sealed class GrammarInventory
         return manifestDirectory is not null && File.Exists(Path.Combine(manifestDirectory, grammarFile));
     }
 
-    public bool TryGet(string language, out GrammarInventoryEntry entry) => _byLanguage.TryGetValue(language, out entry!);
+    public bool TryGet(LanguageId language, out GrammarInventoryEntry entry) => _byLanguage.TryGetValue(language, out entry!);
+
+    /// <summary>Boundary convenience for callers that already hold an identifier as text.</summary>
+    public bool TryGet(string? language, out GrammarInventoryEntry entry)
+    {
+        if (LanguageId.TryParse(language, out var id))
+        {
+            return TryGet(id, out entry);
+        }
+
+        entry = null!;
+        return false;
+    }
 
     /// <summary>Human-readable inventory, used in the message that explains why ANTLR is unavailable.</summary>
     public string Describe()

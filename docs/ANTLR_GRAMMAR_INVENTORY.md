@@ -104,3 +104,19 @@ The distinction between the two mechanisms is user-visible, not cosmetic:
 Adding a grammar means: ship the `.g4` and its generated lexer, ship `grammars/grammar-manifest.json`, implement
 `ICommentChannelLexer` over that lexer, register it, and add the language to the inventory table above. Until all of
 that exists, the honest description of `--strip-comments` is "language-aware lexical scanner".
+
+## Related: the structural pass does not use ANTLR either
+
+`--signatures-only` is a real parse-tree transformation, and it is worth being precise about what parses the file:
+
+| | Comment stripping | Signature extraction |
+|---|---|---|
+| Mechanism | Hand-written lexical scanner | Roslyn syntax tree (`CSharpSyntaxWalker`) |
+| Rewriting | Text spans with separator and line-ending rules | Token spans through `TokenStreamRewriter` |
+| Why not ANTLR | A comment lexer needs no grammar | The C# grammar would have to be vendored, generated (a JRE toolchain) and kept current with the language — while Roslyn is the C# parser, ships as a package, and is error-tolerant by design |
+| Seam | `ICommentChannelLexer` + `GrammarInventory` | `ISignatureSkeletonProvider` + `ITokenStreamRewriter` |
+
+Both seams accept a grammar-backed implementation: an ANTLR lexer satisfies `ICommentChannelLexer`, and an ANTLR
+parse-tree visitor plus ANTLR's own `TokenStreamRewriter` satisfies `ISignatureSkeletonProvider` — so adding a
+maintained grammar for a language would light up both paths without changing the pipeline. See
+[Signature extraction](SIGNATURE_EXTRACTION.md).

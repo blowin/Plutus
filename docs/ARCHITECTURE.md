@@ -7,9 +7,9 @@ Plutus is organized as a .NET solution with separate CLI, domain, infrastructure
 | Project | Responsibility |
 |---|---|
 | `Plutus.CLI` | Defines command-line arguments/options, validates CLI-level constraints, creates the service provider, and starts the application runner. |
-| `Plutus.Domain` | Owns bundle workflow contracts, project-tree/scanning logic, ignore/comment-stripping/minification abstractions, token estimation/policy, and Markdown/JSON/XML writers. |
+| `Plutus.Domain` | Owns bundle workflow contracts, project-tree/scanning logic, ignore/comment-stripping/signature-extraction/minification abstractions, token estimation/policy, and Markdown/JSON/XML writers. |
 | `Plutus.Infrastructure` | Supplies physical filesystem/path services, concrete ignore matchers, remote repository adapters, and dependency-injection registration. |
-| `Plutus.Test` | Unit tests for scanners, writers, filters, comment strippers, minifiers, path/remote resolution, and token-budget behavior. |
+| `Plutus.Test` | Unit tests for scanners, writers, filters, comment strippers, signature extraction, minifiers, path/remote resolution, and token-budget behavior. |
 
 ## High-level pipeline
 
@@ -39,7 +39,10 @@ flowchart TD
 - **Content mode:** `IBundleWriter.IncludeFileContents` separates "review the change" (`--diff-only`: paths plus per-file diffs) from "bundle the changed source" (`--diff-from`: contents plus diffs). It is a writer concern, so the scanner, filters and token policy behave identically in both modes.
 - **One budget, two payloads:** `TokenBudgetSelector` owns the whole-file selection rules, and both `TokenBudgetApplier` (content) and `DiffScopeLimiter` (diffs) use it, so `fail`, `warn`, `select` and the selection strategies cannot drift apart between the two paths. `DiffScopeLimiter` performs no I/O: the caller supplies file sizes.
 - **Comment-stripping strategy:** `--strip-comments` and `--minify` share one pipeline. `ICommentStripper` is the seam: `LexicalCommentStripper` is a character scanner driven by `LanguageCommentSyntaxRegistry`, while `AntlrCommentChannelStripper` drops tokens on a grammar's comment channels and refuses to rewrite a file whose tokens do not tile the input. `CommentStrippingPlanner` resolves the requested strategy against `GrammarInventory` (the grammars the project actually maintains) before any file is read, and `CommentStrippingReport` records which strategy answered per language so the run can print it. A language with no syntax entry is never scanned with another language's rules.
+- **Structural pass:** `--signatures-only` runs a parse-tree transformation through `ISignatureSkeletonProvider`. The C# provider parses with Roslyn, walks the tree with a `CSharpSyntaxWalker`, turns each implementation body into an inclusive token span, and applies the spans through `TokenStreamRewriter` — an ANTLR-shaped rewriter (replace, delete and insert over token indices) that refuses a stream which does not tile its source and throws on conflicting edits, so the provider can degrade to "leave the file unchanged, say why". `SourceProcessingContext` fixes the order of the passes: comments, then signatures, then whitespace.
 - **Source-processing modes:** `SourceProcessingMode` distinguishes stripping comments from minifying: the whitespace pass, C# region removal, and the final trim happen only in `Minify` mode, which keeps `--strip-comments` byte-faithful outside the comments themselves.
+- **Discovery over dispatch:** language processors (`IMaintainedLanguageProcessor`) and structural providers (`ISignatureSkeletonProvider`) declare the language they serve and are registered by the container scanning for their interface. `LanguageMinifierCatalog.Compose` fills in every other language from the syntax table and rejects a language claimed twice, so no switch over language identifiers exists in the code.
+- **Language identity:** `LanguageId` is a normalized value type rather than a loose string, so lookups need no comparer, a misspelled identifier cannot silently miss a table entry, and the canonical spellings live in one place.
 - **Dependency injection:** `Plutus.Infrastructure` registers the concrete services consumed by the CLI runner.
 
 ## Error and omission semantics
@@ -53,3 +56,5 @@ A diff can be absent for the same reasons, and the diff sections state which one
 Tests use file-provider abstractions and test file-info implementations to exercise core behavior without requiring a real repository for every case. When changing pipeline behavior, prefer a focused unit test plus an end-to-end CLI test when the behavior crosses multiple layers.
 
 Comment stripping is additionally tested against real-world fixtures under `Plutus.Test/Fixtures/Comments`; where a fixture's own parser is on `PATH` (`node`, `python`, `gcc`), the stripped output is handed to it so the result is verified by something other than the scanner under test.
+
+Signature extraction is tested against a real fixture (`Plutus.Test/Fixtures/Structure/Service.cs`) plus unit tests for interfaces, abstract members, generics with constraints, expression and accessor bodies, and for the token rewriter's refusal to apply conflicting edits.

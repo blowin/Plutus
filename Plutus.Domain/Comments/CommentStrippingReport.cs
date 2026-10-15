@@ -9,7 +9,7 @@ namespace Plutus.Domain.Comments;
 /// </summary>
 public sealed class CommentStrippingReport(CommentStrippingPlan plan) : ICommentStripObserver
 {
-    private readonly ConcurrentDictionary<string, LanguageStatistics> _languages = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<LanguageId, LanguageStatistics> _languages = new();
     private readonly ConcurrentQueue<string> _reasons = new();
     private long _files;
     private long _removedInline;
@@ -35,10 +35,10 @@ public sealed class CommentStrippingReport(CommentStrippingPlan plan) : IComment
     public long Fallbacks => Interlocked.Read(ref _fallbacks);
 
     /// <summary>Languages actually processed, with the strategy that answered for each.</summary>
-    public IReadOnlyDictionary<string, string> StrategiesByLanguage =>
-        _languages.ToDictionary(pair => pair.Key, pair => pair.Value.Strategy.ToString(), StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<LanguageId, string> StrategiesByLanguage =>
+        _languages.ToDictionary(pair => pair.Key, pair => pair.Value.Strategy.ToString());
 
-    public void OnCommentsStripped(string language, CommentStripResult result)
+    public void OnCommentsStripped(LanguageId language, CommentStripResult result)
     {
         Interlocked.Increment(ref _files);
         Interlocked.Add(ref _removedInline, result.RemovedInlineComments);
@@ -72,7 +72,7 @@ public sealed class CommentStrippingReport(CommentStrippingPlan plan) : IComment
         }
 
         var languages = string.Join(", ", _languages
-            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(pair => pair.Key.Value, StringComparer.Ordinal)
             .Select(pair => $"{pair.Key}={pair.Value.Files}"));
         var fallbacks = Fallbacks == 0 ? string.Empty : $"; strategy fallbacks={Fallbacks}";
 

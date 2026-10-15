@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Plutus.Domain;
 using Plutus.Domain.Comments;
 
 namespace Plutus.Test.Comments;
@@ -65,7 +66,7 @@ public class CommentStrippingPlanTests
 
         error.Should().BeNull();
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.AntlrTokenChannel);
-        plan.GrammarBackedLanguages.Should().Equal("sql");
+        plan.GrammarBackedLanguages.Should().Equal(LanguageId.Sql);
         plan.Describe().Should().StartWith("strategy=antlr-token-channel");
     }
 
@@ -77,7 +78,7 @@ public class CommentStrippingPlanTests
         CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Auto, inventory, out var plan, out _).Should().BeTrue();
 
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.Lexical);
-        plan.GrammarBackedLanguages.Should().Equal("sql");
+        plan.GrammarBackedLanguages.Should().Equal(LanguageId.Sql);
         plan.Rationale.Should().Contain("ANTLR token channels for [sql]");
     }
 
@@ -136,8 +137,8 @@ public class CommentStrippingReportTests
     {
         var report = new CommentStrippingReport(Plan());
 
-        report.OnCommentsStripped("csharp", Result("csharp", inline: 2, block: 1, documentation: 1));
-        report.OnCommentsStripped("javascript", Result("javascript", inline: 3));
+        report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, inline: 2, block: 1, documentation: 1));
+        report.OnCommentsStripped(LanguageId.JavaScript, Result(LanguageId.JavaScript, inline: 3));
 
         report.IsActive.Should().BeTrue();
         report.FilesProcessed.Should().Be(2);
@@ -149,8 +150,8 @@ public class CommentStrippingReportTests
     public void Describe_ReportsStrategyCountsAndLanguages()
     {
         var report = new CommentStrippingReport(Plan());
-        report.OnCommentsStripped("csharp", Result("csharp", inline: 1));
-        report.OnCommentsStripped("csharp", Result("csharp", block: 1, preservedDocumentation: 2, unterminated: 1));
+        report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, inline: 1));
+        report.OnCommentsStripped(LanguageId.CSharp, Result(LanguageId.CSharp, block: 1, preservedDocumentation: 2, unterminated: 1));
 
         var description = report.Describe();
 
@@ -168,7 +169,7 @@ public class CommentStrippingReportTests
     {
         var report = new CommentStrippingReport(Plan());
 
-        report.OnCommentsStripped("sql", Result("sql") with { FallbackReason = "lexer output does not tile the input" });
+        report.OnCommentsStripped(LanguageId.Sql, Result(LanguageId.Sql) with { FallbackReason = "lexer output does not tile the input" });
 
         report.Fallbacks.Should().Be(1);
         report.FallbackReasons.Should().ContainSingle().Which.Should().Contain("does not tile");
@@ -182,15 +183,16 @@ public class CommentStrippingReportTests
     }
 
     private static CommentStripResult Result(
-        string language,
+        LanguageId language,
         int inline = 0,
         int block = 0,
         int documentation = 0,
         int preservedDocumentation = 0,
         int unterminated = 0) => new()
         {
-            Content = language,
+            Content = language.Value,
             Strategy = CommentStripStrategy.Lexical,
+            Language = language,
             RemovedInlineComments = inline,
             RemovedBlockComments = block,
             RemovedDocumentationComments = documentation,

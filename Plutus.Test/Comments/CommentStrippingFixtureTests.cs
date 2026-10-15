@@ -64,7 +64,13 @@ public class CommentStrippingFixtureTests
         var result = LexicalCommentStripper.Instance.Strip(source, language, CommentStripOptions.Default);
 
         CountLines(result.Content).Should().Be(CountLines(source), "removing a comment must not move the lines of {0}", file);
-        result.Content.Should().NotContain("\r", "the fixtures use LF and stripping must not introduce CR");
+
+        // Stripping neither adds, removes nor rewrites a line terminator: the sequence must be identical, whether
+        // the checkout handed us LF or CRLF.
+        LineTerminators(result.Content).Should().Equal(
+            LineTerminators(source),
+            "stripping must not change the line endings of {0}",
+            file);
     }
 
     [Theory]
@@ -260,6 +266,30 @@ public class CommentStrippingFixtureTests
         LexicalCommentStripper.Instance.Strip(ReadFixture(file), language, CommentStripOptions.Default).Content;
 
     private static int CountLines(string text) => text.Split('\n').Length;
+
+    /// <summary>Every line terminator of the text, in order, so a change of style or count is visible.</summary>
+    private static IEnumerable<string> LineTerminators(string text)
+    {
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '\r')
+            {
+                if (index + 1 < text.Length && text[index + 1] == '\n')
+                {
+                    index++;
+                    yield return "\r\n";
+                }
+                else
+                {
+                    yield return "\r";
+                }
+            }
+            else if (text[index] == '\n')
+            {
+                yield return "\n";
+            }
+        }
+    }
 
     /// <summary>
     /// Writes the stripped source to a temporary file and runs an available parser over it. Returns <c>true</c>

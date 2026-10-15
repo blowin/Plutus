@@ -18,7 +18,7 @@ public sealed record CommentChannelToken(int Type, string TypeName, string Text,
 /// </summary>
 public interface ICommentChannelLexer
 {
-    string Language { get; }
+    LanguageId Language { get; }
 
     /// <summary>
     /// Tokenizes <paramref name="source"/>. Tokens must tile the input: every character belongs to exactly one

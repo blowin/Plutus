@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Plutus.Domain;
 using Plutus.Domain.Comments;
 
 namespace Plutus.Test.Comments;
@@ -43,7 +44,7 @@ public class GrammarInventoryTests
         inventory.LoadError.Should().BeNull();
         var entry = inventory.Entries.Should().ContainSingle().Subject;
 
-        entry.Language.Should().Be("sql");
+        entry.Language.Should().Be(LanguageId.Sql);
         entry.LexerClass.Should().Contain("SqlLexer");
         entry.ResolveCommentChannelNumbers(out var unresolved).Should().Equal(1, 2);
         unresolved.Should().BeEmpty();

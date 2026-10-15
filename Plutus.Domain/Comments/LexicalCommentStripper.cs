@@ -23,9 +23,12 @@ public sealed class LexicalCommentStripper : ICommentStripper
 
     public CommentStripStrategy Strategy => CommentStripStrategy.Lexical;
 
-    public static bool Supports(string? language) => LanguageCommentSyntaxRegistry.IsSupported(language);
+    public static bool Supports(LanguageId language) => LanguageCommentSyntaxRegistry.IsSupported(language);
 
-    public CommentStripResult Strip(string source, string language, CommentStripOptions options)
+    /// <summary>Boundary convenience for callers that already hold an identifier as text.</summary>
+    public static bool Supports(string? language) => LanguageId.TryParse(language, out var id) && Supports(id);
+
+    public CommentStripResult Strip(string source, LanguageId language, CommentStripOptions options)
     {
         if (!LanguageCommentSyntaxRegistry.TryGet(language, out var syntax))
         {
@@ -35,6 +38,7 @@ public sealed class LexicalCommentStripper : ICommentStripper
             {
                 Content = source,
                 Strategy = Strategy,
+                Language = language,
                 LanguageSupported = false,
                 FallbackReason = $"no comment syntax is maintained for '{language}'",
             };
@@ -42,10 +46,14 @@ public sealed class LexicalCommentStripper : ICommentStripper
 
         if (string.IsNullOrEmpty(source))
         {
-            return new CommentStripResult { Content = source, Strategy = Strategy };
+            return new CommentStripResult { Content = source, Strategy = Strategy, Language = language };
         }
 
-        var scanner = new CommentScanner(source, syntax, options);
+        var scanner = new CommentScanner(source, syntax, options, language);
         return scanner.Run();
     }
+
+    /// <summary>Boundary convenience for callers that already hold an identifier as text.</summary>
+    public CommentStripResult Strip(string source, string? language, CommentStripOptions options) =>
+        Strip(source, LanguageId.From(language), options);
 }
