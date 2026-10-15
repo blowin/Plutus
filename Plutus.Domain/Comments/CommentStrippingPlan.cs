@@ -25,15 +25,18 @@ public sealed record CommentStrippingPlan
     };
 }
 
-/// <summary>Resolves the requested strategy against the grammars the project actually maintains.</summary>
-public static class CommentStrippingPlanner
+/// <summary>
+/// Resolves the requested strategy against the grammars the project actually maintains. It is a service rather than
+/// a static helper so a host can inject it and a test can substitute it, and so the resolution has one owner.
+/// </summary>
+public sealed class CommentStrippingPlanner
 {
     /// <summary>
     /// Resolves the plan, or fails with a reason. A broken manifest is a failure even for <c>auto</c>: falling
     /// back to lexical scanning because a grammar could not be read is exactly the silent downgrade this feature
     /// is meant to prevent.
     /// </summary>
-    public static bool TryResolve(CommentStrategyRequest request, GrammarInventory inventory, out CommentStrippingPlan plan, out string? error)
+    public bool TryResolve(CommentStrategyRequest request, GrammarInventory inventory, out CommentStrippingPlan plan, out string? error)
     {
         plan = new CommentStrippingPlan
         {

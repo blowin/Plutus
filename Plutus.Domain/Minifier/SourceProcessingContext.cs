@@ -18,12 +18,11 @@ public interface ICommentStripperResolver
 public sealed class CommentStripperResolver(
     CommentStrippingPlan? plan = null,
     GrammarInventory? inventory = null,
-    IReadOnlyDictionary<LanguageId, ICommentChannelLexer>? channelLexers = null) : ICommentStripperResolver
+    IReadOnlyDictionary<LanguageId, ICommentChannelLexer>? channelLexers = null,
+    ICommentStripper? lexical = null) : ICommentStripperResolver
 {
+    private readonly ICommentStripper _lexical = lexical ?? new LexicalCommentStripper(new LanguageCommentSyntaxTable());
     private readonly ConcurrentDictionary<LanguageId, ICommentStripper> _cache = new();
-
-    /// <summary>A resolver that always answers with lexical scanning; used when comment processing is off.</summary>
-    public static readonly ICommentStripperResolver LexicalOnly = new CommentStripperResolver();
 
     public ICommentStripper Resolve(LanguageId language) =>
         _cache.GetOrAdd(language, Create);
@@ -40,7 +39,7 @@ public sealed class CommentStripperResolver(
             return new AntlrCommentChannelStripper(grammar, lexer);
         }
 
-        return LexicalCommentStripper.Instance;
+        return _lexical;
     }
 }
 
@@ -58,7 +57,7 @@ public sealed record SourceProcessingContext
         CommentOptions = CommentStripOptions.Default,
         SignatureOptions = SignatureExtractionOptions.Default,
         ExtractSignatures = false,
-        Strippers = CommentStripperResolver.LexicalOnly,
+        Strippers = new CommentStripperResolver(),
         Extractor = new SignatureSkeletonExtractor([]),
     };
 
@@ -73,7 +72,7 @@ public sealed record SourceProcessingContext
         CommentOptions = CommentStripOptions.Default,
         SignatureOptions = SignatureExtractionOptions.Default,
         ExtractSignatures = false,
-        Strippers = CommentStripperResolver.LexicalOnly,
+        Strippers = new CommentStripperResolver(),
         Extractor = new SignatureSkeletonExtractor([]),
     };
 

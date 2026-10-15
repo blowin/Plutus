@@ -19,7 +19,7 @@ namespace Plutus.Infrastructure.Structure;
 /// </summary>
 public sealed class CSharpSignatureSkeletonProvider : ISignatureSkeletonProvider
 {
-    public static readonly IReadOnlyCollection<MemberKind> MemberKinds = new[]
+    private static readonly IReadOnlyCollection<MemberKind> MemberKinds = new[]
     {
         MemberKind.Method,
         MemberKind.Constructor,

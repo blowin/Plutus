@@ -6,57 +6,100 @@ using Plutus.Domain.Structure;
 
 namespace Plutus.Infrastructure.Diagnostics;
 
+/// <summary>Prints the report of the run that just finished.</summary>
+public interface IRunReportWriter
+{
+    void Write();
+}
+
 /// <summary>
 /// Renders the run report: what the bundle holds, what source processing did, and what a pass could not do. All
 /// run-level presentation lives here, in one place, so the host only decides whether a report is wanted — and so the
 /// wording, the alignment and the culture of the numbers cannot drift between callers.
+/// <para>
+/// The writer is a service: it takes the output, the options and the reports of the run, and a host asks it to
+/// print. A test builds the same object with a recording output and summary data, without a container.
+/// </para>
 /// </summary>
-public static class RunReportWriter
+public sealed class RunReportWriter : IRunReportWriter
 {
     private const int Indent = 2;
     private const int LabelGap = 2;
 
-    public static void Write(
+    private readonly IRunOutput _output;
+    private readonly RunAppOptions _options;
+    private readonly BundleRunReport _bundle;
+    private readonly Func<CommentStrippingSummary> _comments;
+    private readonly Func<SignatureExtractionSummary> _signatures;
+
+    /// <summary>Wires the writer to the reports of a run, which are read when the report is printed.</summary>
+    public RunReportWriter(
+        IRunOutput output,
+        RunAppOptions options,
+        BundleRunReport bundle,
+        CommentStrippingReport comments,
+        SignatureExtractionReport signatures)
+        : this(output, options, bundle, comments.Snapshot, signatures.Snapshot)
+    {
+    }
+
+    /// <summary>Wires the writer straight to the data, which is what a test or a library host has.</summary>
+    public RunReportWriter(
         IRunOutput output,
         RunAppOptions options,
         BundleRunReport bundle,
         CommentStrippingSummary comments,
         SignatureExtractionSummary signatures)
+        : this(output, options, bundle, () => comments, () => signatures)
     {
-        WriteBundle(output, bundle);
-        WriteSourceProcessing(output, options, comments, signatures);
     }
 
-    private static void WriteBundle(IRunOutput output, BundleRunReport bundle)
+    private RunReportWriter(
+        IRunOutput output,
+        RunAppOptions options,
+        BundleRunReport bundle,
+        Func<CommentStrippingSummary> comments,
+        Func<SignatureExtractionSummary> signatures)
     {
-        if (!bundle.HasResult)
+        _output = output;
+        _options = options;
+        _bundle = bundle;
+        _comments = comments;
+        _signatures = signatures;
+    }
+
+    public void Write()
+    {
+        WriteBundle();
+        WriteSourceProcessing(_comments(), _signatures());
+    }
+
+    private void WriteBundle()
+    {
+        if (!_bundle.HasResult)
         {
             return;
         }
 
         var rows = new (string Label, string Value)[]
         {
-            ("Bundle created:", bundle.OutputPath!),
-            ("Files included:", Number(bundle.FilesIncluded)),
-            ("Total size:", bundle.TotalBytes.HumanSize()),
-            ("Elapsed time:", $"{bundle.Elapsed.TotalSeconds.ToString("F2", CultureInfo.InvariantCulture)}s ({Number(bundle.Elapsed.TotalMilliseconds)} ms)"),
+            ("Bundle created:", _bundle.OutputPath!),
+            ("Files included:", Number(_bundle.FilesIncluded)),
+            ("Total size:", _bundle.TotalBytes.HumanSize()),
+            ("Elapsed time:", $"{_bundle.Elapsed.TotalSeconds.ToString("F2", CultureInfo.InvariantCulture)}s ({Number(_bundle.Elapsed.TotalMilliseconds)} ms)"),
         };
 
         var width = rows.Max(row => row.Label.Length);
         foreach (var (label, value) in rows)
         {
-            output.Info($"{label.PadRight(width)}{new string(' ', LabelGap)}{value}");
+            _output.Info($"{label.PadRight(width)}{new string(' ', LabelGap)}{value}");
         }
     }
 
-    private static void WriteSourceProcessing(
-        IRunOutput output,
-        RunAppOptions options,
-        CommentStrippingSummary comments,
-        SignatureExtractionSummary signatures)
+    private void WriteSourceProcessing(CommentStrippingSummary comments, SignatureExtractionSummary signatures)
     {
-        var commentRequested = options.CommentStripPlan is not null;
-        var signaturesRequested = options.SignaturesOnly;
+        var commentRequested = _options.CommentStripPlan is not null;
+        var signaturesRequested = _options.SignaturesOnly;
 
         if (!commentRequested && !signaturesRequested)
         {
@@ -77,15 +120,15 @@ public static class RunReportWriter
         }
 
         var width = lines.Max(line => line.Label.Length);
-        output.Info(string.Empty);
-        output.Info("Source processing");
+        _output.Info(string.Empty);
+        _output.Info("Source processing");
         foreach (var (label, value) in lines)
         {
             var prefix = new string(' ', Indent) + label.PadRight(width) + new string(' ', LabelGap);
-            output.Info($"{prefix}{value}");
+            _output.Info($"{prefix}{value}");
         }
 
-        ReportFallbacks(output, comments, signatures);
+        ReportFallbacks(comments, signatures);
     }
 
     private static string DescribeStrategy(CommentStrippingSummary summary)
@@ -152,19 +195,16 @@ public static class RunReportWriter
         return string.Join(", ", parts);
     }
 
-    private static void ReportFallbacks(
-        IRunOutput output,
-        CommentStrippingSummary comments,
-        SignatureExtractionSummary signatures)
+    private void ReportFallbacks(CommentStrippingSummary comments, SignatureExtractionSummary signatures)
     {
         foreach (var reason in comments.FallbackReasons)
         {
-            output.Warning($"comment stripping did not run for {reason}");
+            _output.Warning($"comment stripping did not run for {reason}");
         }
 
         foreach (var reason in signatures.FallbackReasons)
         {
-            output.Warning($"signature extraction did not run for {reason}");
+            _output.Warning($"signature extraction did not run for {reason}");
         }
     }
 

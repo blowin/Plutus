@@ -90,9 +90,10 @@ public static class ServiceCollectionExt
         // run, which is what makes the selected strategy and the structural pass observable.
         services.AddSingleton(_ => new CommentStrippingReport(
             options.CommentStripPlan ?? DisabledCommentPlan));
+        services.AddSingleton<ICommentStripObserver>(provider => provider.GetRequiredService<CommentStrippingReport>());
         services.AddSingleton<SignatureExtractionReport>();
         services.AddSingleton<ISignatureExtractionObserver>(provider => provider.GetRequiredService<SignatureExtractionReport>());
-        services.AddSingleton(GrammarInventory.Discover());
+        services.AddSingleton(new GrammarInventoryLoader().Discover());
 
         // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
         // registers it. Adding a structural provider or a maintained language processor is a matter of writing the
@@ -124,18 +125,15 @@ public static class ServiceCollectionExt
             provider.GetServices<ISignatureSkeletonProvider>(),
             provider.GetRequiredService<ISignatureExtractionObserver>()));
 
-        services.AddSingleton(provider => CodeMinifierFactory.CreateContext(
-            provider.GetRequiredService<RunAppOptions>(),
-            provider.GetRequiredService<RunAppOptions>().CommentStripPlan,
-            provider.GetRequiredService<GrammarInventory>(),
-            provider.GetRequiredService<IReadOnlyDictionary<LanguageId, ICommentChannelLexer>>(),
-            provider.GetRequiredService<CommentStrippingReport>(),
-            provider.GetServices<ISignatureSkeletonProvider>(),
-            provider.GetRequiredService<ISignatureExtractionObserver>()));
+        // Source processing is composed from services, not from static helpers: the syntax table is a singleton, the
+        // factory is a singleton that reads the options, and the context it builds is shared by every processor.
+        services.AddSingleton<ILanguageCommentSyntaxTable, LanguageCommentSyntaxTable>();
+        services.AddSingleton<LanguageMinifierCatalog>();
+        services.AddSingleton<CodeMinifierFactory>();
+        services.AddSingleton(provider => provider.GetRequiredService<CodeMinifierFactory>().Context);
+        services.AddSingleton(provider => provider.GetRequiredService<CodeMinifierFactory>().Create());
 
-        services.AddSingleton<ICodeMinifier>(provider => CodeMinifierFactory.Create(
-            provider.GetRequiredService<RunAppOptions>(),
-            provider.GetRequiredService<SourceProcessingContext>()));
+        services.AddSingleton<IRunReportWriter, RunReportWriter>();
 
         return services;
     }

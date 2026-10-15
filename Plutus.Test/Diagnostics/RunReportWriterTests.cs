@@ -9,8 +9,8 @@ using Plutus.Infrastructure.Diagnostics;
 namespace Plutus.Test.Diagnostics;
 
 /// <summary>
-/// The run report is presentation, so it is tested as presentation: one place decides the wording, the alignment and
-/// what is worth printing, and this is where that decision is pinned.
+/// The run report is presentation, so it is tested as presentation: one service decides the wording, the alignment
+/// and what is worth printing, and it is built here with a recording output and summary data — no container needed.
 /// </summary>
 public class RunReportWriterTests
 {
@@ -19,7 +19,7 @@ public class RunReportWriterTests
     {
         var output = new RecordingRunOutput();
 
-        RunReportWriter.Write(output, Options(), Bundle(), Comments(), Signatures());
+        Writer(output, Options(), Bundle()).Write();
 
         output.Lines.Should().Equal(
             "Bundle created:  /tmp/out.md",
@@ -35,7 +35,7 @@ public class RunReportWriterTests
     {
         var output = new RecordingRunOutput();
 
-        RunReportWriter.Write(output, Options(), new BundleRunReport(), Comments(), Signatures());
+        Writer(output, Options(), new BundleRunReport()).Write();
 
         output.Lines.Should().BeEmpty();
     }
@@ -44,24 +44,18 @@ public class RunReportWriterTests
     public void Write_WithCommentProcessing_PrintsTheStrategyAndTheCounts()
     {
         var output = new RecordingRunOutput();
+        var comments = InactiveComments() with
+        {
+            Files = 12,
+            RemovedInline = 20,
+            RemovedBlock = 12,
+            RemovedDocumentation = 5,
+            PreservedDocumentation = 3,
+            Rationale = "lexical scanning; no project-maintained grammar",
+            Languages = new Dictionary<LanguageId, long> { [LanguageId.CSharp] = 9, [LanguageId.JavaScript] = 3 },
+        };
 
-        RunReportWriter.Write(
-            output,
-            Options(commentPlan: Plan()),
-            Bundle(),
-            Comments(new CommentStrippingSummary
-            {
-                Request = CommentStrategyRequest.Auto,
-                Strategy = CommentStripStrategy.Lexical,
-                Rationale = "lexical scanning; no project-maintained grammar",
-                Files = 12,
-                RemovedInline = 20,
-                RemovedBlock = 12,
-                RemovedDocumentation = 5,
-                PreservedDocumentation = 3,
-                Languages = new Dictionary<LanguageId, long> { [LanguageId.CSharp] = 9, [LanguageId.JavaScript] = 3 },
-            }),
-            Signatures());
+        Writer(output, Options(commentPlan: Plan()), Bundle(), comments).Write();
 
         output.Lines.Should().Equal(
             "Bundle created:  /tmp/out.md",
@@ -78,19 +72,13 @@ public class RunReportWriterTests
     public void Write_WhenNothingNeededCommentProcessing_StillStatesTheStrategy()
     {
         var output = new RecordingRunOutput();
+        var comments = InactiveComments() with
+        {
+            Request = CommentStrategyRequest.Lexical,
+            Rationale = "explicit lexical scanning requested",
+        };
 
-        RunReportWriter.Write(
-            output,
-            Options(commentPlan: Plan()),
-            new BundleRunReport(),
-            Comments(new CommentStrippingSummary
-            {
-                Request = CommentStrategyRequest.Lexical,
-                Strategy = CommentStripStrategy.Lexical,
-                Rationale = "explicit lexical scanning requested",
-                Files = 0,
-            }),
-            Signatures());
+        Writer(output, Options(commentPlan: Plan()), new BundleRunReport(), comments).Write();
 
         output.Lines.Should().Contain("  comments  strategy=lexical (requested: lexical) — explicit lexical scanning requested");
         output.Lines.Should().Contain("            no source file required comment processing");
@@ -100,27 +88,23 @@ public class RunReportWriterTests
     public void Write_WithSignatureExtraction_PrintsTheProviderAndTheCutBodies()
     {
         var output = new RecordingRunOutput();
-
-        RunReportWriter.Write(
-            output,
-            Options(signatures: true),
-            new BundleRunReport(),
-            Comments(),
-            Signatures(new SignatureExtractionSummary
+        var signatures = new SignatureExtractionSummary
+        {
+            Files = 12,
+            BodiesByKind = new Dictionary<MemberKind, long>
             {
-                Files = 12,
-                BodiesByKind = new Dictionary<MemberKind, long>
-                {
-                    [MemberKind.Method] = 30,
-                    [MemberKind.Property] = 9,
-                    [MemberKind.Accessor] = 6,
-                    [MemberKind.Constructor] = 3,
-                },
-                Providers = new Dictionary<string, long> { ["roslyn-csharp"] = 10 },
-                FilesWithoutProvider = 2,
-                ParseDiagnostics = 4,
-                FilesWithParseDiagnostics = 1,
-            }));
+                [MemberKind.Method] = 30,
+                [MemberKind.Property] = 9,
+                [MemberKind.Accessor] = 6,
+                [MemberKind.Constructor] = 3,
+            },
+            Providers = new Dictionary<string, long> { ["roslyn-csharp"] = 10 },
+            FilesWithoutProvider = 2,
+            ParseDiagnostics = 4,
+            FilesWithParseDiagnostics = 1,
+        };
+
+        Writer(output, Options(signatures: true), new BundleRunReport(), signatures: signatures).Write();
 
         output.Lines.Should().Contain("  signatures  provider=roslyn-csharp");
         output.Lines.Should().Contain(
@@ -132,7 +116,7 @@ public class RunReportWriterTests
     {
         var output = new RecordingRunOutput();
 
-        RunReportWriter.Write(output, Options(signatures: true), new BundleRunReport(), Comments(), Signatures());
+        Writer(output, Options(signatures: true), new BundleRunReport()).Write();
 
         output.Lines.Should().Contain("  signatures  provider=none");
         output.Lines.Should().Contain("              no source file required structural processing");
@@ -142,13 +126,10 @@ public class RunReportWriterTests
     public void Write_WithFallbacks_ReportsEachOneAsAWarning()
     {
         var output = new RecordingRunOutput();
+        var comments = InactiveComments() with { FallbackReasons = ["sql: lexer output does not tile the input"] };
+        var signatures = InactiveSignatures() with { FallbackReasons = ["rust: provider declined"] };
 
-        RunReportWriter.Write(
-            output,
-            Options(commentPlan: Plan(), signatures: true),
-            Bundle(),
-            Comments(Comments() with { FallbackReasons = ["sql: lexer output does not tile the input"] }),
-            Signatures(Signatures() with { FallbackReasons = ["rust: provider declined"] }));
+        Writer(output, Options(commentPlan: Plan(), signatures: true), Bundle(), comments, signatures).Write();
 
         output.Warnings.Should().Equal(
             "Warning: comment stripping did not run for sql: lexer output does not tile the input",
@@ -162,7 +143,7 @@ public class RunReportWriterTests
         var bundle = new BundleRunReport();
         bundle.Record("/tmp/out.md", 1234567, 2_500, TimeSpan.FromMilliseconds(420.5));
 
-        RunReportWriter.Write(output, Options(), bundle, Comments(), Signatures());
+        Writer(output, Options(), bundle).Write();
 
         output.Lines.Should().Contain("Files included:  1234567");
         output.Lines.Should().Contain("Elapsed time:    0.42s (420 ms)");
@@ -197,6 +178,15 @@ public class RunReportWriterTests
         act.Should().NotThrow();
     }
 
+    /// <summary>Builds the writer the way a host does, with summary data instead of live reports.</summary>
+    private static RunReportWriter Writer(
+        RecordingRunOutput output,
+        RunAppOptions options,
+        BundleRunReport bundle,
+        CommentStrippingSummary? comments = null,
+        SignatureExtractionSummary? signatures = null) =>
+        new(output, options, bundle, comments ?? InactiveComments(), signatures ?? InactiveSignatures());
+
     private static BundleRunReport Bundle()
     {
         var report = new BundleRunReport();
@@ -205,7 +195,7 @@ public class RunReportWriterTests
     }
 
     /// <summary>An inactive comment summary: the pass was requested, but no file needed it.</summary>
-    private static CommentStrippingSummary Comments(CommentStrippingSummary? summary = null) => summary ?? new()
+    private static CommentStrippingSummary InactiveComments() => new()
     {
         Request = CommentStrategyRequest.Auto,
         Strategy = CommentStripStrategy.Lexical,
@@ -214,7 +204,7 @@ public class RunReportWriterTests
     };
 
     /// <summary>An inactive structural summary: the pass was requested, but no file needed it.</summary>
-    private static SignatureExtractionSummary Signatures(SignatureExtractionSummary? summary = null) => summary ?? new();
+    private static SignatureExtractionSummary InactiveSignatures() => new();
 
     private static CommentStrippingPlan Plan() => new()
     {

@@ -29,7 +29,7 @@ public class SignatureExtractionDocumentationTests
     {
         var guide = ReadDocument("SIGNATURE_EXTRACTION.md");
 
-        foreach (var provider in MaintainedSignatureProviders.All())
+        foreach (var provider in TestSourceProcessing.Providers())
         {
             guide.Should().Contain($"`{provider.Language.Value}`", "the supported-language table must list {provider.Language}");
             guide.Should().Contain(provider.Name, "the table must name the provider that answers");

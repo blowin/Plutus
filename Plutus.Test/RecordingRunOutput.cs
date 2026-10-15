@@ -1,6 +1,6 @@
 using Plutus.Domain.Diagnostics;
 
-namespace Plutus.Test.Diagnostics;
+namespace Plutus.Test;
 
 /// <summary>
 /// An <see cref="IRunOutput"/> that keeps every message, so tests can assert on the output of a run without a

@@ -7,7 +7,7 @@ the feature is, which languages and comment forms it covers, what it guarantees,
 
 | | |
 |---|---|
-| **It is** | A language-aware *lexical scanner*: a single-character-at-a-time state machine driven by a per-language table of comment and literal forms (`Plutus.Domain.Comments.LanguageCommentSyntaxRegistry`). |
+| **It is** | A language-aware *lexical scanner*: a single-character-at-a-time state machine driven by a per-language table of comment and literal forms (`Plutus.Domain.Comments.LanguageCommentSyntaxTable`). |
 | **It is not** | A parser, an AST pass, a grammar-driven lexer, or ANTLR token-channel processing. No grammar is generated, no token stream exists, and no syntax tree is built. |
 | **It is also not** | A formatter. Stripping comments changes nothing else: whitespace, indentation, and line endings survive byte for byte. |
 

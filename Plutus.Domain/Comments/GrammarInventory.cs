@@ -46,38 +46,8 @@ public sealed class GrammarInventory
     /// </summary>
     public const string ManifestPathVariable = "PLUTUS_GRAMMAR_MANIFEST";
 
-    /// <summary>
-    /// Reads the shipped manifest, or the one named by <see cref="ManifestPathVariable"/>. An explicitly named
-    /// manifest that does not exist is reported as a load error: a typo must not look like "no grammars".
-    /// </summary>
-    public static GrammarInventory Discover(string? manifestPath = null)
-    {
-        var variable = Environment.GetEnvironmentVariable(ManifestPathVariable);
-        if (manifestPath is null && !string.IsNullOrWhiteSpace(variable))
-        {
-            return File.Exists(variable)
-                ? Load(variable)
-                : new GrammarInventory([], variable, $"'{ManifestPathVariable}' points at '{variable}', which does not exist");
-        }
-
-        var path = manifestPath ?? DefaultManifestPath;
-        return File.Exists(path) ? Load(path) : new GrammarInventory([], path, null);
-    }
-
-    public static GrammarInventory Load(string manifestPath)
-    {
-        string json;
-        try
-        {
-            json = File.ReadAllText(manifestPath);
-        }
-        catch (Exception exception)
-        {
-            return new GrammarInventory([], manifestPath, $"cannot read grammar manifest '{manifestPath}': {exception.Message}");
-        }
-
-        return Parse(json, manifestPath);
-    }
+    /// <summary>An inventory that cannot be used, with the reason. A run must not continue past this.</summary>
+    public static GrammarInventory Unusable(string? manifestPath, string? error) => new([], manifestPath, error);
 
     /// <summary>Parses a manifest and validates every entry against the filesystem.</summary>
     public static GrammarInventory Parse(string json, string? manifestPath = null)

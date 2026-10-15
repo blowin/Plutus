@@ -32,7 +32,7 @@ public class TokenBudgetTests
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
 
         var writer = new MarkdownBundleWriter(
-            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
             new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
@@ -68,7 +68,7 @@ public class TokenBudgetTests
         var languages = Substitute.For<IMarkdownLanguageProvider>();
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
-            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
             new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
@@ -103,7 +103,7 @@ public class TokenBudgetTests
         var languages = Substitute.For<IMarkdownLanguageProvider>();
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
-            detail, languages, IdentityCodeMinifier.Instance, Encoding.UTF8,
+            detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
             new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)));
         var file = CreateFile("a.txt", "AAAAA");
         var root = new ProjectNode

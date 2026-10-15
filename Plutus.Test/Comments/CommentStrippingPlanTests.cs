@@ -26,7 +26,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_AutoWithoutGrammars_ChoosesLexicalScanningAndSaysWhy()
     {
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Auto, GrammarInventory.Empty, out var plan, out var error)
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Auto, GrammarInventory.Empty, out var plan, out var error)
             .Should().BeTrue();
 
         error.Should().BeNull();
@@ -40,7 +40,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_ExplicitLexical_SaysItWasRequested()
     {
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Lexical, GrammarInventory.Empty, out var plan, out _)
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Lexical, GrammarInventory.Empty, out var plan, out _)
             .Should().BeTrue();
 
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.Lexical);
@@ -50,7 +50,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void Resolve_AntlrWithoutGrammars_IsAnError()
     {
-        var resolved = CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Antlr, GrammarInventory.Empty, out _, out var error);
+        var resolved = new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Antlr, GrammarInventory.Empty, out _, out var error);
 
         resolved.Should().BeFalse();
         error.Should().Contain("requires at least one project-maintained ANTLR grammar");
@@ -62,7 +62,7 @@ public class CommentStrippingPlanTests
     {
         var inventory = GrammarInventory.Parse(SqlGrammarManifest);
 
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Antlr, inventory, out var plan, out var error)
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Antlr, inventory, out var plan, out var error)
             .Should().BeTrue();
 
         error.Should().BeNull();
@@ -76,7 +76,7 @@ public class CommentStrippingPlanTests
     {
         var inventory = GrammarInventory.Parse(SqlGrammarManifest);
 
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Auto, inventory, out var plan, out _).Should().BeTrue();
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Auto, inventory, out var plan, out _).Should().BeTrue();
 
         plan.DefaultStrategy.Should().Be(CommentStripStrategy.Lexical);
         plan.GrammarBackedLanguages.Should().Equal(LanguageId.Sql);
@@ -90,7 +90,7 @@ public class CommentStrippingPlanTests
     {
         var inventory = GrammarInventory.Parse("{ \"grammars\": [ { \"language\": \"sql\" } ] }");
 
-        var resolved = CommentStrippingPlanner.TryResolve(request, inventory, out _, out var error);
+        var resolved = new CommentStrippingPlanner().TryResolve(request, inventory, out _, out var error);
 
         resolved.Should().BeFalse();
         error.Should().Contain("grammar inventory cannot be used");
@@ -101,7 +101,7 @@ public class CommentStrippingPlanTests
     {
         var inventory = GrammarInventory.Parse("{ not json");
 
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Lexical, inventory, out var plan, out var error)
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Lexical, inventory, out var plan, out var error)
             .Should().BeTrue();
 
         error.Should().BeNull();
@@ -111,7 +111,7 @@ public class CommentStrippingPlanTests
     [Fact]
     public void ToOptions_CarriesTheRequestedStrategyAndTheDocumentationChoice()
     {
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Lexical, GrammarInventory.Empty, out var plan, out _).Should().BeTrue();
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Lexical, GrammarInventory.Empty, out var plan, out _).Should().BeTrue();
 
         var options = plan.ToOptions(preserveDocumentationComments: true);
 
@@ -189,7 +189,7 @@ public class CommentStrippingReportTests
 
     private static CommentStrippingPlan Plan()
     {
-        CommentStrippingPlanner.TryResolve(CommentStrategyRequest.Auto, GrammarInventory.Empty, out var plan, out _).Should().BeTrue();
+        new CommentStrippingPlanner().TryResolve(CommentStrategyRequest.Auto, GrammarInventory.Empty, out var plan, out _).Should().BeTrue();
         return plan;
     }
 

@@ -321,7 +321,7 @@ public class MarkdownBundleWriterDiffTests
     }
 
     private MarkdownBundleWriter CreateWriter() =>
-        new(_detail, _languageProvider, IdentityCodeMinifier.Instance, Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        new(_detail, _languageProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
 
     private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 

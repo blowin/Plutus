@@ -4,27 +4,55 @@ namespace Plutus.Domain.Comments;
 
 /// <summary>
 /// The comment and literal forms of every language this project claims to strip comments from. A language that
-/// is absent here has no entry, and <see cref="LexicalCommentStripper"/> therefore leaves its files untouched
-/// instead of applying another language's rules to them.
+/// is absent here has no entry, and the lexical stripper therefore leaves its files untouched instead of applying
+/// another language's rules to them.
 /// <para>
-/// The table is the single source of truth for the language matrix in <c>docs/COMMENT_STRIPPING.md</c>, and it is
-/// covered by tests: every language listed here must prove that it removes its own comments and keeps
-/// comment-like text inside its literals.
+/// The table is a service, not a static: services take it as a dependency, which is what lets a test exercise the
+/// scanner against a table of its own, and the CLI/stripper composition resolve the one the container holds.
 /// </para>
 /// </summary>
-public static class LanguageCommentSyntaxRegistry
+public interface ILanguageCommentSyntaxTable
 {
-    private static readonly IReadOnlyList<LanguageCommentSyntax> Canonical;
-    private static readonly FrozenDictionary<string, LanguageCommentSyntax> ByLanguage;
-    private static readonly IReadOnlyList<string> OrderedNames;
-    private static readonly IReadOnlyList<LanguageId> OrderedLanguages;
+    /// <summary>Every accepted language, aliases included, in ordinal order.</summary>
+    IReadOnlyList<LanguageId> Languages { get; }
 
-    static LanguageCommentSyntaxRegistry()
+    /// <summary>The same identifiers as their canonical spellings, for diagnostics and documentation tests.</summary>
+    IReadOnlyList<string> LanguageNames { get; }
+
+    /// <summary>The canonical definitions only. Used by tests and by the documentation matrix.</summary>
+    IReadOnlyCollection<LanguageCommentSyntax> Definitions { get; }
+
+    bool TryGet(LanguageId language, out LanguageCommentSyntax syntax);
+
+    bool TryGet(string? language, out LanguageCommentSyntax syntax);
+
+    LanguageCommentSyntax? Find(LanguageId language);
+
+    LanguageCommentSyntax? Find(string? language);
+
+    bool IsSupported(LanguageId language);
+
+    bool IsSupported(string? language);
+}
+
+/// <summary>
+/// The maintained comment and literal forms of every supported language. The table is the single source of truth for
+/// the language matrix in <c>docs/COMMENT_STRIPPING.md</c>, and it is covered by tests: every language listed here
+/// must prove that it removes its own comments and keeps comment-like text inside its literals.
+/// </summary>
+public sealed class LanguageCommentSyntaxTable : ILanguageCommentSyntaxTable
+{
+    private readonly IReadOnlyList<LanguageCommentSyntax> _canonical;
+    private readonly FrozenDictionary<string, LanguageCommentSyntax> _byLanguage;
+    private readonly IReadOnlyList<string> _orderedNames;
+    private readonly IReadOnlyList<LanguageId> _orderedLanguages;
+
+    public LanguageCommentSyntaxTable()
     {
-        Canonical = Build();
+        _canonical = Build();
 
         var map = new Dictionary<string, LanguageCommentSyntax>(StringComparer.OrdinalIgnoreCase);
-        foreach (var syntax in Canonical)
+        foreach (var syntax in _canonical)
         {
             map[syntax.Language] = syntax;
             foreach (var alias in syntax.Aliases)
@@ -33,26 +61,23 @@ public static class LanguageCommentSyntaxRegistry
             }
         }
 
-        ByLanguage = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-        OrderedNames = map.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
-        OrderedLanguages = OrderedNames.Select(LanguageId.Parse).ToArray();
+        _byLanguage = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        _orderedNames = map.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
+        _orderedLanguages = _orderedNames.Select(LanguageId.Parse).ToArray();
     }
 
-    /// <summary>Every accepted language, aliases included, in ordinal order.</summary>
-    public static IReadOnlyList<LanguageId> Languages => OrderedLanguages;
+    public IReadOnlyList<LanguageId> Languages => _orderedLanguages;
 
-    /// <summary>The same identifiers as their canonical spellings, for diagnostics and documentation tests.</summary>
-    public static IReadOnlyList<string> LanguageNames => OrderedNames;
+    public IReadOnlyList<string> LanguageNames => _orderedNames;
 
-    /// <summary>The canonical definitions only. Used by tests and by the documentation matrix.</summary>
-    public static IReadOnlyCollection<LanguageCommentSyntax> Definitions => Canonical;
+    public IReadOnlyCollection<LanguageCommentSyntax> Definitions => _canonical;
 
-    public static bool TryGet(LanguageId language, out LanguageCommentSyntax syntax) =>
-        ByLanguage.TryGetValue(language.Value, out syntax!);
+    public bool TryGet(LanguageId language, out LanguageCommentSyntax syntax) =>
+        _byLanguage.TryGetValue(language.Value, out syntax!);
 
-    public static bool TryGet(string? language, out LanguageCommentSyntax syntax)
+    public bool TryGet(string? language, out LanguageCommentSyntax syntax)
     {
-        if (!string.IsNullOrWhiteSpace(language) && ByLanguage.TryGetValue(language, out var found))
+        if (!string.IsNullOrWhiteSpace(language) && _byLanguage.TryGetValue(language, out var found))
         {
             syntax = found;
             return true;
@@ -62,13 +87,13 @@ public static class LanguageCommentSyntaxRegistry
         return false;
     }
 
-    public static LanguageCommentSyntax? Find(LanguageId language) => TryGet(language, out var syntax) ? syntax : null;
+    public LanguageCommentSyntax? Find(LanguageId language) => TryGet(language, out var syntax) ? syntax : null;
 
-    public static LanguageCommentSyntax? Find(string? language) => TryGet(language, out var syntax) ? syntax : null;
+    public LanguageCommentSyntax? Find(string? language) => TryGet(language, out var syntax) ? syntax : null;
 
-    public static bool IsSupported(LanguageId language) => ByLanguage.ContainsKey(language.Value);
+    public bool IsSupported(LanguageId language) => _byLanguage.ContainsKey(language.Value);
 
-    public static bool IsSupported(string? language) => TryGet(language, out _);
+    public bool IsSupported(string? language) => TryGet(language, out _);
 
     // ---- table construction -------------------------------------------------------------------------------
 

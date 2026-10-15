@@ -35,13 +35,6 @@ public sealed class CompositeCodeMinifier : ICodeMinifier
     /// <summary>The languages this minifier can dispatch, which is the keys of the composition.</summary>
     public IReadOnlyCollection<LanguageId> SupportedLanguages => _minifiers.Keys;
 
-    /// <summary>
-    /// Builds the complete processor set for a run. <paramref name="context"/> decides what the processors do; with
-    /// no context they remove comments and collapse whitespace, the default of this entry point.
-    /// </summary>
-    public static CompositeCodeMinifier CreateFull(SourceProcessingContext? context = null) =>
-        new(LanguageMinifierCatalog.Create(context));
-
     public string Minify(string sourceCode, LanguageId language)
     {
         if (string.IsNullOrEmpty(sourceCode))

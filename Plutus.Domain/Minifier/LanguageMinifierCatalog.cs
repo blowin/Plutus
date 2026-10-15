@@ -1,5 +1,4 @@
 using Plutus.Domain.Comments;
-using Plutus.Domain.Minifier.Languages;
 
 namespace Plutus.Domain.Minifier;
 
@@ -7,31 +6,37 @@ namespace Plutus.Domain.Minifier;
 /// Composes the language processors of a run. Which processor answers for a language is decided by the processors
 /// themselves — each declares its languages — so there is no switch over identifiers here and adding a language is
 /// a matter of declaring it, not of editing a dispatch table.
+/// <para>
+/// The catalog is a service: it takes the comment syntax table, which is what tells it which languages still need a
+/// generic processor, and the container decides whether the maintained processors or only the discovered ones are
+/// used.
+/// </para>
 /// </summary>
-public static class LanguageMinifierCatalog
+public sealed class LanguageMinifierCatalog(ILanguageCommentSyntaxTable syntax)
 {
     /// <summary>
-    /// The processors that carry language-specific behavior beyond the syntax table. The dependency container
-    /// discovers the same set by scanning for <see cref="ILanguageMinifier"/> implementations.
+    /// The processors that carry language-specific behavior beyond the syntax table, for a caller without a
+    /// container. A run with a container gets the same set discovered by scanning for <see cref="ILanguageMinifier"/>
+    /// implementations, so nothing has to be registered here.
     /// </summary>
-    public static IReadOnlyList<ILanguageMinifier> Maintained(SourceProcessingContext? context = null) =>
+    public IReadOnlyList<ILanguageMinifier> Maintained(SourceProcessingContext? context = null) =>
     [
-        new CSharpLanguageMinifier(context),
-        new GoLanguageMinifier(context),
-        new JavaLanguageMinifier(context),
-        new JavaScriptLanguageMinifier(context),
-        new PhpLanguageMinifier(context),
-        new RustLanguageMinifier(context),
-        new SqlLanguageMinifier(context),
-        new StyleLanguageMinifier(context),
-        new HtmlLanguageMinifier(context),
+        new Languages.CSharpLanguageMinifier(context),
+        new Languages.GoLanguageMinifier(context),
+        new Languages.JavaLanguageMinifier(context),
+        new Languages.JavaScriptLanguageMinifier(context),
+        new Languages.PhpLanguageMinifier(context),
+        new Languages.RustLanguageMinifier(context),
+        new Languages.SqlLanguageMinifier(context),
+        new Languages.StyleLanguageMinifier(context),
+        new Languages.HtmlLanguageMinifier(context),
     ];
 
     /// <summary>
-    /// Fills in every language declared by the syntax registry that no maintained processor claims. The result is
+    /// Fills in every language declared by the syntax table that no maintained processor claims. The result is
     /// exactly one processor per language, and a language claimed twice is an error rather than a silent winner.
     /// </summary>
-    public static IReadOnlyList<ILanguageMinifier> Compose(
+    public IReadOnlyList<ILanguageMinifier> Compose(
         IEnumerable<ILanguageMinifier> maintained,
         SourceProcessingContext? context = null)
     {
@@ -53,11 +58,11 @@ public static class LanguageMinifierCatalog
             result.Add(minifier);
         }
 
-        foreach (var language in LanguageCommentSyntaxRegistry.Languages)
+        foreach (var language in syntax.Languages)
         {
             if (claimed.Add(language))
             {
-                result.Add(new SyntaxLanguageMinifier(language, Describe(language), effective));
+                result.Add(new Languages.SyntaxLanguageMinifier(language, Describe(language), effective));
             }
         }
 
@@ -65,14 +70,13 @@ public static class LanguageMinifierCatalog
     }
 
     /// <summary>The complete processor set: maintained processors plus a generic one for every other language.</summary>
-    public static IReadOnlyList<ILanguageMinifier> Create(SourceProcessingContext? context = null) =>
+    public IReadOnlyList<ILanguageMinifier> Create(SourceProcessingContext? context = null) =>
         Compose(Maintained(context), context);
 
     /// <summary>Description shown for a language that has no dedicated processor.</summary>
-    public static string Describe(LanguageId language)
+    public string Describe(LanguageId language)
     {
-        var syntax = LanguageCommentSyntaxRegistry.Find(language);
-        var displayName = syntax?.DisplayName ?? language.Value;
+        var displayName = syntax.Find(language)?.DisplayName ?? language.Value;
         return $"{displayName} processor (lexical comment scanner)";
     }
 }

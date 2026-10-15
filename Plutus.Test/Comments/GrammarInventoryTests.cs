@@ -29,7 +29,7 @@ public class GrammarInventoryTests
     [Fact]
     public void Discover_WithoutAManifest_ReportsAnEmptyInventoryAndWhereItLooked()
     {
-        var inventory = GrammarInventory.Discover(Path.Combine(Path.GetTempPath(), "plutus-missing", "grammar-manifest.json"));
+        var inventory = new GrammarInventoryLoader().Discover(Path.Combine(Path.GetTempPath(), "plutus-missing", "grammar-manifest.json"));
 
         inventory.HasGrammars.Should().BeFalse();
         inventory.LoadError.Should().BeNull();
@@ -92,7 +92,7 @@ public class GrammarInventoryTests
         var manifestPath = Path.Combine(directory.FullName, "grammar-manifest.json");
         File.WriteAllText(manifestPath, ValidManifest);
 
-        var inventory = GrammarInventory.Load(manifestPath);
+        var inventory = new GrammarInventoryLoader().Load(manifestPath);
 
         inventory.LoadError.Should().Contain("not next to the manifest");
         directory.Delete(recursive: true);
@@ -106,7 +106,7 @@ public class GrammarInventoryTests
         File.WriteAllText(Path.Combine(directory.FullName, "SqlLexer.g4"), "lexer grammar SqlLexer;");
         File.WriteAllText(manifestPath, ValidManifest);
 
-        var inventory = GrammarInventory.Load(manifestPath);
+        var inventory = new GrammarInventoryLoader().Load(manifestPath);
 
         inventory.LoadError.Should().BeNull();
         inventory.TryGet("SQL", out var entry).Should().BeTrue("language lookup is case-insensitive");
@@ -134,7 +134,7 @@ public class GrammarInventoryTests
         {
             Environment.SetEnvironmentVariable(GrammarInventory.ManifestPathVariable, Path.Combine(Path.GetTempPath(), "plutus-missing-manifest.json"));
 
-            var inventory = GrammarInventory.Discover();
+            var inventory = new GrammarInventoryLoader().Discover();
 
             inventory.HasGrammars.Should().BeFalse();
             inventory.LoadError.Should().Contain(GrammarInventory.ManifestPathVariable);

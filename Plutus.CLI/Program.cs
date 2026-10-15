@@ -356,7 +356,7 @@ public static class Program
             CommentStrippingPlan? commentStripPlan = null;
             if (stripComments || minify)
             {
-                if (!CommentStrippingPlanner.TryResolve(commentStrategy, GrammarInventory.Discover(), out var resolved, out var planError))
+                if (!new CommentStrippingPlanner().TryResolve(commentStrategy, new GrammarInventoryLoader().Discover(), out var resolved, out var planError))
                 {
                     output.Error(planError!);
                     return 1;
@@ -436,12 +436,7 @@ public static class Program
 
         var exitCode = await scope.ServiceProvider.GetRequiredService<BundleAppRunner>().RunAsync(options);
 
-        RunReportWriter.Write(
-            output,
-            options,
-            scope.ServiceProvider.GetRequiredService<BundleRunReport>(),
-            scope.ServiceProvider.GetRequiredService<CommentStrippingReport>().Snapshot(),
-            scope.ServiceProvider.GetRequiredService<SignatureExtractionReport>().Snapshot());
+        scope.ServiceProvider.GetRequiredService<IRunReportWriter>().Write();
 
         return exitCode;
     }

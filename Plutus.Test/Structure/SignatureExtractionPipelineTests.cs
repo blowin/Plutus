@@ -28,7 +28,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Create_WithoutAnyFlag_ReturnsTheIdentityMinifier()
     {
-        CodeMinifierFactory.Create(Options()).Should().BeSameAs(IdentityCodeMinifier.Instance);
+        TestSourceProcessing.Create(Options()).Should().BeOfType<IdentityCodeMinifier>();
     }
 
     [Fact]
@@ -88,11 +88,9 @@ public class SignatureExtractionPipelineTests
     public void Report_DescribesFilesProvidersAndStrippedKinds()
     {
         var report = new SignatureExtractionReport();
-        var context = CodeMinifierFactory.CreateContext(
-            Options(signatures: true),
-            signatureProviders: MaintainedSignatureProviders.All(),
-            signatureObserver: report);
-        var minifier = CodeMinifierFactory.Create(Options(signatures: true), context);
+        var options = Options(signatures: true);
+        var context = TestSourceProcessing.Factory(options, signatureObserver: report).CreateContext();
+        var minifier = TestSourceProcessing.Minifier(context);
 
         minifier.Minify(ClassWithComment, LanguageId.CSharp);
         minifier.Minify("def add(a, b):\n    return a + b\n", "python");
@@ -121,7 +119,7 @@ public class SignatureExtractionPipelineTests
     [Fact]
     public void Extractor_WithoutAProviderForTheLanguage_ReportsItInsteadOfGuessing()
     {
-        var extractor = new SignatureSkeletonExtractor(MaintainedSignatureProviders.All());
+        var extractor = new SignatureSkeletonExtractor(TestSourceProcessing.Providers());
 
         var result = extractor.Extract("def add(a, b):\n    return a + b\n", LanguageId.Python, SignatureExtractionOptions.Default);
 
@@ -133,17 +131,15 @@ public class SignatureExtractionPipelineTests
     }
 
     [Fact]
-    public void MaintainedProviders_MatchTheDiscoverableImplementations()
+    public void DiscoveredProviders_AreExactlyTheOnesThisBuildShips()
     {
-        // The container discovers providers by interface; the list a host without a container uses must be the same
-        // set. That the domain ships none of them is asserted by ArchitectureTests.
-        var discovered = typeof(MaintainedSignatureProviders).Assembly
-            .GetTypes()
-            .Where(type => type is { IsAbstract: false, IsInterface: false } && typeof(ISignatureSkeletonProvider).IsAssignableFrom(type))
-            .ToHashSet();
+        // Discovery is the only list of providers: scanning the infrastructure assembly is how the container finds
+        // them, and how the tests and the documentation get the same set.
+        var discovered = TestSourceProcessing.Providers();
 
-        MaintainedSignatureProviders.All().Select(provider => provider.GetType())
-            .Should().BeEquivalentTo(discovered);
+        discovered.Should().ContainSingle();
+        discovered[0].Language.Should().Be(LanguageId.CSharp);
+        discovered[0].Name.Should().Be("roslyn-csharp");
     }
 
     [Fact]

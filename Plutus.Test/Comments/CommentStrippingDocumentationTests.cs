@@ -14,7 +14,7 @@ public class CommentStrippingDocumentationTests
     {
         var guide = ReadDocument("COMMENT_STRIPPING.md");
 
-        foreach (var definition in LanguageCommentSyntaxRegistry.Definitions)
+        foreach (var definition in TestSourceProcessing.Syntax.Definitions)
         {
             guide.Should().Contain(
                 $"`{definition.Language}`",

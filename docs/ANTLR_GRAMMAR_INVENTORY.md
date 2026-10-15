@@ -96,7 +96,7 @@ The distinction between the two mechanisms is user-visible, not cosmetic:
 
 | | Lexical scanner | ANTLR token channels |
 |---|---|---|
-| Configuration | `LanguageCommentSyntaxRegistry` (hand-written table) | `.g4` grammar + manifest, generated lexer |
+| Configuration | `LanguageCommentSyntaxTable` (hand-written table, injected) | `.g4` grammar + manifest, generated lexer |
 | What decides a comment | A prefix or delimiter in the table | The grammar's token type and channel |
 | Failure mode | Reported counts (`unterminated`) plus fixtures | Tiling check failure, file returned unchanged |
 | Currently available | Yes, for the languages in [COMMENT_STRIPPING.md](COMMENT_STRIPPING.md) | No grammar is maintained |

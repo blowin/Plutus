@@ -12,7 +12,7 @@ public class CompositeCodeMinifierTests
     {
         const string source = "some   arbitrary   text";
 
-        CompositeCodeMinifier.CreateFull().Minify(source, "unknown-language")
+        Full().Minify(source, "unknown-language")
             .Should().Be(source);
     }
 
@@ -25,7 +25,7 @@ public class CompositeCodeMinifierTests
     {
         const string source = "const value = 1; // remove me";
 
-        var result = CompositeCodeMinifier.CreateFull().Minify(source, language);
+        var result = Full().Minify(source, language);
 
         result.Should().NotContain("remove me");
         result.Should().Contain("const");
@@ -36,7 +36,7 @@ public class CompositeCodeMinifierTests
     [InlineData(null)]
     public void Minify_ShouldReturnEmptyOrNullInputUnchanged(string? source)
     {
-        CompositeCodeMinifier.CreateFull().Minify(source!, "javascript").Should().Be(source);
+        Full().Minify(source!, "javascript").Should().Be(source);
     }
 
     [Fact]
@@ -53,9 +53,9 @@ public class CompositeCodeMinifierTests
     [Fact]
     public void SupportedLanguages_ShouldCoverTheSyntaxRegistryExactly()
     {
-        var catalog = CompositeCodeMinifier.CreateFull();
+        var catalog = Full();
 
-        catalog.SupportedLanguages.Should().BeEquivalentTo(LanguageCommentSyntaxRegistry.Languages);
+        catalog.SupportedLanguages.Should().BeEquivalentTo(TestSourceProcessing.Syntax.Languages);
     }
 
     [Fact]
@@ -63,11 +63,15 @@ public class CompositeCodeMinifierTests
     {
         // One processor serving several languages must dispatch by the language it was called with, not by its
         // first language: SCSS allows '//' while CSS does not.
-        var catalog = CompositeCodeMinifier.CreateFull();
+        var catalog = Full();
 
         catalog.Minify("// comment\nbody {}", LanguageId.Scss).Should().NotContain("// comment");
         catalog.Minify("// comment\nbody {}", LanguageId.Css).Should().Contain("// comment");
     }
+
+    /// <summary>The full pipeline, built the way a host builds it: maintained processors plus the generic ones.</summary>
+    private static CompositeCodeMinifier Full() =>
+        new(TestSourceProcessing.Minifiers(SourceProcessingContext.Default));
 
     private sealed class StubLanguageMinifier(LanguageId language) : ILanguageMinifier
     {
