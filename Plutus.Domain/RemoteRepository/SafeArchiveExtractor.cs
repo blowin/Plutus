@@ -161,13 +161,12 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             }
         }
 
-        return new SafeExtractionResult(root, fileCount, totalBytes, 0);
+        return new SafeExtractionResult(root, fileCount, totalBytes);
     }
 }
 
 public sealed record SafeExtractionResult(
     string ExtractedDirectory,
     int FilesExtracted,
-    long TotalExtractedBytes,
-    int EntriesRejected);
+    long TotalExtractedBytes);
 
