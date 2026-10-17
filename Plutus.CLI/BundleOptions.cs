@@ -1,6 +1,8 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Domain.RemoteRepository;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.CLI;
@@ -36,24 +38,7 @@ internal sealed class BundleOptions
     {
         Description = "Max file size to include (e.g., 512K, 1M, 2MB).",
         DefaultValueFactory = _ => FileSize.Parse("1M"),
-        CustomParser = result =>
-        {
-            if (result.Tokens.Count != 1)
-            {
-                result.AddError($"{result.Argument.Name} should have 1 file size");
-                return default;
-            }
-
-            try
-            {
-                return FileSize.Parse(result.Tokens.First().Value);
-            }
-            catch (Exception exception)
-            {
-                result.AddError(exception.Message);
-                return default;
-            }
-        }
+        CustomParser = FileSizeParser,
     };
 
     public Option<bool> NoGitignore { get; } = new("--no-gitignore")
@@ -247,14 +232,72 @@ internal sealed class BundleOptions
         Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
     };
 
+    public Option<FileSize> MaxDownloadSize { get; } = new("--max-download-size")
+    {
+        Description = "Maximum allowed download size for remote archives (e.g., 50M, 100MB).",
+        DefaultValueFactory = _ => FileSize.Parse("100M"),
+        CustomParser = FileSizeParser,
+    };
+
+    public Option<FileSize> MaxExtractedSize { get; } = new("--max-extracted-size")
+    {
+        Description = "Maximum allowed total extracted size for remote archives (e.g., 200M, 500MB). Protects against decompression bombs.",
+        DefaultValueFactory = _ => FileSize.Parse("500M"),
+        CustomParser = FileSizeParser,
+    };
+
+    public Option<int?> MaxArchiveFileCount { get; } = new("--max-archive-file-count")
+    {
+        Description = "Maximum number of files allowed in a remote archive.",
+        DefaultValueFactory = _ => 10_000,
+        Validators =
+        {
+            result =>
+            {
+                var value = result.GetValueOrDefault<int?>();
+                if (value is < 10)
+                {
+                    result.AddError($"{result.Option.Name} must be at least 10.");
+                }
+            }
+        }
+    };
+
+    public Option<int?> MaxArchiveDepth { get; } = new("--max-archive-depth")
+    {
+        Description = "Maximum nesting depth of directories in a remote archive.",
+        DefaultValueFactory = _ => 30,
+        Validators =
+        {
+            result =>
+            {
+                var value = result.GetValueOrDefault<int?>();
+                if (value is < 1)
+                {
+                    result.AddError($"{result.Option.Name} must be at least 1.");
+                }
+            }
+        }
+    };
+
+    public Option<bool> RejectDuplicateArchivePaths { get; } = new("--reject-duplicate-archive-paths")
+    {
+        Description = "Reject remote archives containing duplicate entry paths.",
+        DefaultValueFactory = _ => true
+    };
+
+    public Option<bool> RejectSymlinksInArchives { get; } = new("--reject-symlinks-in-archives")
+    {
+        Description = "Reject remote archives containing symlinks (stored as directory entries with non-zero length).",
+        DefaultValueFactory = _ => true
+    };
+
     /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
     public BundleOptions WithAliases()
     {
         Output.Aliases.Add("-o");
-        NoGitignore.Aliases.Add("--no-gitignore");
         Exclude.Aliases.Add("-e");
         Minify.Aliases.Add("-m");
-        CommentStrategy.AcceptOnlyFromAmong("auto", "lexical", "antlr");
         return this;
     }
 
@@ -290,5 +333,30 @@ internal sealed class BundleOptions
         yield return DiffFrom;
         yield return DiffTo;
         yield return DiffIncludeUntracked;
+        yield return MaxDownloadSize;
+        yield return MaxExtractedSize;
+        yield return MaxArchiveFileCount;
+        yield return MaxArchiveDepth;
+        yield return RejectDuplicateArchivePaths;
+        yield return RejectSymlinksInArchives;
+    }
+
+    private static FileSize FileSizeParser(ArgumentResult result)
+    {
+        if (result.Tokens.Count != 1)
+        {
+            result.AddError($"{result.Argument.Name} should have 1 value");
+            return default;
+        }
+
+        try
+        {
+            return FileSize.Parse(result.Tokens.First().Value);
+        }
+        catch (Exception exception)
+        {
+            result.AddError(exception.Message);
+            return default;
+        }
     }
 }

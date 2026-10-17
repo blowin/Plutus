@@ -1,8 +1,12 @@
 using Plutus.Domain;
+using Plutus.Domain.RemoteRepository;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public sealed class GitLabRemoteRepository(HttpClient client, IFileInfoDetailProvider fileInfoDetailProvider) : BaseRemoteRepository(client, fileInfoDetailProvider)
+public sealed class GitLabRemoteRepository(
+    HttpClient client,
+    IFileInfoDetailProvider fileInfoDetailProvider,
+    ArchiveExtractionOptions archiveExtractionOptions) : BaseRemoteRepository(client, fileInfoDetailProvider, archiveExtractionOptions)
 {
     protected override string PlatformPrefix => "gitlab";
 

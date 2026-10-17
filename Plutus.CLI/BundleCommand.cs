@@ -3,6 +3,7 @@ using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
+using Plutus.Domain.RemoteRepository;
 using Plutus.Infrastructure;
 
 namespace Plutus.CLI;
@@ -146,6 +147,8 @@ internal static class BundleCommand
         var diffOnly = reader.Value(options.DiffOnly);
         var diffFrom = reader.Value(options.DiffFrom);
 
+        var archiveExtraction = BuildArchiveExtractionRequest(reader, options);
+
         return new RunOptionsRequest
         {
             ProjectPath = reader.Argument(options.ProjectPath),
@@ -182,6 +185,37 @@ internal static class BundleCommand
                     IncludeUntracked = reader.Value(options.DiffIncludeUntracked),
                 }
                 : null,
+            ArchiveExtraction = archiveExtraction,
+        };
+    }
+
+    /// <summary>Builds the archive extraction request from CLI flags.</summary>
+    private static ArchiveExtractionOptions? BuildArchiveExtractionRequest(
+        CommandLineReader reader,
+        BundleOptions options)
+    {
+        var maxDownloadSize = reader.ExplicitValue(options.MaxDownloadSize);
+        var maxExtractedSize = reader.ExplicitValue(options.MaxExtractedSize);
+        var maxFileCount = reader.ExplicitNullableValue(options.MaxArchiveFileCount);
+        var maxDepth = reader.ExplicitNullableValue(options.MaxArchiveDepth);
+        var rejectDuplicates = reader.ExplicitValue(options.RejectDuplicateArchivePaths);
+        var rejectSymlinks = reader.ExplicitValue(options.RejectSymlinksInArchives);
+
+        // If nothing was explicitly set, return null so the profile/default path takes over.
+        if (maxDownloadSize is null && maxExtractedSize is null && maxFileCount is null &&
+            maxDepth is null && rejectDuplicates is null && rejectSymlinks is null)
+        {
+            return null;
+        }
+
+        return new ArchiveExtractionOptions
+        {
+            MaxDownloadSize = maxDownloadSize,
+            MaxExtractedSize = maxExtractedSize,
+            MaxFileCount = maxFileCount,
+            MaxDepth = maxDepth,
+            RejectDuplicatePaths = rejectDuplicates,
+            RejectSymlinks = rejectSymlinks,
         };
     }
 

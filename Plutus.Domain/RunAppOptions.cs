@@ -2,6 +2,7 @@ using System.Text;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.RemoteRepository;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -73,4 +74,7 @@ public record RunAppOptions
     /// the "review the change, not the source" mode selected by <c>--diff-only</c>.
     /// </summary>
     public bool IncludeFileContents { get; init; } = true;
+
+    /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
+    public ArchiveExtractionOptions ArchiveExtraction { get; init; } = ArchiveExtractionOptions.Default;
 }

@@ -10,4 +10,23 @@ public readonly record struct SafeExtractionOptions()
     public bool RejectSymlinks { get; init; } = true;
 
     public static SafeExtractionOptions Default { get; } = new();
+
+    /// <summary>Creates a SafeExtractionOptions from ArchiveExtractionOptions, using defaults for null values.</summary>
+    public static SafeExtractionOptions From(ArchiveExtractionOptions source)
+    {
+        var defaults = ArchiveExtractionOptions.Default;
+        // Extract non-nullable values from defaults (the properties are nullable but defaults are always set)
+        var defaultMaxDownloadSize = defaults.MaxDownloadSize!.Value;
+        var defaultMaxExtractedSize = defaults.MaxExtractedSize!.Value;
+
+        return new SafeExtractionOptions
+        {
+            MaxDownloadSize = source.MaxDownloadSize ?? defaultMaxDownloadSize,
+            MaxExtractedSize = source.MaxExtractedSize ?? defaultMaxExtractedSize,
+            MaxFileCount = source.MaxFileCount ?? defaults.MaxFileCount.GetValueOrDefault(),
+            MaxDepth = source.MaxDepth ?? defaults.MaxDepth.GetValueOrDefault(),
+            RejectDuplicatePaths = source.RejectDuplicatePaths ?? defaults.RejectDuplicatePaths.GetValueOrDefault(),
+            RejectSymlinks = source.RejectSymlinks ?? defaults.RejectSymlinks.GetValueOrDefault(),
+        };
+    }
 }

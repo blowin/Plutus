@@ -1,4 +1,5 @@
 using Plutus.Domain.Comments;
+using Plutus.Domain.RemoteRepository;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -68,6 +69,9 @@ public sealed record RunOptionsRequest
 
     /// <summary>The diff scope asked for on the command line, if any.</summary>
     public DiffRequest? Diff { get; init; }
+
+    /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
+    public ArchiveExtractionOptions? ArchiveExtraction { get; init; }
 }
 
 /// <summary>A diff scope as requested, before the resolved limits are attached to it.</summary>

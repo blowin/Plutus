@@ -25,6 +25,13 @@ internal sealed class CommandLineReader(ParseResult parseResult)
     public T? ExplicitValue<T>(Option<T> option) where T : struct =>
         parseResult.GetResult(option) is { Implicit: false } ? parseResult.GetValue(option) : null;
 
+    /// <summary>
+    /// The same for a nullable value-typed option (e.g., <c>FileSize?</c>, <c>int?</c>),
+    /// returning <c>null</c> when only the default filled it in.
+    /// </summary>
+    public T? ExplicitNullableValue<T>(Option<T?> option) where T : struct =>
+        parseResult.GetResult(option) is { Implicit: false } ? parseResult.GetValue(option) : null;
+
     /// <summary>The value of an option that is <c>false</c> by default and means "off" when typed.</summary>
     public bool? ExplicitInverse(Option<bool> option) =>
         ExplicitValue(option) is { } value ? !value : null;

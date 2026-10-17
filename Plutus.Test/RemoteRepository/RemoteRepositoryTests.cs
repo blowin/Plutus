@@ -22,7 +22,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         var downloadedPath = await repository.DownloadAsync(path, branch, commit);
 
@@ -40,7 +40,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitLabRemoteRepository(client, RealProvider);
+        using var repository = new GitLabRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         await repository.DownloadAsync(path, branch, commit);
 
@@ -55,7 +55,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new BitbucketRemoteRepository(client, RealProvider);
+        using var repository = new BitbucketRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         await repository.DownloadAsync(path, branch, commit);
 
@@ -70,7 +70,7 @@ public class RemoteRepositoryTests
     public void GitHub_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -82,7 +82,7 @@ public class RemoteRepositoryTests
     public void GitLab_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new GitLabRemoteRepository(client, RealProvider);
+        using var repository = new GitLabRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -94,7 +94,7 @@ public class RemoteRepositoryTests
     public void Bitbucket_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new BitbucketRemoteRepository(client, RealProvider);
+        using var repository = new BitbucketRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -104,7 +104,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo", "main", "a1b2c3d");
 
@@ -120,7 +120,7 @@ public class RemoteRepositoryTests
     public async Task GitHub_DownloadAsync_WhenRepositoryUrlIsInvalid_ShouldThrow(string path)
     {
         using var client = new HttpClient(new ArchiveHttpHandler());
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         Func<Task> act = async () => await repository.DownloadAsync(path);
 
@@ -132,7 +132,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new MaliciousArchiveHttpHandler(CreatePathTraversalArchive);
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -147,7 +147,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new MaliciousArchiveHttpHandler(() => CreateRootedArchive(rootedEntry));
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -160,7 +160,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         var downloadedPath = await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -176,7 +176,7 @@ public class RemoteRepositoryTests
 
         using var handler = new MaliciousArchiveHttpHandler(CreatePathTraversalArchive);
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, RealProvider);
+        using var repository = new GitHubRemoteRepository(client, RealProvider, ArchiveExtractionOptions.Default);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 
