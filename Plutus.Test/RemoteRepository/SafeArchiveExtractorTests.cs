@@ -384,7 +384,6 @@ public class SafeArchiveExtractorTests
     [Fact]
     public async Task ExtractAsync_WhenFilenameContainsDoubleDot_ShouldSucceed()
     {
-        // BUG-02: "version..release.txt" was previously rejected by Contains("..")
         var mock = new MockFileInfoDetailProvider();
         var extractor = new SafeArchiveExtractor(mock);
 
@@ -574,7 +573,6 @@ public class SafeArchiveExtractorTests
     [Fact]
     public async Task ExtractAsync_WhenTargetDirectoryHasTrailingSeparator_ShouldSucceed()
     {
-        // BUG-01: Trailing separator in targetDirectory was breaking path resolution
         var mock = new MockFileInfoDetailProvider();
         var extractor = new SafeArchiveExtractor(mock);
 
@@ -1500,6 +1498,70 @@ public class SafeArchiveExtractorTests
         result.FilesExtracted.Should().Be(1);
         // Stream should still be open and readable after extraction
         memory.Position.Should().BeGreaterOrEqualTo(0);
+    }
+
+    [Fact]
+    public async Task ExtractAsync_WhenDuplicatePathsCaseInsensitiveOnWindows_ShouldThrow()
+    {
+        // On Windows, FS is case-insensitive: file.txt == FILE.TXT
+        if (!OperatingSystem.IsWindows())
+        {
+            // On non-Windows, case-sensitive FS — should succeed
+            var mockNonWin = new MockFileInfoDetailProvider();
+            var extractorNonWin = new SafeArchiveExtractor(mockNonWin);
+
+            using var memoryNonWin = new MemoryStream();
+            await using (var archive = new ZipArchive(memoryNonWin, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                var entry1 = archive.CreateEntry("file.txt");
+                await using (var w1 = new StreamWriter(await entry1.OpenAsync()))
+                {
+                    await w1.WriteAsync("first");
+                }
+
+                var entry2 = archive.CreateEntry("FILE.TXT");
+                await using (var w2 = new StreamWriter(await entry2.OpenAsync()))
+                {
+                    await w2.WriteAsync("second");
+                }
+            }
+            memoryNonWin.Seek(0, SeekOrigin.Begin);
+
+            var targetDirNonWin = "C:\\test_extract_root";
+
+            var result = await extractorNonWin.ExtractAsync(memoryNonWin, targetDirNonWin, SafeExtractionOptions.Default);
+
+            result.FilesExtracted.Should().Be(2);
+            return;
+        }
+
+        // Windows: case-insensitive FS — duplicate detected
+        var mockWin = new MockFileInfoDetailProvider();
+        var extractorWin = new SafeArchiveExtractor(mockWin);
+
+        using var memoryWin = new MemoryStream();
+        await using (var archive = new ZipArchive(memoryWin, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry1 = archive.CreateEntry("file.txt");
+            await using (var w1 = new StreamWriter(await entry1.OpenAsync()))
+            {
+                await w1.WriteAsync("first");
+            }
+
+            var entry2 = archive.CreateEntry("FILE.TXT");
+            await using (var w2 = new StreamWriter(await entry2.OpenAsync()))
+            {
+                await w2.WriteAsync("second");
+            }
+        }
+        memoryWin.Seek(0, SeekOrigin.Begin);
+
+        var targetDirWin = "C:\\test_extract_root";
+
+        Func<Task> act = async () => await extractorWin.ExtractAsync(memoryWin, targetDirWin, SafeExtractionOptions.Default);
+
+        var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
+        ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.DuplicatePath);
     }
 }
 

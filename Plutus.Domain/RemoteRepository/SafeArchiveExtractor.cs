@@ -30,7 +30,10 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
 
         fileSystem.CreateDirectory(root);
 
-        var extractedFiles = new HashSet<string>(StringComparer.Ordinal);
+        var extractedFiles = new HashSet<string>(
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
         long totalBytes = 0;
         int fileCount = 0;
 
