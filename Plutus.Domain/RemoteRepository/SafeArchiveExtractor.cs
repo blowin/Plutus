@@ -20,6 +20,14 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
     {
         string root = Path.GetFullPath(targetDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+        // MaxDownloadSize: reject oversized archives before processing
+        if (archiveStream.CanSeek && archiveStream.Length > options.MaxDownloadSize.Bytes)
+        {
+            throw new ArchiveExtractionException(
+                $"Archive size ({archiveStream.Length:N0} bytes) exceeds download limit of {options.MaxDownloadSize}.",
+                ArchiveExtractionErrorKind.DownloadSizeLimitExceeded);
+        }
+
         fileSystem.CreateDirectory(root);
 
         var extractedFiles = new HashSet<string>(StringComparer.Ordinal);
@@ -102,9 +110,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
                     ArchiveExtractionErrorKind.SymlinkEscape, entryFullName);
             }
 
-            // Depth check: count directory separators in the relative path
-            string relativePath = entryFullPath.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar);
-            int depth = relativePath.Count(c => c == Path.DirectorySeparatorChar);
+            // Depth check: ZIP can use '/' or '\', count both for cross-platform reliability
+            int depth = entryFullName.Count(c => c == '/' || c == Path.DirectorySeparatorChar);
             if (depth > options.MaxDepth)
             {
                 throw new ArchiveExtractionException(
@@ -149,7 +156,6 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             }
 
             // Extract the file through IFileInfoDetailProvider
-            long actualBytesRead;
             try
             {
                 var fileInfo = fileSystem.CreateFile(entryFullPath);
@@ -159,7 +165,7 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
                 await using var writer = fileSystem.CreateWriterForFile(fileInfo);
 
                 // Uses ArrayPool.Shared like Stream.CopyToAsync internally, but with per-chunk size enforcement.
-                actualBytesRead = 0;
+                long actualBytesRead = 0;
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
                 try
                 {
@@ -197,7 +203,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             {
                 throw new ArchiveExtractionException(
                     $"Failed to extract entry '{entryFullName}': {ex.Message}",
-                    ArchiveExtractionErrorKind.MalformedArchive, entryFullName);
+                    ArchiveExtractionErrorKind.MalformedArchive, entryFullName,
+                    ex);
             }
 
             // Extracted size check after each file (uses actual bytes, not header)
@@ -214,13 +221,18 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
 
     private static bool ContainsPathTraversal(string path)
     {
-        string separator = Path.DirectorySeparatorChar.ToString();
-        string altSeparator = Path.AltDirectorySeparatorChar.ToString();
-        string[] segments = path.Replace(altSeparator, separator).Split(separator, StringSplitOptions.RemoveEmptyEntries);
+        // ZIP внутри архива ВСЕГДА использует '/' как разделитель
+        string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
         foreach (string segment in segments)
         {
-            if (segment == "..")
+            if (segment == ".." || segment == ".")
+            {
+                return true;
+            }
+
+            // Защита от обхода через пробелы/точки на конце (Windows обрезает) и ADS (NTFS)
+            if (segment.EndsWith(' ') || segment.EndsWith('.') || segment.Contains(':'))
             {
                 return true;
             }
@@ -231,17 +243,13 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
 
     private static bool IsSymlink(ZipArchiveEntry entry)
     {
-        if (entry.IsEncrypted || entry.ExternalAttributes != 0)
-        {
-            // Check Unix file attributes (stored in the high word of ExternalAttributes)
-            int unixAttributes = entry.ExternalAttributes >> 16;
-            // S_ISLNK = 0o120000 = 0x8000
-            if ((unixAttributes & 0xF000) == 0xA000)
-            {
-                return true;
-            }
-        }
-        return false;
+#if NET8_0_OR_GREATER
+        // S_ISLNK = 0xA000 (Unix symlink mask)
+        int unixAttributes = entry.ExternalAttributes >> 16;
+        return (unixAttributes & 0xF000) == 0xA000;
+#else
+    return false;
+#endif
     }
 }
 

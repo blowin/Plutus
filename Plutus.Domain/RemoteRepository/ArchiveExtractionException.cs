@@ -15,8 +15,9 @@ public enum ArchiveExtractionErrorKind
 public sealed class ArchiveExtractionException(
     string message,
     ArchiveExtractionErrorKind errorKind,
-    string? entryPath = null)
-    : Exception(message)
+    string? entryPath = null,
+    Exception? innerException = null)
+    : Exception(message, innerException)
 {
     public ArchiveExtractionErrorKind ErrorKind { get; } = errorKind;
     public string? EntryPath { get; } = entryPath;
