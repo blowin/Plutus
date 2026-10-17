@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Compression;
 
 namespace Plutus.Domain.RemoteRepository;
@@ -139,7 +140,16 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
                 }
             }
 
+            // Real size enforcement happens during extraction via actual read bytes.
+            if (entry.Length > options.MaxExtractedSize.Bytes)
+            {
+                throw new ArchiveExtractionException(
+                    $"Entry '{entryFullName}' declared size ({entry.Length:N0} bytes) exceeds limit of {options.MaxExtractedSize}.",
+                    ArchiveExtractionErrorKind.SizeLimitExceeded, entryFullName);
+            }
+
             // Extract the file through IFileInfoDetailProvider
+            long actualBytesRead;
             try
             {
                 var fileInfo = fileSystem.CreateFile(entryFullPath);
@@ -147,10 +157,36 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
 
                 await using var entryStream = await entry.OpenAsync(cancellationToken);
                 await using var writer = fileSystem.CreateWriterForFile(fileInfo);
-                await entryStream.CopyToAsync(writer.BaseStream, 81920, cancellationToken);
-                await writer.FlushAsync(cancellationToken);
 
-                totalBytes += entry.Length;
+                // Uses ArrayPool.Shared like Stream.CopyToAsync internally, but with per-chunk size enforcement.
+                actualBytesRead = 0;
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
+                try
+                {
+                    int bytesRead;
+                    while ((bytesRead = await entryStream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await writer.BaseStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                        actualBytesRead += bytesRead;
+
+                        // Per-chunk size check to prevent Zip Bomb expansion attacks
+                        if (actualBytesRead > options.MaxExtractedSize.Bytes)
+                        {
+                            throw new ArchiveExtractionException(
+                                $"Entry '{entryFullName}' expanded to {actualBytesRead:N0} bytes, " +
+                                $"exceeding limit of {options.MaxExtractedSize}.",
+                                ArchiveExtractionErrorKind.SizeLimitExceeded, entryFullName);
+                        }
+                    }
+                    await writer.FlushAsync(cancellationToken);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+
+                totalBytes += actualBytesRead;
                 fileCount++;
             }
             catch (ArchiveExtractionException)
@@ -164,7 +200,7 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
                     ArchiveExtractionErrorKind.MalformedArchive, entryFullName);
             }
 
-            // Extracted size check after each file
+            // Extracted size check after each file (uses actual bytes, not header)
             if (totalBytes > options.MaxExtractedSize.Bytes)
             {
                 throw new ArchiveExtractionException(

@@ -823,6 +823,118 @@ public class SafeArchiveExtractorUncoveredTests
 
     #endregion
 
+    #region SEC-01: Zip Bomb protection (actual bytes, not header)
+
+    [Fact]
+    public async Task ExtractAsync_WhenEntryDeclaredSizeExceedsLimit_ShouldThrowBeforeExtraction()
+    {
+        // SEC-01: Pre-check on entry.Length (header) should reject oversized entries immediately
+        var mock = new MockFileInfoDetailProvider();
+        var extractor = new SafeArchiveExtractor(mock);
+
+        using var memory = new MemoryStream();
+        await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("big-file.txt");
+            await using var writer = new StreamWriter(await entry.OpenAsync());
+            await writer.WriteAsync(new string('x', 100)); // Only 100 bytes actual
+        }
+        memory.Seek(0, SeekOrigin.Begin);
+
+        var targetDir = "C:\\test_extract_root";
+        var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(50) };
+
+        Func<Task> act = async () => await extractor.ExtractAsync(memory, targetDir, options);
+
+        var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
+        ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.SizeLimitExceeded);
+    }
+
+    [Fact]
+    public async Task ExtractAsync_WhenActualBytesExceedLimit_DuringRead_ShouldThrow()
+    {
+        // SEC-03: Per-chunk size check during decompression
+        var mock = new MockFileInfoDetailProvider();
+        var extractor = new SafeArchiveExtractor(mock);
+
+        using var memory = new MemoryStream();
+        await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("file.txt");
+            await using var writer = new StreamWriter(await entry.OpenAsync());
+            await writer.WriteAsync(new string('x', 200)); // 200 bytes
+        }
+        memory.Seek(0, SeekOrigin.Begin);
+
+        var targetDir = "C:\\test_extract_root";
+        var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(150) };
+
+        Func<Task> act = async () => await extractor.ExtractAsync(memory, targetDir, options);
+
+        var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
+        ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.SizeLimitExceeded);
+        ex.Which.EntryPath.Should().Be("file.txt");
+    }
+
+    [Fact]
+    public async Task ExtractAsync_WhenMultipleFiles_TotalUsesActualBytes_ShouldSucceed()
+    {
+        // Verify totalBytes uses actual read bytes, not entry.Length
+        var mock = new MockFileInfoDetailProvider();
+        var extractor = new SafeArchiveExtractor(mock);
+
+        using var memory = new MemoryStream();
+        await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry1 = archive.CreateEntry("file1.txt");
+            await using (var w1 = new StreamWriter(await entry1.OpenAsync()))
+                await w1.WriteAsync("12345"); // 5 bytes
+
+            var entry2 = archive.CreateEntry("subdir/file2.txt");
+            await using (var w2 = new StreamWriter(await entry2.OpenAsync()))
+                await w2.WriteAsync("1234567890"); // 10 bytes
+        }
+        memory.Seek(0, SeekOrigin.Begin);
+
+        var targetDir = "C:\\test_extract_root";
+
+        var result = await extractor.ExtractAsync(memory, targetDir, SafeExtractionOptions.Default);
+
+        result.TotalExtractedBytes.Should().Be(15); // Actual bytes, not compressed size
+        result.FilesExtracted.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ExtractAsync_WhenTotalActualBytesExceedLimit_ShouldThrow()
+    {
+        // SEC-01: Total size check uses actual bytes across all files
+        var mock = new MockFileInfoDetailProvider();
+        var extractor = new SafeArchiveExtractor(mock);
+
+        using var memory = new MemoryStream();
+        await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry1 = archive.CreateEntry("file1.txt");
+            await using (var w1 = new StreamWriter(await entry1.OpenAsync()))
+                await w1.WriteAsync(new string('x', 80));
+
+            var entry2 = archive.CreateEntry("file2.txt");
+            await using (var w2 = new StreamWriter(await entry2.OpenAsync()))
+                await w2.WriteAsync(new string('x', 80));
+        }
+        memory.Seek(0, SeekOrigin.Begin);
+
+        var targetDir = "C:\\test_extract_root";
+        var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(100) };
+
+        Func<Task> act = async () => await extractor.ExtractAsync(memory, targetDir, options);
+
+        var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
+        ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.SizeLimitExceeded);
+    }
+
+    #endregion
+
     #region Stream handling
 
     [Fact]
