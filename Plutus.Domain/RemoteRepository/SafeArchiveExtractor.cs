@@ -17,7 +17,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
         SafeExtractionOptions options,
         CancellationToken cancellationToken = default)
     {
-        string root = Path.GetFullPath(targetDirectory);
+        string root = Path.GetFullPath(targetDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
         fileSystem.CreateDirectory(root);
 
         var extractedFiles = new HashSet<string>(StringComparer.Ordinal);
@@ -36,59 +37,68 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
                 ArchiveExtractionErrorKind.MalformedArchive);
         }
 
+        await using var archiveDisposable = archive;
+
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            string entryName = entry.FullName;
+            string entryFullName = entry.FullName;
 
             // Skip empty entries (zip root entries)
-            if (string.IsNullOrEmpty(entryName))
+            if (string.IsNullOrEmpty(entryFullName))
             {
                 continue;
             }
 
             // Skip directory-only entries (end with '/') — created implicitly by file extraction
-            if (entryName.EndsWith("/", StringComparison.Ordinal))
+            if (entryFullName.EndsWith("/", StringComparison.Ordinal))
             {
                 continue;
             }
 
             // Reject absolute paths (Windows and Unix)
-            if (Path.IsPathRooted(entryName))
+            if (Path.IsPathRooted(entryFullName))
             {
                 throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' has an absolute path which is not allowed.",
-                    ArchiveExtractionErrorKind.PathTraversal, entryName);
-            }
-
-            // Reject entries containing ".." path traversal sequences
-            if (entryName.Contains(".."))
-            {
-                throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' contains path traversal sequence '..'.",
-                    ArchiveExtractionErrorKind.PathTraversal, entryName);
+                    $"Entry '{entryFullName}' has an absolute path which is not allowed.",
+                    ArchiveExtractionErrorKind.PathTraversal, entryFullName);
             }
 
             // Resolve the full target path and verify it stays within root
-            string entryFullPath = Path.GetFullPath(Path.Combine(root, entryName));
+            string entryFullPath;
+            try
+            {
+                entryFullPath = Path.GetFullPath(Path.Combine(root, entryFullName));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                throw new ArchiveExtractionException(
+                    $"Failed to resolve path for entry '{entryFullName}': {ex.Message}",
+                    ArchiveExtractionErrorKind.PathTraversal, entryFullName);
+            }
+
+            if (ContainsPathTraversal(entryFullName))
+            {
+                throw new ArchiveExtractionException(
+                    $"Entry '{entryFullName}' contains path traversal sequence.",
+                    ArchiveExtractionErrorKind.PathTraversal, entryFullName);
+            }
 
             string separator = Path.DirectorySeparatorChar.ToString();
             if (!entryFullPath.StartsWith(root + separator) && entryFullPath != root)
             {
                 throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' would extract outside the target directory. " +
+                    $"Entry '{entryFullName}' would extract outside the target directory. " +
                     $"Resolved to '{entryFullPath}'.",
-                    ArchiveExtractionErrorKind.PathTraversal, entryName);
+                    ArchiveExtractionErrorKind.PathTraversal, entryFullName);
             }
 
-            // Symlink detection: on some platforms, symlinks are stored as directory entries
-            // with non-zero length. Reject them for safety.
-            if (options.RejectSymlinks && entry.Name.EndsWith("/", StringComparison.Ordinal) && entry.Length > 0)
+            if (options.RejectSymlinks && IsSymlink(entry))
             {
                 throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' appears to be a symlink (non-zero length directory entry).",
-                    ArchiveExtractionErrorKind.SymlinkEscape, entryName);
+                    $"Entry '{entryFullName}' appears to be a symlink.",
+                    ArchiveExtractionErrorKind.SymlinkEscape, entryFullName);
             }
 
             // Depth check: count directory separators in the relative path
@@ -97,8 +107,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             if (depth > options.MaxDepth)
             {
                 throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' exceeds maximum depth of {options.MaxDepth} (actual: {depth}).",
-                    ArchiveExtractionErrorKind.DepthLimitExceeded, entryName);
+                    $"Entry '{entryFullName}' exceeds maximum depth of {options.MaxDepth} (actual: {depth}).",
+                    ArchiveExtractionErrorKind.DepthLimitExceeded, entryFullName);
             }
 
             // File count check
@@ -110,21 +120,23 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             }
 
             // Duplicate path check (ordinal comparison catches exact duplicates)
-            if (options.RejectDuplicatePaths && !extractedFiles.Add(entryName))
+            if (options.RejectDuplicatePaths && !extractedFiles.Add(entryFullName))
             {
                 throw new ArchiveExtractionException(
-                    $"Duplicate entry path: '{entryName}'.",
-                    ArchiveExtractionErrorKind.DuplicatePath, entryName);
+                    $"Duplicate entry path: '{entryFullName}'.",
+                    ArchiveExtractionErrorKind.DuplicatePath, entryFullName);
             }
 
-            // Windows reserved device names (secondary defense)
-            string baseName = Path.GetFileNameWithoutExtension(entryName);
-            if (!string.IsNullOrEmpty(baseName) &&
-                WindowsReservedNames.Contains(baseName, StringComparer.OrdinalIgnoreCase))
+            if (OperatingSystem.IsWindows())
             {
-                throw new ArchiveExtractionException(
-                    $"Entry '{entryName}' uses a reserved Windows device name '{baseName}'.",
-                    ArchiveExtractionErrorKind.PathTraversal, entryName);
+                string baseName = Path.GetFileNameWithoutExtension(entryFullName);
+                if (!string.IsNullOrEmpty(baseName) &&
+                    WindowsReservedNames.Contains(baseName, StringComparer.OrdinalIgnoreCase))
+                {
+                    throw new ArchiveExtractionException(
+                        $"Entry '{entryFullName}' uses a reserved Windows device name '{baseName}'.",
+                        ArchiveExtractionErrorKind.PathTraversal, entryFullName);
+                }
             }
 
             // Extract the file through IFileInfoDetailProvider
@@ -148,8 +160,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 throw new ArchiveExtractionException(
-                    $"Failed to extract entry '{entryName}': {ex.Message}",
-                    ArchiveExtractionErrorKind.MalformedArchive, entryName);
+                    $"Failed to extract entry '{entryFullName}': {ex.Message}",
+                    ArchiveExtractionErrorKind.MalformedArchive, entryFullName);
             }
 
             // Extracted size check after each file
@@ -162,6 +174,38 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
         }
 
         return new SafeExtractionResult(root, fileCount, totalBytes);
+    }
+
+    private static bool ContainsPathTraversal(string path)
+    {
+        string separator = Path.DirectorySeparatorChar.ToString();
+        string altSeparator = Path.AltDirectorySeparatorChar.ToString();
+        string[] segments = path.Replace(altSeparator, separator).Split(separator, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string segment in segments)
+        {
+            if (segment == "..")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSymlink(ZipArchiveEntry entry)
+    {
+        if (entry.IsEncrypted || entry.ExternalAttributes != 0)
+        {
+            // Check Unix file attributes (stored in the high word of ExternalAttributes)
+            int unixAttributes = entry.ExternalAttributes >> 16;
+            // S_ISLNK = 0o120000 = 0x8000
+            if ((unixAttributes & 0xF000) == 0xA000)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
