@@ -1,6 +1,7 @@
 using System.Text;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.RemoteRepository;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -97,6 +98,7 @@ public sealed class RunOptionsResolver
             Diff = diff,
             IncludeFileContents = ResolveValue("includeFileContents", request.IncludeFileContents, profile?.IncludeFileContents, true, provenance),
             Profile = provenance.Build(),
+            ArchiveExtraction = ResolveArchiveExtraction(request.ArchiveExtraction, profile, provenance),
         };
     }
 
@@ -267,6 +269,115 @@ public sealed class RunOptionsResolver
         }
 
         return [];
+    }
+
+    private static ArchiveExtractionOptions ResolveArchiveExtraction(
+        ArchiveExtractionOptions? fromCommandLine,
+        PlutusProfile? profile,
+        Provenance provenance)
+    {
+        // Resolve each field: CLI wins over profile wins over default
+        var defaultOptions = ArchiveExtractionOptions.Default;
+
+        var maxDownloadSize = ResolveFileSize(
+            "maxDownloadSize",
+            fromCommandLine?.MaxDownloadSize,
+            profile?.MaxDownloadSize,
+            defaultOptions.MaxDownloadSize!,
+            provenance);
+
+        var maxExtractedSize = ResolveFileSize(
+            "maxExtractedSize",
+            fromCommandLine?.MaxExtractedSize,
+            profile?.MaxExtractedSize,
+            defaultOptions.MaxExtractedSize!,
+            provenance);
+
+        var maxFileCount = ResolveNullableValue(
+            "maxFileCount",
+            fromCommandLine?.MaxFileCount,
+            profile?.MaxArchiveFileCount,
+            defaultOptions.MaxFileCount.GetValueOrDefault(),
+            provenance);
+
+        var maxDepth = ResolveNullableValue(
+            "maxDepth",
+            fromCommandLine?.MaxDepth,
+            profile?.MaxArchiveDepth,
+            defaultOptions.MaxDepth.GetValueOrDefault(),
+            provenance);
+
+        var rejectDuplicatePaths = ResolveNullableValue(
+            "rejectDuplicatePaths",
+            fromCommandLine?.RejectDuplicatePaths,
+            profile?.RejectDuplicateArchivePaths,
+            defaultOptions.RejectDuplicatePaths.GetValueOrDefault(),
+            provenance);
+
+        var rejectSymlinks = ResolveNullableValue(
+            "rejectSymlinks",
+            fromCommandLine?.RejectSymlinks,
+            profile?.RejectSymlinksInArchives,
+            defaultOptions.RejectSymlinks.GetValueOrDefault(),
+            provenance);
+
+        return new ArchiveExtractionOptions
+        {
+            MaxDownloadSize = maxDownloadSize,
+            MaxExtractedSize = maxExtractedSize,
+            MaxFileCount = maxFileCount,
+            MaxDepth = maxDepth,
+            RejectDuplicatePaths = rejectDuplicatePaths,
+            RejectSymlinks = rejectSymlinks,
+        };
+    }
+
+    private static FileSize? ResolveFileSize(
+        string key,
+        FileSize? fromCommandLine,
+        string? fromProfile,
+        FileSize? fallback,
+        Provenance provenance)
+    {
+        if (fromCommandLine is { } explicitValue)
+        {
+            provenance.OverrideIfStated(key, !string.IsNullOrWhiteSpace(fromProfile));
+            return explicitValue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fromProfile))
+        {
+            try
+            {
+                var parsed = FileSize.Parse(fromProfile);
+                provenance.Apply(key, differsFromDefault: fallback is null || parsed != fallback);
+                return parsed;
+            }
+            catch (Exception exception)
+            {
+                throw new ConfigurationException($"profile '{provenance.Path}': 'maxDownloadSize' / 'maxExtractedSize' {exception.Message}");
+            }
+        }
+
+        return null;
+    }
+
+    private static T? ResolveNullableValue<T>(string key, T? fromCommandLine, T? fromProfile, T fallback, Provenance provenance)
+        where T : struct
+    {
+        if (fromCommandLine is { } explicitValue)
+        {
+            provenance.OverrideIfStated(key, fromProfile is not null);
+            return explicitValue;
+        }
+
+        if (fromProfile is { } profileValue)
+        {
+            provenance.Apply(key, differsFromDefault: !EqualityComparer<T>.Default.Equals(profileValue, fallback));
+            return profileValue;
+        }
+
+        return null;
     }
 
     /// <summary>Collects which profile keys were used, and which an explicit flag replaced.</summary>

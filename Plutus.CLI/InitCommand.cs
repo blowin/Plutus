@@ -1,5 +1,4 @@
 using System.CommandLine;
-using Plutus.Domain;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure;

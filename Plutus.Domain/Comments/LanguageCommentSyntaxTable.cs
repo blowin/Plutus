@@ -45,7 +45,6 @@ public sealed class LanguageCommentSyntaxTable : ILanguageCommentSyntaxTable
     private readonly IReadOnlyList<LanguageCommentSyntax> _canonical;
     private readonly FrozenDictionary<string, LanguageCommentSyntax> _byLanguage;
     private readonly IReadOnlyList<string> _orderedNames;
-    private readonly IReadOnlyList<LanguageId> _orderedLanguages;
 
     public LanguageCommentSyntaxTable()
     {
@@ -63,10 +62,10 @@ public sealed class LanguageCommentSyntaxTable : ILanguageCommentSyntaxTable
 
         _byLanguage = map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
         _orderedNames = map.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
-        _orderedLanguages = _orderedNames.Select(LanguageId.Parse).ToArray();
+        Languages = _orderedNames.Select(LanguageId.Parse).ToArray();
     }
 
-    public IReadOnlyList<LanguageId> Languages => _orderedLanguages;
+    public IReadOnlyList<LanguageId> Languages { get; }
 
     public IReadOnlyList<string> LanguageNames => _orderedNames;
 

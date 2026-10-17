@@ -1,10 +1,8 @@
 using System.Text;
 using FluentAssertions;
 using Plutus.Domain;
-using Plutus.Domain.Comments;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Structure;
-using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Test.Structure;
 

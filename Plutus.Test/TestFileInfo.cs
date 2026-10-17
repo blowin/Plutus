@@ -13,5 +13,5 @@ public sealed class TestFileInfo : IFileInfo
     public string? PhysicalPath { get; set; }
     public string Name { get; set; } = null!;
     public DateTimeOffset LastModified => new DateTimeOffset(2026, 10, 7, 17, 58, 12, TimeSpan.Zero);
-    public bool IsDirectory => false;
+    public bool IsDirectory { get; set; }
 }

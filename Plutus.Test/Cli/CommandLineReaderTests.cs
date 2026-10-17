@@ -1,10 +1,7 @@
 using System.CommandLine;
 using FluentAssertions;
 using Plutus.CLI;
-using Plutus.Domain;
 using Plutus.Domain.Comments;
-using Plutus.Domain.Diagnostics;
-using Plutus.Test.Fakes;
 
 namespace Plutus.Test.Cli;
 

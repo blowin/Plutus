@@ -1,4 +1,3 @@
-using System.Text;
 using Plutus.Domain.Diffing;
 
 namespace Plutus.Domain.BundleWriters;

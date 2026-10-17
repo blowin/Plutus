@@ -4,7 +4,6 @@ using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Domain.BundleWriters;
 

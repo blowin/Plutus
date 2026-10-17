@@ -1,6 +1,4 @@
 using System.Text.RegularExpressions;
-using Plutus.Domain.Comments;
-using Plutus.Domain.Structure;
 
 namespace Plutus.Domain.Minifier.Languages;
 

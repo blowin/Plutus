@@ -1,6 +1,12 @@
+using Plutus.Domain;
+using Plutus.Domain.RemoteRepository;
+
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public class GitHubRemoteRepository(HttpClient client) : BaseRemoteRepository(client)
+public class GitHubRemoteRepository(
+    HttpClient client,
+    IFileInfoDetailProvider fileInfoDetailProvider,
+    ArchiveExtractionOptions archiveExtractionOptions) : BaseRemoteRepository(client, fileInfoDetailProvider, archiveExtractionOptions)
 {
     protected override string PlatformPrefix => "github";
 
