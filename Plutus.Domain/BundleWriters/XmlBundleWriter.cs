@@ -4,7 +4,6 @@ using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Domain.BundleWriters;
 
@@ -33,7 +32,7 @@ public class XmlBundleWriter(
         };
 
         await using var streamWriter = FileInfoDetailProvider.CreateWriterForFile(output, Encoding);
-        using var xmlWriter = XmlWriter.Create(streamWriter, xmlSettings);
+        await using var xmlWriter = XmlWriter.Create(streamWriter, xmlSettings);
 
         await xmlWriter.WriteStartDocumentAsync();
         await xmlWriter.WriteStartElementAsync(null, "Bundle", null);

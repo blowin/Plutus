@@ -1,9 +1,9 @@
-using System.IO.Compression;
 using Plutus.Domain;
+using Plutus.Domain.RemoteRepository;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
-public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepository, IDisposable
+public abstract class BaseRemoteRepository(HttpClient client, IFileInfoDetailProvider fileInfoDetailProvider) : IRemoteRepository, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
     protected readonly HttpClient HttpClient = client;
@@ -45,14 +45,7 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
 
         if (treeIndex >= 0)
         {
-            if (segments[treeIndex].Equals("-", StringComparison.OrdinalIgnoreCase))
-            {
-                segments = segments.Take(treeIndex).ToList();
-            }
-            else
-            {
-                segments = segments.Take(treeIndex).ToList();
-            }
+            segments = segments.Take(treeIndex).ToList();
         }
 
         if (segments.Count > 0 && segments[^1].EndsWith(".git", StringComparison.OrdinalIgnoreCase))
@@ -78,16 +71,25 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
         var tempZip = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.zip");
         var targetDir = Path.Combine(Path.GetTempPath(), $"plutus_remote_{Guid.NewGuid()}");
 
+        bool success = false;
         try
         {
             using (var response = await HttpClient.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();
 
-                // CRITICAL SAFETY CHECK: If Content-Length is zero or the server didn't send zip headers
+                // CRITICAL SAFETY CHECK: Reject empty responses early
                 if (response.Content.Headers.ContentLength == 0)
                 {
                     throw new InvalidOperationException("The remote repository returned an empty archive. It might be empty or private.");
+                }
+
+                // Download size limit check
+                if (response.Content.Headers.ContentLength > SafeExtractionOptions.Default.MaxDownloadSize.Bytes)
+                {
+                    throw new ArchiveExtractionException(
+                        $"Download size ({response.Content.Headers.ContentLength:N0} bytes) exceeds limit of {SafeExtractionOptions.Default.MaxDownloadSize}.",
+                        ArchiveExtractionErrorKind.DownloadSizeLimitExceeded);
                 }
 
                 await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
@@ -95,22 +97,44 @@ public abstract class BaseRemoteRepository(HttpClient client) : IRemoteRepositor
             }
 
             // Secondary validation: Check file size on disk before extraction
-            if (new FileInfo(tempZip).Length < 22) // 22 bytes is the absolute minimum size for any valid empty ZIP
+            var downloadedSize = new FileInfo(tempZip).Length;
+            if (downloadedSize < 22) // 22 bytes is the absolute minimum size for any valid empty ZIP
             {
                 throw new InvalidDataException("Downloaded archive file is corrupted or empty. Verify branch name or repository access permissions.");
             }
 
-            await ZipFile.ExtractToDirectoryAsync(tempZip, targetDir);
+            // Enforce download size limit on actual bytes received
+            if (downloadedSize > SafeExtractionOptions.Default.MaxDownloadSize.Bytes)
+            {
+                throw new ArchiveExtractionException(
+                    $"Download size ({downloadedSize:N0} bytes) exceeds limit of {SafeExtractionOptions.Default.MaxDownloadSize}.",
+                    ArchiveExtractionErrorKind.DownloadSizeLimitExceeded);
+            }
+
+            // Safe extraction: entry-by-entry validation
+            await using var archiveStream = new FileStream(tempZip, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var extractor = new SafeArchiveExtractor(fileInfoDetailProvider);
+            await extractor.ExtractAsync(archiveStream, targetDir, SafeExtractionOptions.Default);
+
+            success = true;
+            _tempDirectories.Add(targetDir);
         }
         finally
         {
+            // Always clean up the temp ZIP
             if (File.Exists(tempZip))
             {
-                File.Delete(tempZip);
+                try { File.Delete(tempZip); }
+                catch { /* best-effort */ }
+            }
+
+            // Clean up the extracted directory on failure or cancellation
+            if (!success && Directory.Exists(targetDir))
+            {
+                try { Directory.Delete(targetDir, true); }
+                catch { /* best-effort */ }
             }
         }
-
-        _tempDirectories.Add(targetDir);
 
         // Common logic for GitHub/GitLab: they archive the root into a subfolder like: "user-repo-hash"
         var subDirs = Directory.GetDirectories(targetDir);
