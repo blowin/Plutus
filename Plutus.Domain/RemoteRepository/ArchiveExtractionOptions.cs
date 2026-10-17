@@ -57,4 +57,25 @@ public sealed record ArchiveExtractionOptions
         RejectDuplicatePaths = true,
         RejectSymlinks = true,
     };
+
+    /// <summary>
+    /// Validates the archive extraction options and returns a list of error messages.
+    /// Returns an empty list if the options are valid.
+    /// </summary>
+    public IReadOnlyList<string> Validate()
+    {
+        var errors = new List<string>();
+
+        if (MaxFileCount is { } fileCount && fileCount < 10)
+        {
+            errors.Add($"MaxFileCount must be at least 10, but got {fileCount}.");
+        }
+
+        if (MaxDepth is { } depth && depth < 1)
+        {
+            errors.Add($"MaxDepth must be at least 1, but got {depth}.");
+        }
+
+        return errors;
+    }
 }

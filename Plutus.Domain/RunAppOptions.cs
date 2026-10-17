@@ -77,4 +77,46 @@ public record RunAppOptions
 
     /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
     public ArchiveExtractionOptions ArchiveExtraction { get; init; } = ArchiveExtractionOptions.Default;
+
+    /// <summary>
+    /// Validates the run options and returns a list of error messages.
+    /// Returns an empty list if the options are valid.
+    /// </summary>
+    public IReadOnlyList<string> Validate()
+    {
+        var errors = new List<string>();
+
+        if (MaxConcurrency < 1)
+        {
+            errors.Add($"MaxConcurrency must be at least 1, but got {MaxConcurrency}.");
+        }
+
+        if (TokenBudget is { MaxTokens: <= 0 })
+        {
+            errors.Add("Token budget max tokens must be greater than zero.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Commit) && !System.Text.RegularExpressions.Regex.IsMatch(Commit, "^(?:[0-9a-fA-F]{7,40})$"))
+        {
+            errors.Add("Commit must be a hexadecimal Git commit hash (7–40 characters).");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Branch) && !string.IsNullOrWhiteSpace(Commit))
+        {
+            errors.Add("branch and commit cannot be used together.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Diff?.Target) && (!string.IsNullOrWhiteSpace(Branch) || !string.IsNullOrWhiteSpace(Commit)))
+        {
+            errors.Add("diff-from cannot be used together with branch or commit.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Diff?.TargetTo) && string.IsNullOrWhiteSpace(Diff?.Target))
+        {
+            errors.Add("diff-to requires diff-from to define the other end of the range.");
+        }
+
+        errors.AddRange(ArchiveExtraction.Validate());
+        return errors;
+    }
 }

@@ -54,17 +54,6 @@ internal sealed class BundleOptions
     public Option<string?> Commit { get; } = new("--commit")
     {
         Description = "Specific remote commit hash to download. Cannot be used together with --branch.",
-        Validators =
-        {
-            result =>
-            {
-                var commit = result.GetValueOrDefault<string?>() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(commit) && !System.Text.RegularExpressions.Regex.IsMatch(commit, "^(?:[0-9a-fA-F]{7,40})$"))
-                {
-                    result.AddError("Error: --commit must be a hexadecimal Git commit hash (7–40 characters).");
-                }
-            }
-        }
     };
 
     public Option<List<string>> Exclude { get; } = new("--exclude")
@@ -144,17 +133,6 @@ internal sealed class BundleOptions
     {
         Description = "Limit maximum concurrent file processing I/O tasks bound by a semaphore.",
         DefaultValueFactory = _ => 8,
-        Validators =
-        {
-            result =>
-            {
-                var value = result.GetValueOrDefault<int>();
-                if (value < 1)
-                {
-                    result.AddError($"The {result.Option.Name} option must be at least 1.");
-                }
-            }
-        }
     };
 
     public Option<string> Format { get; } = new("--format")
@@ -166,16 +144,6 @@ internal sealed class BundleOptions
     public Option<int?> MaxTokens { get; } = new("--max-tokens")
     {
         Description = "Target source-token budget using an offline heuristic.",
-        Validators =
-        {
-            result =>
-            {
-                if (result.GetValueOrDefault<int?>() is <= 0)
-                {
-                    result.AddError("--max-tokens must be greater than zero.");
-                }
-            }
-        }
     };
 
     public Option<TokenOverflowPolicy> OverflowPolicy { get; } = new("--token-overflow-policy")
@@ -198,33 +166,11 @@ internal sealed class BundleOptions
     public Option<string?> DiffFrom { get; } = new("--diff-from")
     {
         Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
-        Validators =
-        {
-            result =>
-            {
-                var target = result.GetValueOrDefault<string?>();
-                if (target is not null && string.IsNullOrWhiteSpace(target))
-                {
-                    result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
-                }
-            }
-        }
     };
 
     public Option<string?> DiffTo { get; } = new("--diff-to")
     {
         Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
-        Validators =
-        {
-            result =>
-            {
-                var target = result.GetValueOrDefault<string?>();
-                if (target is not null && string.IsNullOrWhiteSpace(target))
-                {
-                    result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
-                }
-            }
-        }
     };
 
     public Option<bool> DiffIncludeUntracked { get; } = new("--diff-include-untracked")
@@ -250,34 +196,12 @@ internal sealed class BundleOptions
     {
         Description = "Maximum number of files allowed in a remote archive.",
         DefaultValueFactory = _ => 10_000,
-        Validators =
-        {
-            result =>
-            {
-                var value = result.GetValueOrDefault<int?>();
-                if (value is < 10)
-                {
-                    result.AddError($"{result.Option.Name} must be at least 10.");
-                }
-            }
-        }
     };
 
     public Option<int?> MaxArchiveDepth { get; } = new("--max-archive-depth")
     {
         Description = "Maximum nesting depth of directories in a remote archive.",
         DefaultValueFactory = _ => 30,
-        Validators =
-        {
-            result =>
-            {
-                var value = result.GetValueOrDefault<int?>();
-                if (value is < 1)
-                {
-                    result.AddError($"{result.Option.Name} must be at least 1.");
-                }
-            }
-        }
     };
 
     public Option<bool> RejectDuplicateArchivePaths { get; } = new("--reject-duplicate-archive-paths")
