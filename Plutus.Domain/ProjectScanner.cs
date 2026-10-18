@@ -43,7 +43,6 @@ public class ProjectScanner(IFileInfoDetailProvider fileInfoDetailProvider, IIgn
 
         foreach (var child in children)
         {
-            // Используем ваши новые методы фильтрации: IsSamePath и IsReparsePoint
             if (child.IsSamePath(outputPhysicalPath) || fileInfoDetailProvider.IsReparsePoint(child))
             {
                 continue;

@@ -46,7 +46,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
         {
             throw new ArchiveExtractionException(
                 $"Failed to open archive: {ex.Message}",
-                ArchiveExtractionErrorKind.MalformedArchive);
+                ArchiveExtractionErrorKind.MalformedArchive,
+                innerException: ex);
         }
 
         await using var archiveDisposable = archive;
@@ -87,7 +88,8 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
             {
                 throw new ArchiveExtractionException(
                     $"Failed to resolve path for entry '{entryFullName}': {ex.Message}",
-                    ArchiveExtractionErrorKind.PathTraversal, entryFullName);
+                    ArchiveExtractionErrorKind.PathTraversal, entryFullName,
+                    innerException: ex);
             }
 
             if (ContainsPathTraversal(entryFullName))
