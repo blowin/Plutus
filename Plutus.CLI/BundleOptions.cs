@@ -243,6 +243,11 @@ internal sealed class BundleOptions
         CustomParser = ParseTimeSpan,
     };
 
+    public Option<bool> IncludeDependencies { get; } = new("--include-dependencies")
+    {
+        Description = "Automatically discover and include file dependencies (e.g., C# using directives and shared namespaces) for the selected files."
+    };
+
     /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
     public BundleOptions WithAliases()
     {
@@ -294,6 +299,7 @@ internal sealed class BundleOptions
         yield return MaxRetries;
         yield return RetryBaseDelay;
         yield return RetryMaxDelay;
+        yield return IncludeDependencies;
     }
 
     private static TimeSpan ParseTimeSpan(ArgumentResult result)

@@ -30,7 +30,7 @@ public class BundleAppRunnerTests
         _output.PhysicalPath.Returns("/repo/out.md");
 
         _contextResolver.ResolveContextAsync(Arg.Any<List<string>?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>())
-            .Returns(new ProjectResolveResponse([_root], _output));
+            .Returns(new ProjectResolveResponse([_root], _output, []));
         _matcherProvider.GetMatchers(Arg.Any<List<IFileProvider>>(), Arg.Any<RunAppOptions>()).Returns([]);
     }
 

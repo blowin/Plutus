@@ -85,7 +85,8 @@ public sealed class ProfileTemplate
             MaxRetries = 3,
             RetryBaseDelay = TimeSpan.FromMilliseconds(500),
             RetryMaxDelay = TimeSpan.FromSeconds(30),
-        }
+        },
+        IncludeDependencies = false,
     };
 
     public string Render() => JsonSerializer.Serialize(Starter, SerializerOptions) + Environment.NewLine;

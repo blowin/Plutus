@@ -82,6 +82,10 @@ public record RunAppOptions
     /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
     public TimeoutOptions Timeout { get; init; } = TimeoutOptions.Default;
 
+    public bool IncludeDependencies { get; init; }
+
+    public IReadOnlyList<string> ExplicitInitialFiles { get; init; } = [];
+
     /// <summary>
     /// Validates the run options and returns a list of error messages.
     /// Returns an empty list if the options are valid.

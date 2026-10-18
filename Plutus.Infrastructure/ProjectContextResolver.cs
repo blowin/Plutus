@@ -21,14 +21,13 @@ public class ProjectContextResolver(
             return null;
         }
 
-        var processedPaths = await GetPathForProcessAsync(projectPaths, branch, commit, cancellationToken);
-        var roots = processedPaths?.Select(ResolveDirectory).ToList();
-        if (roots is null)
+        var rootDetails = await ResolveRoots(projectPaths, branch, commit, cancellationToken);
+        if (rootDetails is null)
         {
             return null;
         }
 
-        var primaryRoot = roots.First();
+        var primaryRoot = rootDetails.Value.Roots.First();
         var normalizeOutputPath = NormalizeOutputPath(projectPaths, outputPath);
         var output = ResolveOutput(primaryRoot, normalizeOutputPath, format);
 
@@ -38,18 +37,46 @@ public class ProjectContextResolver(
             return null;
         }
 
-        return new(roots, output);
+        return new(rootDetails.Value.Roots, output, rootDetails.Value.ExplicitFiles);
     }
 
-    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, string? branch, string? commit, CancellationToken cancellationToken)
+    private async Task<(List<IFileInfo> Roots, List<string> ExplicitFiles)?> ResolveRoots(List<string> projectPaths, string? branch, string? commit, CancellationToken cancellationToken)
     {
-        var processedPaths = new List<string>();
+        var processedPaths = await GetPathForProcessAsync(projectPaths, branch, commit, cancellationToken);
+        var roots = processedPaths?.Select(e => ResolveDirectory(e.Directory)).ToList();
+        if (roots is null)
+        {
+            return null;
+        }
+
+        return (roots, []);
+    }
+
+    private async Task<List<(string Directory, string? ExplicitFile)>?> GetPathForProcessAsync(List<string> projectPaths, string? branch, string? commit, CancellationToken cancellationToken)
+    {
+        var processedPaths = new List<(string Directory, string? ExplicitFile)>();
         foreach (var path in projectPaths)
         {
             try
             {
                 var remotePath = await ExtractRemotePathAsync(path);
-                processedPaths.Add(remotePath ?? path);
+                if (remotePath is not null)
+                {
+                    processedPaths.Add((remotePath, null));
+                }
+                else
+                {
+                    if (provider.IsFile(path))
+                    {
+                        var fileInfo = provider.CreateFile(path);
+                        var dir = Path.GetDirectoryName(fileInfo.PhysicalPath ?? path) ?? throw new DirectoryNotFoundException($"Directory not found for file {path}");
+                        processedPaths.Add((dir, path));
+                    }
+                    else
+                    {
+                        processedPaths.Add((path, null));
+                    }
+                }
             }
             catch
             {

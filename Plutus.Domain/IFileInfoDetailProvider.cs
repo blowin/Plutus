@@ -11,6 +11,7 @@ public interface IFileInfoDetailProvider
     StreamWriter CreateWriterForFile(IFileInfo fileInfo, Encoding? encoding = null);
     IFileProvider CreateFileProvider(IFileInfo fileInfo);
 
+    bool IsFile(string path);
     bool IsReparsePoint(IFileInfo fileInfo);
     string GetCurrentDirectory();
 }

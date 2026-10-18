@@ -65,6 +65,7 @@ public sealed class MockFileInfoDetailProvider : IFileInfoDetailProvider
     }
 
     public IFileProvider CreateFileProvider(IFileInfo fileInfo) => throw new NotImplementedException();
+    public bool IsFile(string path) => throw new NotImplementedException();
 
     public bool IsReparsePoint(IFileInfo fileInfo) => false;
 

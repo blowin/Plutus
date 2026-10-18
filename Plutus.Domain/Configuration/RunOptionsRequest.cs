@@ -76,6 +76,7 @@ public sealed record RunOptionsRequest
 
     /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
     public TimeoutOptions? Timeout { get; init; }
+    public bool IncludeDependencies { get; init; }
 }
 
 /// <summary>A diff scope as requested, before the resolved limits are attached to it.</summary>

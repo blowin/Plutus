@@ -101,6 +101,7 @@ public sealed class RunOptionsResolver
             Profile = provenance.Build(),
             ArchiveExtraction = ResolveArchiveExtraction(request.ArchiveExtraction, profile, provenance),
             Timeout = ResolveTimeoutOptions(request.Timeout, profile?.Timeout, provenance),
+            IncludeDependencies = ResolveValue("includeDependencies", request.IncludeDependencies, profile?.IncludeDependencies, false, provenance),
         };
     }
 

@@ -22,6 +22,7 @@ public sealed class PhysicianPlutusFileInfo : IFileInfoDetailProvider
     }
 
     public IFileProvider CreateFileProvider(IFileInfo fileInfo) => new PhysicalFileProvider(fileInfo.PhysicalPath ?? throw new ArgumentException("Unable to determine PhysicalPath"), ExclusionFilters.None);
+    public bool IsFile(string path) => File.Exists(path);
 
     public bool IsReparsePoint(IFileInfo fileInfo)
     {

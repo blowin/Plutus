@@ -4,6 +4,7 @@ using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
+using Plutus.Domain.Dependencies;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
@@ -11,6 +12,7 @@ using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
 using Plutus.Domain.Retry;
 using Plutus.Domain.Structure;
+using Plutus.Infrastructure.Dependencies.Csharp;
 using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
@@ -67,8 +69,16 @@ public static class ServiceCollectionExt
                 .AddClasses(classes => classes.AssignableTo<IBundleWriter>())
                 .AsImplementedInterfaces()
                 .WithScopedLifetime();
+
+            scan.FromAssemblyOf<CSharpSourceAnalyzer>()
+                .AddClasses(classes => classes.AssignableTo<IDependencyAnalyzer>())
+                .As<IDependencyAnalyzer>()
+                .WithScopedLifetime();
         });
 
+
+        services.AddScoped<ICSharpNamespaceIndex, CSharpNamespaceIndex>();
+        services.AddScoped<IDependencyResolver, DependencyResolver>();
         services.AddScoped<IReadOnlyCollection<IRemoteRepository>>(sp => sp.GetRequiredService<IEnumerable<IRemoteRepository>>().ToList());
 
         services.AddScoped<BundleAppRunner>();

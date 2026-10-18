@@ -19,14 +19,18 @@ public class BundleAppRunner(
             return 1;
         }
 
-        var (roots, output) = details;
+        var (roots, output, explicitFiles) = details;
+        if (explicitFiles is { Count: > 0 })
+        {
+            options = options with { ExplicitInitialFiles = explicitFiles };
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         DiffScopeResult? diffScope = null;
         if (options.Diff is { } diffOptions)
         {
-            diffScope = await gitDiffContextProvider.ResolveAsync(diffOptions, roots);
+            diffScope = await gitDiffContextProvider.ResolveAsync(diffOptions, roots, cancellationToken);
             if (diffScope is null)
             {
                 return 1;

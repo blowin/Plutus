@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Threading;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.Dependencies;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Tokens;
@@ -15,6 +16,7 @@ namespace Plutus.Domain;
 public class PlutusBundler(
     IFileInfoDetailProvider fileInfoDetailProvider,
     IReadOnlyCollection<IBundleWriter> bundleWriters,
+    IDependencyResolver? dependencyResolver = null,
     IRunOutput? runOutput = null,
     BundleRunReport? runReport = null)
 {
@@ -59,6 +61,23 @@ public class PlutusBundler(
         {
             var provider = fileInfoDetailProvider.CreateFileProvider(root);
             var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize, CreateDiffPaths(gitDiff, root));
+            if (options.IncludeDependencies && dependencyResolver is not null)
+            {
+                var initialFiles = options.ExplicitInitialFiles is { Count: > 0 }
+                    ? options.ExplicitInitialFiles
+                    : projectNode.ExtractBundleEntries().Select(e => e.RelativePath).ToList();
+
+                var resolved = await dependencyResolver.ResolveAsync(initialFiles, provider, cancellationToken);
+                var allowedPaths = resolved
+                    .Where(e => !string.IsNullOrWhiteSpace(e.VirtualPath))
+                    .Select(r => r.VirtualPath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                MarkUnresolvedAsIgnored(projectNode, allowedPaths);
+
+                _output.Info($"Dependency resolution: included {resolved.Count(f => f.IsDirect)} direct files and {resolved.Count(f => !f.IsDirect)} dependencies.");
+            }
+
             bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
         }
 
@@ -86,6 +105,29 @@ public class PlutusBundler(
         // The numbers are recorded, not printed: the host decides how a run summary reads.
         _report.Record(physicalPath, allEntries.Count, allEntries.Sum(e => e.File.Length), stopwatch.Elapsed);
         return 0;
+    }
+
+    private static void MarkUnresolvedAsIgnored(ProjectNode node, HashSet<string> allowedPaths)
+    {
+        if (node.IsDirectory)
+        {
+            foreach (var child in node.Children)
+            {
+                MarkUnresolvedAsIgnored(child, allowedPaths);
+            }
+
+            if (node.Children.Count > 0 && node.Children.All(c => c.Status is NodeStatus.IgnoredFile or NodeStatus.IgnoredDirectory))
+            {
+                node.Status = NodeStatus.IgnoredDirectory;
+            }
+        }
+        else
+        {
+            if (!allowedPaths.Contains(node.RelativePath))
+            {
+                node.Status = NodeStatus.IgnoredFile;
+            }
+        }
     }
 
     /// <summary>
