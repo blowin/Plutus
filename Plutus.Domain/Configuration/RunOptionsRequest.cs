@@ -1,5 +1,6 @@
 using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -72,6 +73,9 @@ public sealed record RunOptionsRequest
 
     /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
     public ArchiveExtractionOptions? ArchiveExtraction { get; init; }
+
+    /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
+    public TimeoutOptions? Timeout { get; init; }
 }
 
 /// <summary>A diff scope as requested, before the resolved limits are attached to it.</summary>

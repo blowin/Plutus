@@ -9,10 +9,12 @@ using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Structure;
 using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
+using Plutus.Infrastructure.Retry;
 using Plutus.Infrastructure.Structure;
 
 namespace Plutus.Infrastructure;
@@ -38,12 +40,19 @@ public static class ServiceCollectionExt
         services.AddSingleton(provider => files ?? provider.GetRequiredService<FileProviderAccessFactory>().CreateForWorkingDirectory());
         services.AddSingleton<PlutusProfileLoader>();
         services.AddSingleton<GrammarInventoryLoader>();
+
+        // Timeout options are resolved by RunOptionsResolver from CLI > profile > default;
+        // the container receives the already-resolved instance directly.
+        services.AddSingleton(options.Timeout);
+        services.AddScoped<RetryPolicy>();
+
         services.AddScoped<HttpClient>(_ => new HttpClient(new HttpClientHandler
         {
             AllowAutoRedirect = true,
             AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
         })
         {
+            Timeout = options.Timeout.OperationTimeout,
             DefaultRequestHeaders = { UserAgent = { System.Net.Http.Headers.ProductInfoHeaderValue.Parse("Mozilla/5.0...") } }
         });
 

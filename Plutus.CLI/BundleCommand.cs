@@ -4,6 +4,7 @@ using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
+using Plutus.Domain.Retry;
 using Plutus.Infrastructure;
 
 namespace Plutus.CLI;
@@ -163,6 +164,7 @@ internal static class BundleCommand
                 }
                 : null,
             ArchiveExtraction = archiveExtraction,
+            Timeout = BuildTimeoutOptions(reader, options),
         };
     }
 
@@ -193,6 +195,23 @@ internal static class BundleCommand
             MaxDepth = maxDepth,
             RejectDuplicatePaths = rejectDuplicates,
             RejectSymlinks = rejectSymlinks,
+        };
+    }
+
+    /// <summary>Builds the timeout and retry configuration from CLI flags.</summary>
+    private static TimeoutOptions BuildTimeoutOptions(CommandLineReader reader, BundleOptions options)
+    {
+        var httpTimeout = reader.Value(options.HttpTimeout);
+        var maxRetries = reader.Value(options.MaxRetries);
+        var retryBaseDelay = reader.Value(options.RetryBaseDelay);
+        var retryMaxDelay = reader.Value(options.RetryMaxDelay);
+
+        return new TimeoutOptions
+        {
+            OperationTimeout = httpTimeout,
+            MaxRetries = maxRetries,
+            RetryBaseDelay = retryBaseDelay,
+            RetryMaxDelay = retryMaxDelay,
         };
     }
 

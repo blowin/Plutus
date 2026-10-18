@@ -17,19 +17,38 @@ internal static class BundleRunHost
         Console.OutputEncoding = options.TargetEncoding;
         Console.InputEncoding = options.TargetEncoding;
 
-        var services = new ServiceCollection();
-        services.AddInfrastructureServices(options, output, files);
-        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        using var cts = new CancellationTokenSource();
+
+        // Wire Ctrl+C to cancellation
+        ConsoleCancelEventHandler? consoleOnCancelKeyPress = (s, e) =>
         {
-            ValidateScopes = true,
-            ValidateOnBuild = true,
-        });
-        await using var scope = provider.CreateAsyncScope();
+            e.Cancel = true; // Prevent immediate process termination
+            output.Warning("Cancellation requested (Ctrl+C). Cleaning up...");
+            // ReSharper disable once AccessToDisposedClosure
+            cts.Cancel();
+        };
+        Console.CancelKeyPress += consoleOnCancelKeyPress;
 
-        var exitCode = await scope.ServiceProvider.GetRequiredService<BundleAppRunner>().RunAsync(options);
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddInfrastructureServices(options, output, files);
+            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+            {
+                ValidateScopes = true,
+                ValidateOnBuild = true,
+            });
+            await using var scope = provider.CreateAsyncScope();
 
-        scope.ServiceProvider.GetRequiredService<IRunReportWriter>().Write();
+            var exitCode = await scope.ServiceProvider.GetRequiredService<BundleAppRunner>().RunAsync(options, cts.Token);
 
-        return exitCode;
+            scope.ServiceProvider.GetRequiredService<IRunReportWriter>().Write();
+
+            return exitCode;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= consoleOnCancelKeyPress;
+        }
     }
 }

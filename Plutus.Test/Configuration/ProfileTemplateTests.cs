@@ -47,8 +47,17 @@ public class ProfileTemplateTests
         var withoutProfile = new RunOptionsResolver().Resolve(new RunOptionsRequest { ProjectPath = ["."] }).Options!;
 
         starter.ExcludeDirPatterns.Should().Equal(ProfileTemplate.Starter.ExcludeDirs);
+        starter.Branch.Should().Be(ProfileTemplate.Starter.Branch);
+        starter.Commit.Should().Be(ProfileTemplate.Starter.Commit);
+        starter.Timeout.Should().BeEquivalentTo(ProfileTemplate.Starter.Timeout);
         starter.Profile!.AppliedKeys.Should().Equal(
-            new[] { "excludeDirs" },
+            new[]
+            {
+                "excludeDirs",
+                "branch",
+                "commit",
+                "timeout"
+            },
             "it is the only key that states something the default does not");
         starter.Profile.DefaultedKeys.Should().BeEquivalentTo(
             [

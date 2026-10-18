@@ -215,6 +215,30 @@ internal sealed class BundleOptions
         DefaultValueFactory = _ => true
     };
 
+    public Option<TimeSpan> HttpTimeout { get; } = new("--http-timeout")
+    {
+        Description = "Maximum time allowed for HTTP operations (e.g., 30s, 2m).",
+        DefaultValueFactory = _ => TimeSpan.FromMinutes(2),
+    };
+
+    public Option<int> MaxRetries { get; } = new("--max-retries")
+    {
+        Description = "Maximum number of retry attempts for transient network failures.",
+        DefaultValueFactory = _ => 3
+    };
+
+    public Option<TimeSpan> RetryBaseDelay { get; } = new("--retry-base-delay")
+    {
+        Description = "Base delay for exponential backoff on retries (e.g., 500ms, 1s).",
+        DefaultValueFactory = _ => TimeSpan.FromMicroseconds(500),
+    };
+
+    public Option<TimeSpan> RetryMaxDelay { get; } = new("--retry-max-delay")
+    {
+        Description = "Maximum delay between retries (e.g., 10s, 1m). Default: 30s.",
+        DefaultValueFactory = _ => TimeSpan.FromSeconds(30),
+    };
+
     /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
     public BundleOptions WithAliases()
     {
@@ -262,6 +286,10 @@ internal sealed class BundleOptions
         yield return MaxArchiveDepth;
         yield return RejectDuplicateArchivePaths;
         yield return RejectSymlinksInArchives;
+        yield return HttpTimeout;
+        yield return MaxRetries;
+        yield return RetryBaseDelay;
+        yield return RetryMaxDelay;
     }
 
     private static FileSize FileSizeParser(ArgumentResult result)

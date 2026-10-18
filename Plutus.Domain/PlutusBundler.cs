@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diagnostics;
@@ -26,7 +27,8 @@ public class PlutusBundler(
         IReadOnlyCollection<IFileInfo> roots,
         IFileInfo output,
         RunAppOptions options,
-        GitDiffContext? gitDiff = null)
+        GitDiffContext? gitDiff = null,
+        CancellationToken cancellationToken = default)
     {
         if (output.IsDirectory)
         {
@@ -70,7 +72,7 @@ public class PlutusBundler(
         try
         {
             bundleWriter.IncludeFileContents = options.IncludeFileContents;
-            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, gitDiff).ConfigureAwait(false);
+            allEntries = await bundleWriter.WriteAsync(bundleWriterEntries, output, gitDiff, cancellationToken).ConfigureAwait(false);
         }
         catch (TokenBudgetExceededException ex)
         {

@@ -1,3 +1,4 @@
+using System.Threading;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 
@@ -10,15 +11,17 @@ public class BundleAppRunner(
     IAdditionalIgnoreMatcherProvider additionalIgnoreMatcherProvider,
     IGitDiffContextProvider gitDiffContextProvider)
 {
-    public async Task<int> RunAsync(RunAppOptions options)
+    public async Task<int> RunAsync(RunAppOptions options, CancellationToken cancellationToken = default)
     {
-        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath, options.Format, options.Branch, options.Commit);
+        var details = await contextResolver.ResolveContextAsync(options.ProjectPath, options.OutputPath, options.Format, options.Branch, options.Commit, cancellationToken);
         if (details is null)
         {
             return 1;
         }
 
         var (roots, output) = details;
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         DiffScopeResult? diffScope = null;
         if (options.Diff is { } diffOptions)
@@ -35,6 +38,6 @@ public class BundleAppRunner(
         var ignoreMatcher = ignoreMatcherFactory.CreateIgnoreMatcher(options.UseDefaultExcludes, options.AllowDangerous);
 
         var projectScanner = new ProjectScanner(detailProvider, ignoreMatcher);
-        return await bundler.RunBundleAsync(projectScanner, roots, output, options, diffScope?.Context);
+        return await bundler.RunBundleAsync(projectScanner, roots, output, options, diffScope?.Context, cancellationToken);
     }
 }

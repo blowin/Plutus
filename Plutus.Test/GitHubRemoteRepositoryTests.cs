@@ -1,12 +1,16 @@
-﻿using FluentAssertions;
+using FluentAssertions;
+using Plutus.Domain.Retry;
 using Plutus.Infrastructure.RemoteRepository;
+using Plutus.Infrastructure.Retry;
 using Plutus.Test.RemoteRepository;
 
 namespace Plutus.Test;
 
 public class GitHubRemoteRepositoryTests
 {
-    private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client, new NullSafeArchiveExtractor())
+    private static readonly RetryPolicy DefaultRetryPolicy = new(new TimeoutOptions());
+
+    private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client, new NullSafeArchiveExtractor(), DefaultRetryPolicy)
     {
         public string ExposeBuildZipUrl(string path) => BuildZipUrl(path, null, null);
     }
@@ -20,7 +24,7 @@ public class GitHubRemoteRepositoryTests
     {
         // Arrange
         using var client = new HttpClient();
-        using var repo = new GitHubRemoteRepository(client, new NullSafeArchiveExtractor());
+        using var repo = new GitHubRemoteRepository(client, new NullSafeArchiveExtractor(), DefaultRetryPolicy);
 
         // Act
         var result = repo.IsSupportedPath(path);

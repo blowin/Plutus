@@ -1,11 +1,15 @@
+using System.Net;
+using System.Net.Http;
 using Plutus.Domain;
 using Plutus.Domain.ArchiveExtractor;
+using Plutus.Infrastructure.Retry;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public abstract class BaseRemoteRepository(
     HttpClient client,
-    ISafeArchiveExtractor safeArchiveExtractor) : IRemoteRepository, IDisposable
+    ISafeArchiveExtractor safeArchiveExtractor,
+    RetryPolicy retryPolicy) : IRemoteRepository, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
     protected readonly HttpClient HttpClient = client;
@@ -61,7 +65,7 @@ public abstract class BaseRemoteRepository(
     protected static string EscapeRef(string value) =>
         string.Join("/", value.Split('/').Select(Uri.EscapeDataString));
 
-    public async ValueTask<string> DownloadAsync(string path, string? branch = null, string? commit = null)
+    public async ValueTask<string> DownloadAsync(string path, string? branch = null, string? commit = null, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
         {
@@ -76,8 +80,17 @@ public abstract class BaseRemoteRepository(
         bool success = false;
         try
         {
-            using (var response = await HttpClient.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
+            string downloadedZip = await retryPolicy.ExecuteAsync(async ct =>
             {
+                using var response = await HttpClient.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+
+                // Handle rate-limit headers
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    var retryAfter = ReadRetryAfter(response);
+                    throw new HttpRequestException($"Rate limit exceeded. Retry after {retryAfter.TotalSeconds:F0} seconds.", null, response.StatusCode);
+                }
+
                 response.EnsureSuccessStatusCode();
 
                 // CRITICAL SAFETY CHECK: Reject empty responses early
@@ -95,8 +108,10 @@ public abstract class BaseRemoteRepository(
                 }
 
                 await using var fs = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fs);
-            }
+                await response.Content.CopyToAsync(fs, ct).ConfigureAwait(false);
+
+                return tempZip;
+            }, cancellationToken);
 
             // Secondary validation: Check file size on disk before extraction
             var downloadedSize = new FileInfo(tempZip).Length;
@@ -113,9 +128,9 @@ public abstract class BaseRemoteRepository(
                     ArchiveExtractionErrorKind.DownloadSizeLimitExceeded);
             }
 
-            // Safe extraction: entry-by-entry validation
-            await using var archiveStream = new FileStream(tempZip, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await safeArchiveExtractor.ExtractAsync(archiveStream, targetDir);
+            // Safe extraction: entry-by-entry validation (already accepts CancellationToken)
+            await using var archiveStream = new FileStream(downloadedZip, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await safeArchiveExtractor.ExtractAsync(archiveStream, targetDir, cancellationToken).ConfigureAwait(false);
 
             success = true;
             _tempDirectories.Add(targetDir);
@@ -140,6 +155,36 @@ public abstract class BaseRemoteRepository(
         // Common logic for GitHub/GitLab: they archive the root into a subfolder like: "user-repo-hash"
         var subDirs = Directory.GetDirectories(targetDir);
         return subDirs.Length > 0 ? subDirs[0] : targetDir;
+    }
+
+    /// <summary>
+    /// Reads the Retry-After header from an HTTP response.
+    /// </summary>
+    private static TimeSpan ReadRetryAfter(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("Retry-After", out var values))
+        {
+            var firstValue = values.First();
+
+            // Try parsing as seconds first
+            if (int.TryParse(firstValue, out var seconds) && seconds > 0)
+            {
+                return TimeSpan.FromSeconds(seconds);
+            }
+
+            // Try parsing as HTTP date
+            if (DateTimeOffset.TryParse(firstValue, out var retryDate))
+            {
+                var delay = retryDate - DateTimeOffset.Now;
+                if (delay > TimeSpan.Zero)
+                {
+                    return delay;
+                }
+            }
+        }
+
+        // Fallback: 1 second
+        return TimeSpan.FromSeconds(1);
     }
 
     public string NormalizeOutputPath(string path)
