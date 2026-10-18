@@ -1,11 +1,10 @@
-using Plutus.Domain;
 using Plutus.Domain.ArchiveExtractor;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public class GitHubRemoteRepository(
     HttpClient client,
-    SafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
+    ISafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
 {
     protected override string PlatformPrefix => "github";
 

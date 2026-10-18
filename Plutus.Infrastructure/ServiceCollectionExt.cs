@@ -106,7 +106,7 @@ public static class ServiceCollectionExt
         // Archive extraction options are resolved from the run options and made available as a standalone service
         // so the remote repository implementations can consume them from the container.
         services.AddSingleton(_ => SafeExtractionOptions.From(options.ArchiveExtraction));
-        services.AddSingleton<SafeArchiveExtractor>();
+        services.AddSingleton<ISafeArchiveExtractor, SafeArchiveExtractor>();
 
         // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
         // registers it. Adding a structural provider or a maintained language processor is a matter of writing the

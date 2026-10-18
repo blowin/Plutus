@@ -4,7 +4,7 @@ namespace Plutus.Infrastructure.RemoteRepository;
 
 public sealed class GitLabRemoteRepository(
     HttpClient client,
-    SafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
+    ISafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
 {
     protected override string PlatformPrefix => "gitlab";
 

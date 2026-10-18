@@ -5,7 +5,7 @@ namespace Plutus.Infrastructure.RemoteRepository;
 
 public abstract class BaseRemoteRepository(
     HttpClient client,
-    SafeArchiveExtractor safeArchiveExtractor) : IRemoteRepository, IDisposable
+    ISafeArchiveExtractor safeArchiveExtractor) : IRemoteRepository, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
     protected readonly HttpClient HttpClient = client;

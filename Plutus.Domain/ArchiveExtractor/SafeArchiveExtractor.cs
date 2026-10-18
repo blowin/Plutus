@@ -3,7 +3,7 @@ using System.IO.Compression;
 
 namespace Plutus.Domain.ArchiveExtractor;
 
-public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem, SafeExtractionOptions options)
+public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem, SafeExtractionOptions options) : ISafeArchiveExtractor
 {
     private static readonly string[] WindowsReservedNames =
     [
