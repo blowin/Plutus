@@ -6,7 +6,6 @@ namespace Plutus.Test;
 
 public class GitHubRemoteRepositoryTests
 {
-
     private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client, new NullSafeArchiveExtractor())
     {
         public string ExposeBuildZipUrl(string path) => BuildZipUrl(path, null, null);
