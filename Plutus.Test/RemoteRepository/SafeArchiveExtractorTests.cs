@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using FluentAssertions;
 using Plutus.Domain;
-using Plutus.Domain.RemoteRepository;
+using Plutus.Domain.ArchiveExtractor;
 
 namespace Plutus.Test.RemoteRepository;
 
@@ -20,7 +20,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenPathIsMalicious_ShouldThrowPathTraversal(string maliciousEntry)
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -31,7 +31,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        Func<Task> act = async () => await extractor.ExtractAsync(memory, "C:\\test_extract_root", SafeExtractionOptions.Default);
+        Func<Task> act = async () => await extractor.ExtractAsync(memory, "C:\\test_extract_root");
 
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.PathTraversal);
@@ -42,7 +42,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenFilenameContainsLegitimateDots_ShouldSucceed()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -52,7 +52,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var result = await extractor.ExtractAsync(memory, "C:\\test_extract_root", SafeExtractionOptions.Default);
+        var result = await extractor.ExtractAsync(memory, "C:\\test_extract_root");
         result.FilesExtracted.Should().Be(2);
     }
 
@@ -60,8 +60,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenExtractedSizeLimitExceeded_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(100) };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -73,7 +73,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", options);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.SizeLimitExceeded);
     }
@@ -82,7 +82,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenWindowsReservedName_ShouldThrowOnWindowsOnly()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -93,13 +93,13 @@ public class SafeArchiveExtractorTests
 
         if (OperatingSystem.IsWindows())
         {
-            var act = async () => await extractor.ExtractAsync(memory, "C:\\test", SafeExtractionOptions.Default);
+            var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
             var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
             ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.PathTraversal);
         }
         else
         {
-            var result = await extractor.ExtractAsync(memory, "C:\\test", SafeExtractionOptions.Default);
+            var result = await extractor.ExtractAsync(memory, "C:\\test");
             result.FilesExtracted.Should().Be(1);
         }
     }
@@ -108,8 +108,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenDuplicatePathsCaseInsensitiveOnWindows_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { RejectDuplicatePaths = true };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -121,13 +121,13 @@ public class SafeArchiveExtractorTests
 
         if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
-            var act = async () => await extractor.ExtractAsync(memory, "C:\\test", options);
+            var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
             var res = await act.Should().ThrowAsync<ArchiveExtractionException>();
             res.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.DuplicatePath);
         }
         else
         {
-            var result = await extractor.ExtractAsync(memory, "C:\\test", options);
+            var result = await extractor.ExtractAsync(memory, "C:\\test");
             result.FilesExtracted.Should().Be(2); // Linux is case-sensitive
         }
     }
@@ -139,7 +139,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenTargetDirectoryHasEdgeCases_ShouldSucceed(string targetDir)
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -149,7 +149,7 @@ public class SafeArchiveExtractorTests
         memory.Seek(0, SeekOrigin.Begin);
 
         var expectedRoot = Path.GetFullPath(targetDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var result = await extractor.ExtractAsync(memory, targetDir, SafeExtractionOptions.Default);
+        var result = await extractor.ExtractAsync(memory, targetDir);
 
         result.FilesExtracted.Should().Be(1);
         result.ExtractedDirectory.Should().Be(expectedRoot);
@@ -159,8 +159,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenStreamExceedsMaxDownloadSize_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxDownloadSize = FileSize.FromBytes(10) };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var zipMemory = new MemoryStream();
         await using (var archive = new ZipArchive(zipMemory, ZipArchiveMode.Create, leaveOpen: true))
@@ -170,7 +170,7 @@ public class SafeArchiveExtractorTests
 
         var paddedStream = new PaddedMemoryStream(zipMemory.ToArray(), 100); // Fake large size
 
-        var act = async () => await extractor.ExtractAsync(paddedStream, "C:\\test", options);
+        var act = async () => await extractor.ExtractAsync(paddedStream, "C:\\test");
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.DownloadSizeLimitExceeded);
     }
@@ -179,7 +179,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenStreamIsNonSeekable_ShouldSkipDownloadCheckAndSucceed()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
 
         using var zipMemory = new MemoryStream();
         await using (var archive = new ZipArchive(zipMemory, ZipArchiveMode.Create, leaveOpen: true))
@@ -188,7 +188,7 @@ public class SafeArchiveExtractorTests
         }
         zipMemory.Seek(0, SeekOrigin.Begin);
 
-        var result = await extractor.ExtractAsync(new NonSeekableStream(zipMemory), "C:\\test", SafeExtractionOptions.Default);
+        var result = await extractor.ExtractAsync(new NonSeekableStream(zipMemory), "C:\\test");
         result.FilesExtracted.Should().Be(1);
     }
 
@@ -196,7 +196,7 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenCancellationRequested_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Cancel immediately
 
@@ -207,7 +207,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", SafeExtractionOptions.Default, cts.Token);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
@@ -215,10 +215,10 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenArchiveIsMalformed_ShouldThrowWithInnerException()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
+        var extractor = new SafeArchiveExtractor(mock, SafeExtractionOptions.From(ArchiveExtractionOptions.Default));
         using var memory = new MemoryStream("not a zip"u8.ToArray());
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", SafeExtractionOptions.Default);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
 
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.MalformedArchive);
@@ -229,8 +229,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenFileCountEqualsMax_ShouldSucceed()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxFileCount = 5 };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -244,7 +244,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var result = await extractor.ExtractAsync(memory, "C:\\test", options);
+        var result = await extractor.ExtractAsync(memory, "C:\\test");
 
         result.FilesExtracted.Should().Be(5);
     }
@@ -253,8 +253,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenFileCountExceedsMax_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxFileCount = 5 };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -268,7 +268,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", options);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
 
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.FileCountLimitExceeded);
@@ -278,8 +278,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenDepthEqualsMax_ShouldSucceed()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxDepth = 3 };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -291,7 +291,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var result = await extractor.ExtractAsync(memory, "C:\\test", options);
+        var result = await extractor.ExtractAsync(memory, "C:\\test");
 
         result.FilesExtracted.Should().Be(1);
     }
@@ -300,8 +300,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenDepthExceedsMax_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxDepth = 3 };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -313,7 +313,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", options);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
 
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.DepthLimitExceeded);
@@ -324,8 +324,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenExtractedSizeEqualsMax_ShouldSucceed()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(100) };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -336,7 +336,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var result = await extractor.ExtractAsync(memory, "C:\\test", options);
+        var result = await extractor.ExtractAsync(memory, "C:\\test");
 
         result.FilesExtracted.Should().Be(1);
         result.TotalExtractedBytes.Should().Be(100);
@@ -346,8 +346,8 @@ public class SafeArchiveExtractorTests
     public async Task ExtractAsync_WhenExtractedSizeExceedsMax_ShouldThrow()
     {
         var mock = new MockFileInfoDetailProvider();
-        var extractor = new SafeArchiveExtractor(mock);
         var options = new SafeExtractionOptions { MaxExtractedSize = FileSize.FromBytes(100) };
+        var extractor = new SafeArchiveExtractor(mock, options);
 
         using var memory = new MemoryStream();
         await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -358,7 +358,7 @@ public class SafeArchiveExtractorTests
         }
         memory.Seek(0, SeekOrigin.Begin);
 
-        var act = async () => await extractor.ExtractAsync(memory, "C:\\test", options);
+        var act = async () => await extractor.ExtractAsync(memory, "C:\\test");
 
         var ex = await act.Should().ThrowAsync<ArchiveExtractionException>();
         ex.Which.ErrorKind.Should().Be(ArchiveExtractionErrorKind.SizeLimitExceeded);

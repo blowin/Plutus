@@ -1,9 +1,9 @@
 using System.Buffers;
 using System.IO.Compression;
 
-namespace Plutus.Domain.RemoteRepository;
+namespace Plutus.Domain.ArchiveExtractor;
 
-public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
+public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem, SafeExtractionOptions options)
 {
     private static readonly string[] WindowsReservedNames =
     [
@@ -15,7 +15,6 @@ public sealed class SafeArchiveExtractor(IFileInfoDetailProvider fileSystem)
     public async ValueTask<SafeExtractionResult> ExtractAsync(
         Stream archiveStream,
         string targetDirectory,
-        SafeExtractionOptions options,
         CancellationToken cancellationToken = default)
     {
         string root = Path.GetFullPath(targetDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

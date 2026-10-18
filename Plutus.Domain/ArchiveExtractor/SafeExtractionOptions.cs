@@ -1,6 +1,6 @@
-namespace Plutus.Domain.RemoteRepository;
+namespace Plutus.Domain.ArchiveExtractor;
 
-public readonly record struct SafeExtractionOptions()
+public record SafeExtractionOptions()
 {
     public FileSize MaxDownloadSize { get; init; } = FileSize.Parse("100MB");
     public FileSize MaxExtractedSize { get; init; } = FileSize.Parse("500MB");
@@ -9,7 +9,7 @@ public readonly record struct SafeExtractionOptions()
     public bool RejectDuplicatePaths { get; init; } = true;
     public bool RejectSymlinks { get; init; } = true;
 
-    public static SafeExtractionOptions Default { get; } = new();
+    public static SafeExtractionOptions Default { get; } = From(ArchiveExtractionOptions.Default);
 
     /// <summary>Creates a SafeExtractionOptions from ArchiveExtractionOptions, using defaults for null values.</summary>
     public static SafeExtractionOptions From(ArchiveExtractionOptions source)

@@ -1,4 +1,4 @@
-namespace Plutus.Domain.RemoteRepository;
+namespace Plutus.Domain.ArchiveExtractor;
 
 public enum ArchiveExtractionErrorKind
 {

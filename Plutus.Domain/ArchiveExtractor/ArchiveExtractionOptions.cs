@@ -1,4 +1,4 @@
-namespace Plutus.Domain.RemoteRepository;
+namespace Plutus.Domain.ArchiveExtractor;
 
 /// <summary>
 /// Configurable limits and behaviors for remote archive extraction.

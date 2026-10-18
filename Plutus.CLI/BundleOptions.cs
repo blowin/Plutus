@@ -2,7 +2,6 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
-using Plutus.Domain.RemoteRepository;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.CLI;

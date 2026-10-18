@@ -1,12 +1,10 @@
-using Plutus.Domain;
-using Plutus.Domain.RemoteRepository;
+using Plutus.Domain.ArchiveExtractor;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public sealed class GitLabRemoteRepository(
     HttpClient client,
-    IFileInfoDetailProvider fileInfoDetailProvider,
-    ArchiveExtractionOptions archiveExtractionOptions) : BaseRemoteRepository(client, fileInfoDetailProvider, archiveExtractionOptions)
+    SafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
 {
     protected override string PlatformPrefix => "gitlab";
 

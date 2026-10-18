@@ -1,12 +1,11 @@
 using Plutus.Domain;
-using Plutus.Domain.RemoteRepository;
+using Plutus.Domain.ArchiveExtractor;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public abstract class BaseRemoteRepository(
     HttpClient client,
-    IFileInfoDetailProvider fileInfoDetailProvider,
-    ArchiveExtractionOptions archiveExtractionOptions) : IRemoteRepository, IDisposable
+    SafeArchiveExtractor safeArchiveExtractor) : IRemoteRepository, IDisposable
 {
     private readonly List<string> _tempDirectories = [];
     protected readonly HttpClient HttpClient = client;
@@ -116,9 +115,7 @@ public abstract class BaseRemoteRepository(
 
             // Safe extraction: entry-by-entry validation
             await using var archiveStream = new FileStream(tempZip, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var extractor = new SafeArchiveExtractor(fileInfoDetailProvider);
-            var safeOptions = SafeExtractionOptions.From(archiveExtractionOptions);
-            await extractor.ExtractAsync(archiveStream, targetDir, safeOptions);
+            await safeArchiveExtractor.ExtractAsync(archiveStream, targetDir);
 
             success = true;
             _tempDirectories.Add(targetDir);
