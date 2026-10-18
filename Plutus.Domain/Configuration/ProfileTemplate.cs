@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain.Configuration;
@@ -25,7 +26,11 @@ public sealed class ProfileTemplate
         // Absent and unset are different things in a profile: a key that is present with null states "not set", and
         // a user who wants to fill it in should see it.
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower) },
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower),
+            new TimeSpanConverter(),
+        },
     };
 
     /// <summary>The values a run uses when nothing is stated.</summary>
@@ -53,6 +58,8 @@ public sealed class ProfileTemplate
 
         Output = null,
         Format = "md",
+        Branch = "master",
+        Commit = "bef25b4",
         Encoding = "utf-8",
         MaxFileSize = "1M",
         MaxTokens = null,
@@ -72,6 +79,13 @@ public sealed class ProfileTemplate
         MaxArchiveDepth = 16,
         RejectDuplicateArchivePaths = true,
         RejectSymlinksInArchives = true,
+        Timeout = new TimeoutOptions
+        {
+            OperationTimeout = TimeSpan.FromSeconds(120),
+            MaxRetries = 3,
+            RetryBaseDelay = TimeSpan.FromMilliseconds(500),
+            RetryMaxDelay = TimeSpan.FromSeconds(30),
+        }
     };
 
     public string Render() => JsonSerializer.Serialize(Starter, SerializerOptions) + Environment.NewLine;

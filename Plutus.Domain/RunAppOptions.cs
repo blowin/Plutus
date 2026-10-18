@@ -3,6 +3,7 @@ using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -77,6 +78,9 @@ public record RunAppOptions
 
     /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
     public ArchiveExtractionOptions ArchiveExtraction { get; init; } = ArchiveExtractionOptions.Default;
+
+    /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
+    public TimeoutOptions Timeout { get; init; } = TimeoutOptions.Default;
 
     /// <summary>
     /// Validates the run options and returns a list of error messages.

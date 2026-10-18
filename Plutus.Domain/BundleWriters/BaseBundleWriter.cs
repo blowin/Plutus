@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
@@ -13,8 +14,6 @@ public abstract class BaseBundleWriter(
     Encoding encoding,
     BundleLimits bundleLimits) : IBundleWriter
 {
-    private readonly BundleLimits _limits = bundleLimits;
-
     public abstract string FormatExtension { get; }
     public int MaxConcurrentFileReads { get; set; } = 8;
     public bool IncludeFileContents { get; set; } = true;
@@ -25,12 +24,13 @@ public abstract class BaseBundleWriter(
     protected readonly Encoding Encoding = encoding;
 
     /// <summary>The limits this writer applies, so formats can report the same numbers the limits used.</summary>
-    protected BundleLimits Limits => _limits;
+    protected BundleLimits Limits => bundleLimits;
 
     public async ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        GitDiffContext? gitDiff = null)
+        GitDiffContext? gitDiff = null,
+        CancellationToken cancellationToken = default)
     {
         FileInfoDetailProvider.CreateDirectoryForFile(output);
 
@@ -41,12 +41,15 @@ public abstract class BaseBundleWriter(
 
         using var semaphore = new SemaphoreSlim(MaxConcurrentFileReads);
 
+        // Check for early cancellation
+        cancellationToken.ThrowIfCancellationRequested();
+
         // ReSharper disable once AccessToDisposedClosure
-        var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e));
+        var processingTasks = entries.Select(e => ProcessEntryInternalAsync(semaphore, e, cancellationToken));
         var processedFiles = (await Task.WhenAll(processingTasks).ConfigureAwait(false)).ToList();
 
         // The one shared limit step: size first, then the token budget, both from BundleLimits.
-        var limitResult = _limits.Apply(processedFiles.Select(ToLimitItem).ToArray());
+        var limitResult = bundleLimits.Apply(processedFiles.Select(ToLimitItem).ToArray());
         var excluded = limitResult.Exclusions.ToDictionary(exclusion => exclusion.Key, exclusion => exclusion.Reason, StringComparer.Ordinal);
         var limitedFiles = processedFiles
             .Select(file => ApplyLimit(file, excluded, limitResult.IncludedKeys))
@@ -57,7 +60,7 @@ public abstract class BaseBundleWriter(
             .Select(f => f.Entry.RelativePath)
             .ToHashSet(StringComparer.Ordinal);
         var skippedPaths = limitedFiles
-            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && !_limits.ExcludedBySize(f.Entry.File.Length))
+            .Where(f => f.IsSkipped && !f.IsTokenBudgetOmitted && !bundleLimits.ExcludedBySize(f.Entry.File.Length))
             .Select(f => f.Entry.RelativePath)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -66,7 +69,7 @@ public abstract class BaseBundleWriter(
             ApplyFileStatuses(root.ProjectNode, tokenBudgetOmittedPaths, skippedPaths);
         }
 
-        await WriteContentAsync(roots, output, limitedFiles, _limits.CreateSummary(limitResult), gitDiff).ConfigureAwait(false);
+        await WriteContentAsync(roots, output, limitedFiles, bundleLimits.CreateSummary(limitResult), gitDiff).ConfigureAwait(false);
         return entries;
     }
 
@@ -130,7 +133,7 @@ public abstract class BaseBundleWriter(
                 return;
             }
 
-            if (_limits.ExcludedBySize(node.FileInfo?.Length ?? 0))
+            if (bundleLimits.ExcludedBySize(node.FileInfo?.Length ?? 0))
             {
                 node.Status = NodeStatus.OversizedFile;
             }
@@ -152,26 +155,28 @@ public abstract class BaseBundleWriter(
         }
     }
 
-    private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry)
+    private async Task<ProcessedFileContext> ProcessEntryInternalAsync(SemaphoreSlim semaphore, BundleEntry entry, CancellationToken cancellationToken)
     {
-        await semaphore.WaitAsync().ConfigureAwait(false);
+        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var language = MarkdownLanguageProvider.GetLanguage(entry.File.Name);
 
-            if (_limits.ExcludedBySize(entry.File.Length))
+            if (bundleLimits.ExcludedBySize(entry.File.Length))
             {
-                return ProcessedFileContext.CreateSkipped(entry, language, _limits.SizeExclusionReason(entry.File.Length));
+                return ProcessedFileContext.CreateSkipped(entry, language, bundleLimits.SizeExclusionReason(entry.File.Length));
             }
 
-            var (content, reason) = await ReadTextSafeAsync(entry.File).ConfigureAwait(false);
+            var (content, reason) = await ReadTextSafeAsync(entry.File, cancellationToken).ConfigureAwait(false);
             if (content is null)
             {
                 return ProcessedFileContext.CreateSkipped(entry, language, reason ?? "unknown error");
             }
 
             var minifiedContent = CodeMinifier.Minify(content, language);
-            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, _limits.EstimatesTokens ? TokenEstimator.Estimate(minifiedContent) : null);
+            return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, bundleLimits.EstimatesTokens ? TokenEstimator.Estimate(minifiedContent) : null);
         }
         finally
         {
@@ -179,14 +184,14 @@ public abstract class BaseBundleWriter(
         }
     }
 
-    private async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file)
+    private async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file, CancellationToken cancellationToken)
     {
         try
         {
             await using (var fs = file.CreateReadStream())
             {
                 var buffer = new byte[8192];
-                var bytesRead = await fs.ReadAsync(buffer).ConfigureAwait(false);
+                var bytesRead = await fs.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
                 for (var i = 0; i < bytesRead; i++)
                 {
                     if (buffer[i] == 0)
@@ -201,7 +206,7 @@ public abstract class BaseBundleWriter(
             {
                 await using (var fs = file.CreateReadStream())
                 {
-                    await fs.CopyToAsync(ms).ConfigureAwait(false);
+                    await fs.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
                 }
                 bytes = ms.ToArray();
             }

@@ -3,14 +3,17 @@ using System.Net;
 using FluentAssertions;
 using Plutus.Domain;
 using Plutus.Domain.ArchiveExtractor;
+using Plutus.Domain.Retry;
 using Plutus.Infrastructure;
 using Plutus.Infrastructure.RemoteRepository;
+using Plutus.Infrastructure.Retry;
 
 namespace Plutus.Test.RemoteRepository;
 
 public class RemoteRepositoryTests
 {
     private static readonly IFileInfoDetailProvider RealProvider = new PhysicianPlutusFileInfo();
+    private static readonly RetryPolicy DefaultRetryPolicy = new(new TimeoutOptions());
 
     [Theory]
     [InlineData("https://github.com/owner/repo", null, null, "https://github.com/owner/repo/archive/master.zip")]
@@ -22,7 +25,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         var downloadedPath = await repository.DownloadAsync(path, branch, commit);
 
@@ -40,7 +43,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitLabRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitLabRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         await repository.DownloadAsync(path, branch, commit);
 
@@ -55,7 +58,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new BitbucketRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new BitbucketRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         await repository.DownloadAsync(path, branch, commit);
 
@@ -70,7 +73,7 @@ public class RemoteRepositoryTests
     public void GitHub_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -82,7 +85,7 @@ public class RemoteRepositoryTests
     public void GitLab_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new GitLabRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitLabRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -94,7 +97,7 @@ public class RemoteRepositoryTests
     public void Bitbucket_IsSupportedPath_ShouldRequireExactHost(string path, bool expected)
     {
         using var client = new HttpClient();
-        using var repository = new BitbucketRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new BitbucketRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         repository.IsSupportedPath(path).Should().Be(expected);
     }
@@ -104,7 +107,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo", "main", "a1b2c3d");
 
@@ -120,7 +123,7 @@ public class RemoteRepositoryTests
     public async Task GitHub_DownloadAsync_WhenRepositoryUrlIsInvalid_ShouldThrow(string path)
     {
         using var client = new HttpClient(new ArchiveHttpHandler());
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         Func<Task> act = async () => await repository.DownloadAsync(path);
 
@@ -132,7 +135,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new MaliciousArchiveHttpHandler(CreatePathTraversalArchive);
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -147,7 +150,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new MaliciousArchiveHttpHandler(() => CreateRootedArchive(rootedEntry));
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -160,7 +163,7 @@ public class RemoteRepositoryTests
     {
         using var handler = new ArchiveHttpHandler();
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         var downloadedPath = await repository.DownloadAsync("https://github.com/owner/repo");
 
@@ -176,7 +179,7 @@ public class RemoteRepositoryTests
 
         using var handler = new MaliciousArchiveHttpHandler(CreatePathTraversalArchive);
         using var client = new HttpClient(handler);
-        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)));
+        using var repository = new GitHubRemoteRepository(client, new SafeArchiveExtractor(RealProvider, SafeExtractionOptions.From(ArchiveExtractionOptions.Default)), DefaultRetryPolicy);
 
         Func<Task> act = async () => await repository.DownloadAsync("https://github.com/owner/repo");
 

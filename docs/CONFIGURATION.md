@@ -178,6 +178,37 @@ What a profile cannot set: the project paths, `--branch` / `--commit`, and the d
 `--diff-from`, `--diff-to`, `--diff-include-untracked`). Those identify *what* is being bundled rather than *how*, and
 a preset that silently changed the target would be a trap.
 
+### HTTP timeouts and retries
+
+| Key | Type | Equivalent flag |
+|---|---|---|
+| `timeout` | object | CLI flags (see below) |
+| `timeout.operationTimeout` | string (`"120s"`, `"5m"`) | `--http-timeout` |
+| `timeout.maxRetries` | integer ≥ 0 | `--max-retries` |
+| `timeout.retryBaseDelay` | string (`"500ms"`, `"1s"`) | `--retry-base-delay` |
+| `timeout.retryMaxDelay` | string (`"30s"`, `"1m"`) | `--retry-max-delay` |
+
+`timeout` controls how HTTP operations behave when fetching remote repositories:
+
+- **`operationTimeout`** — total time allowed for a single HTTP operation. Default: `120s`.
+- **`maxRetries`** — maximum number of retry attempts for transient failures (5xx responses, connection errors). Default: `3`.
+- **`retryBaseDelay`** — base delay for exponential backoff (`baseDelay * 2^attempt`). Default: `500ms`.
+- **`retryMaxDelay`** — maximum delay between retries, capping the exponential growth. Default: `30s`.
+
+The retry policy respects the `Retry-After` header when present: if a server returns a `Retry-After` value greater
+than the calculated backoff delay, the policy waits for the server-specified duration instead.
+
+```jsonc
+{
+  "timeout": {
+    "operationTimeout": "120s",
+    "maxRetries": 3,
+    "retryBaseDelay": "500ms",
+    "retryMaxDelay": "30s"
+  }
+}
+```
+
 ## Example
 
 ```jsonc

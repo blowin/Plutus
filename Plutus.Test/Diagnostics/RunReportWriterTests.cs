@@ -228,7 +228,7 @@ public class RunReportWriterTests
     {
         var standard = new StringWriter();
         var error = new StringWriter();
-        var output = new ConsoleRunOutput(standard, error);
+        var output = new TextWriterRunOutput(standard, error);
 
         output.Info("bundle written");
         output.Warning("something was skipped");

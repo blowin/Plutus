@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Diffing;
 
@@ -15,5 +16,6 @@ public interface IBundleWriter
     ValueTask<List<BundleEntry>> WriteAsync(
         List<(IFileProvider Provider, string RootName, string OriginalPath, ProjectNode ProjectNode)> roots,
         IFileInfo output,
-        GitDiffContext? gitDiff = null);
+        GitDiffContext? gitDiff = null,
+        CancellationToken cancellationToken = default);
 }

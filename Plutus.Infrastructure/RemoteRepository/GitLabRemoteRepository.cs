@@ -1,10 +1,12 @@
 using Plutus.Domain.ArchiveExtractor;
+using Plutus.Infrastructure.Retry;
 
 namespace Plutus.Infrastructure.RemoteRepository;
 
 public sealed class GitLabRemoteRepository(
     HttpClient client,
-    ISafeArchiveExtractor safeArchiveExtractor) : BaseRemoteRepository(client, safeArchiveExtractor)
+    ISafeArchiveExtractor safeArchiveExtractor,
+    RetryPolicy retryPolicy) : BaseRemoteRepository(client, safeArchiveExtractor, retryPolicy)
 {
     protected override string PlatformPrefix => "gitlab";
 

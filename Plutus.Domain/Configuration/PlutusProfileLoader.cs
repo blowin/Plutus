@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Plutus.Domain.Retry;
 
 namespace Plutus.Domain.Configuration;
 
@@ -43,7 +44,11 @@ public sealed class PlutusProfileLoader(FileProviderAccess files)
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower) },
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower),
+            new TimeSpanConverter(),
+        },
     };
 
     /// <summary>

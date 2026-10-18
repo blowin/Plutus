@@ -2,6 +2,7 @@ using System.Text;
 using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Diffing;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
 
@@ -92,13 +93,14 @@ public sealed class RunOptionsResolver
             TargetEncoding = ResolveEncoding(request.Encoding, profile?.Encoding, provenance),
             MaxConcurrency = ResolveValue("maxConcurrency", request.MaxConcurrency, profile?.MaxConcurrency, DefaultMaxConcurrency, provenance),
             Format = ResolveString("format", request.Format, profile?.Format, DefaultFormat, provenance),
-            Branch = request.Branch,
-            Commit = request.Commit,
+            Branch = ResolveNullableString("branch", request.Branch, profile?.Branch, null, provenance),
+            Commit = ResolveNullableString("commit", request.Commit, profile?.Commit, null, provenance),
             TokenBudget = tokenBudget,
             Diff = diff,
             IncludeFileContents = ResolveValue("includeFileContents", request.IncludeFileContents, profile?.IncludeFileContents, true, provenance),
             Profile = provenance.Build(),
             ArchiveExtraction = ResolveArchiveExtraction(request.ArchiveExtraction, profile, provenance),
+            Timeout = ResolveTimeoutOptions(request.Timeout, profile?.Timeout, provenance),
         };
     }
 
@@ -193,6 +195,28 @@ public sealed class RunOptionsResolver
         return trimmed.StartsWith('.') ? $"*{trimmed}" : $"*.{trimmed}";
     }
 
+    private static TimeSpan? ResolveTimeSpan(string key, TimeSpan? fromCommandLine, string? fromProfile, TimeSpan fallback)
+    {
+        if (fromCommandLine is { } explicitValue)
+        {
+            return explicitValue;
+        }
+
+        if (!string.IsNullOrWhiteSpace(fromProfile))
+        {
+            try
+            {
+                return TimeSpan.Parse(fromProfile);
+            }
+            catch (Exception)
+            {
+                return fallback;
+            }
+        }
+
+        return null;
+    }
+
     private static Encoding ResolveEncoding(string? fromCommandLine, string? fromProfile, Provenance provenance)
     {
         var name = fromCommandLine ?? fromProfile ?? DefaultEncoding;
@@ -234,6 +258,9 @@ public sealed class RunOptionsResolver
     }
 
     private static string ResolveString(string key, string? fromCommandLine, string? fromProfile, string fallback, Provenance provenance)
+        => ResolveNullableString(key, fromCommandLine, fromProfile, fallback, provenance)!;
+
+    private static string? ResolveNullableString(string key, string? fromCommandLine, string? fromProfile, string? fallback, Provenance provenance)
     {
         if (!string.IsNullOrWhiteSpace(fromCommandLine))
         {
@@ -378,6 +405,23 @@ public sealed class RunOptionsResolver
         }
 
         return null;
+    }
+
+    private static TimeoutOptions ResolveTimeoutOptions(TimeoutOptions? fromCommandLine, TimeoutOptions? fromProfile, Provenance provenance)
+    {
+        if (fromCommandLine is { } cmd)
+        {
+            provenance.OverrideIfStated("timeout", fromProfile is not null);
+            return cmd;
+        }
+
+        if (fromProfile is { } profile)
+        {
+            provenance.Apply("timeout", differsFromDefault: true);
+            return profile;
+        }
+
+        return TimeoutOptions.Default;
     }
 
     /// <summary>Collects which profile keys were used, and which an explicit flag replaced.</summary>

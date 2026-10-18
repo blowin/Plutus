@@ -135,7 +135,8 @@ public class BundleAppRunnerTests
             IReadOnlyCollection<IFileInfo> roots,
             IFileInfo output,
             RunAppOptions options,
-            GitDiffContext? gitDiff = null)
+            GitDiffContext? gitDiff = null,
+            System.Threading.CancellationToken cancellationToken = default)
         {
             Invocations.Add(1);
             LastDiffContext = gitDiff;

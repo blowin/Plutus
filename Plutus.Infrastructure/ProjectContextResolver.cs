@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain;
 using Plutus.Domain.Diagnostics;
@@ -12,7 +13,7 @@ public class ProjectContextResolver(
 {
     private readonly IRunOutput _output = runOutput ?? NullRunOutput.Instance;
 
-    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format, string? branch, string? commit)
+    public async Task<ProjectResolveResponse?> ResolveContextAsync(List<string>? projectPaths, string? outputPath, string? format, string? branch, string? commit, CancellationToken cancellationToken = default)
     {
         if (projectPaths == null || projectPaths.Count == 0)
         {
@@ -20,7 +21,7 @@ public class ProjectContextResolver(
             return null;
         }
 
-        var processedPaths = await GetPathForProcessAsync(projectPaths, branch, commit);
+        var processedPaths = await GetPathForProcessAsync(projectPaths, branch, commit, cancellationToken);
         var roots = processedPaths?.Select(ResolveDirectory).ToList();
         if (roots is null)
         {
@@ -40,7 +41,7 @@ public class ProjectContextResolver(
         return new(roots, output);
     }
 
-    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, string? branch, string? commit)
+    private async Task<List<string>?> GetPathForProcessAsync(List<string> projectPaths, string? branch, string? commit, CancellationToken cancellationToken)
     {
         var processedPaths = new List<string>();
         foreach (var path in projectPaths)
@@ -70,7 +71,7 @@ public class ProjectContextResolver(
                 _output.Info($"Downloading remote repository: {path}...");
                 try
                 {
-                    return await remoteRepositoryProvider.DownloadAsync(path, branch, commit);
+                    return await remoteRepositoryProvider.DownloadAsync(path, branch, commit, cancellationToken);
                 }
                 catch (Exception ex)
                 {

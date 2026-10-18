@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.CLI;
@@ -215,6 +216,33 @@ internal sealed class BundleOptions
         DefaultValueFactory = _ => true
     };
 
+    public Option<TimeSpan> HttpTimeout { get; } = new("--http-timeout")
+    {
+        Description = "Maximum time allowed for HTTP operations (e.g., 30s, 2m).",
+        DefaultValueFactory = _ => TimeSpan.FromMinutes(2),
+        CustomParser = ParseTimeSpan,
+    };
+
+    public Option<int> MaxRetries { get; } = new("--max-retries")
+    {
+        Description = "Maximum number of retry attempts for transient network failures.",
+        DefaultValueFactory = _ => 3
+    };
+
+    public Option<TimeSpan> RetryBaseDelay { get; } = new("--retry-base-delay")
+    {
+        Description = "Base delay for exponential backoff on retries (e.g., 500ms, 1s).",
+        DefaultValueFactory = _ => TimeSpan.FromMilliseconds(500),
+        CustomParser = ParseTimeSpan,
+    };
+
+    public Option<TimeSpan> RetryMaxDelay { get; } = new("--retry-max-delay")
+    {
+        Description = "Maximum delay between retries (e.g., 10s, 1m). Default: 30s.",
+        DefaultValueFactory = _ => TimeSpan.FromSeconds(30),
+        CustomParser = ParseTimeSpan,
+    };
+
     /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
     public BundleOptions WithAliases()
     {
@@ -262,6 +290,29 @@ internal sealed class BundleOptions
         yield return MaxArchiveDepth;
         yield return RejectDuplicateArchivePaths;
         yield return RejectSymlinksInArchives;
+        yield return HttpTimeout;
+        yield return MaxRetries;
+        yield return RetryBaseDelay;
+        yield return RetryMaxDelay;
+    }
+
+    private static TimeSpan ParseTimeSpan(ArgumentResult result)
+    {
+        if (result.Tokens.Count != 1)
+        {
+            result.AddError($"{result.Argument.Name} should have 1 value");
+            return default;
+        }
+
+        try
+        {
+            return TimeSpanParser.Parse(result.Tokens.First().Value);
+        }
+        catch (Exception exception)
+        {
+            result.AddError(exception.Message);
+            return default;
+        }
     }
 
     private static FileSize FileSizeParser(ArgumentResult result)

@@ -1,4 +1,5 @@
 using Plutus.Domain.Comments;
+using Plutus.Domain.Retry;
 using Plutus.Domain.Tokens;
 
 namespace Plutus.Domain.Configuration;
@@ -55,6 +56,11 @@ public sealed record PlutusProfile
 
     /// <summary>Bundle format (<c>md</c>, <c>json</c>, <c>xml</c>). Equivalent to <c>--format</c>.</summary>
     public string? Format { get; init; }
+
+    /// <summary>Remote revision, which cannot come from a profile: it identifies what is being bundled.</summary>
+    public string? Branch { get; init; }
+
+    public string? Commit { get; init; }
 
     /// <summary>Text encoding name. Equivalent to <c>--encoding</c>.</summary>
     public string? Encoding { get; init; }
@@ -113,4 +119,9 @@ public sealed record PlutusProfile
 
     /// <summary>Reject symlinks in remote archives. Equivalent to <c>--reject-symlinks-in-archives</c>.</summary>
     public bool? RejectSymlinksInArchives { get; init; }
+
+    // ---- network timeouts and retries -----------------------------------------------------------------------
+
+    /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
+    public TimeoutOptions? Timeout { get; init; }
 }
