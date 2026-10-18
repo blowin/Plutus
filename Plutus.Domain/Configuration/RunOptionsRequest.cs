@@ -1,3 +1,4 @@
+using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Structure;
 using Plutus.Domain.Tokens;
@@ -68,6 +69,9 @@ public sealed record RunOptionsRequest
 
     /// <summary>The diff scope asked for on the command line, if any.</summary>
     public DiffRequest? Diff { get; init; }
+
+    /// <summary>Archive extraction limits and behaviors for remote repository downloads.</summary>
+    public ArchiveExtractionOptions? ArchiveExtraction { get; init; }
 }
 
 /// <summary>A diff scope as requested, before the resolved limits are attached to it.</summary>
@@ -94,7 +98,7 @@ public sealed record ProfileProvenance
     /// <summary>Keys the profile set to something other than the built-in default, so they decided the run.</summary>
     public IReadOnlyList<string> AppliedKeys { get; init; } = [];
 
-    /// <summary>Keys the profile set to the value a run would have used anyway.</summary>
+    /// <summary>Keys the profile set to the value a run would use anyway.</summary>
     public IReadOnlyList<string> DefaultedKeys { get; init; } = [];
 
     /// <summary>Keys the profile set and an explicit flag replaced.</summary>

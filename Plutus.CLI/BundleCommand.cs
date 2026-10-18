@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Plutus.Domain;
+using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
@@ -30,16 +31,6 @@ internal static class BundleCommand
 
     private static async Task<int> RunAsync(CommandLineReader reader, BundleOptions options, IRunOutput output)
     {
-        var branch = reader.Value(options.Branch);
-        var commit = reader.Value(options.Commit);
-        var diffFrom = reader.Value(options.DiffFrom);
-        var diffOnly = reader.Value(options.DiffOnly);
-
-        if (Validate(branch, commit, diffFrom, reader.Value(options.DiffTo), output) is { } failure)
-        {
-            return failure;
-        }
-
         // Configuration is read through one file access for the whole process: the profile search, the grammar
         // inventory and the container all see the same filesystem, and none of them opens a file directly.
         var fileProviderDetail = new PhysicianPlutusFileInfo();
@@ -65,6 +56,17 @@ internal static class BundleCommand
         }
 
         var resolved = resolution.Options!;
+        var validationErrors = resolved.Validate();
+        if (validationErrors.Count > 0)
+        {
+            foreach (var error in validationErrors)
+            {
+                output.Error(error);
+            }
+
+            return 1;
+        }
+
         WarnAboutIdleCommentOptions(resolved, output);
 
         // Resolve the strategy before any work: asking for ANTLR token channels without a maintained grammar is an
@@ -90,30 +92,6 @@ internal static class BundleCommand
             output.Error(exception.Message);
             return 1;
         }
-    }
-
-    /// <summary>The combinations that cannot mean anything, refused before any work starts.</summary>
-    private static int? Validate(string? branch, string? commit, string? diffFrom, string? diffTo, IRunOutput output)
-    {
-        if (!string.IsNullOrWhiteSpace(branch) && !string.IsNullOrWhiteSpace(commit))
-        {
-            output.Error("branch and commit cannot be used together.");
-            return 1;
-        }
-
-        if (!string.IsNullOrWhiteSpace(diffFrom) && (!string.IsNullOrWhiteSpace(branch) || !string.IsNullOrWhiteSpace(commit)))
-        {
-            output.Error("--diff-from cannot be used together with --branch or --commit.");
-            return 1;
-        }
-
-        if (!string.IsNullOrWhiteSpace(diffTo) && string.IsNullOrWhiteSpace(diffFrom))
-        {
-            output.Error("--diff-to requires --diff-from to define the other end of the range.");
-            return 1;
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -145,6 +123,8 @@ internal static class BundleCommand
     {
         var diffOnly = reader.Value(options.DiffOnly);
         var diffFrom = reader.Value(options.DiffFrom);
+
+        var archiveExtraction = BuildArchiveExtractionRequest(reader, options);
 
         return new RunOptionsRequest
         {
@@ -182,6 +162,37 @@ internal static class BundleCommand
                     IncludeUntracked = reader.Value(options.DiffIncludeUntracked),
                 }
                 : null,
+            ArchiveExtraction = archiveExtraction,
+        };
+    }
+
+    /// <summary>Builds the archive extraction request from CLI flags.</summary>
+    private static ArchiveExtractionOptions? BuildArchiveExtractionRequest(
+        CommandLineReader reader,
+        BundleOptions options)
+    {
+        var maxDownloadSize = reader.ExplicitValue(options.MaxDownloadSize);
+        var maxExtractedSize = reader.ExplicitValue(options.MaxExtractedSize);
+        var maxFileCount = reader.ExplicitNullableValue(options.MaxArchiveFileCount);
+        var maxDepth = reader.ExplicitNullableValue(options.MaxArchiveDepth);
+        var rejectDuplicates = reader.ExplicitValue(options.RejectDuplicateArchivePaths);
+        var rejectSymlinks = reader.ExplicitValue(options.RejectSymlinksInArchives);
+
+        // If nothing was explicitly set, return null so the profile/default path takes over.
+        if (maxDownloadSize is null && maxExtractedSize is null && maxFileCount is null &&
+            maxDepth is null && rejectDuplicates is null && rejectSymlinks is null)
+        {
+            return null;
+        }
+
+        return new ArchiveExtractionOptions
+        {
+            MaxDownloadSize = maxDownloadSize,
+            MaxExtractedSize = maxExtractedSize,
+            MaxFileCount = maxFileCount,
+            MaxDepth = maxDepth,
+            RejectDuplicatePaths = rejectDuplicates,
+            RejectSymlinks = rejectSymlinks,
         };
     }
 

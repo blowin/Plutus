@@ -52,9 +52,10 @@ public class ProfileTemplateTests
             "it is the only key that states something the default does not");
         starter.Profile.DefaultedKeys.Should().BeEquivalentTo(
             [
-                "allowDangerousFiles", "commentStrategy", "encoding", "format", "includeFileContents", "maxConcurrency",
-                "maxFileSize", "minify", "preserveDocComments", "signaturesOnly", "stripComments", "useDefaultExcludes",
-                "useGitignore",
+                "maxFileSize","useGitignore","useDefaultExcludes","allowDangerousFiles","minify","stripComments",
+                "preserveDocComments","commentStrategy","signaturesOnly","encoding","maxConcurrency","format",
+                "includeFileContents","maxDownloadSize","maxExtractedSize","maxFileCount","maxDepth",
+                "rejectDuplicatePaths","rejectSymlinks"
             ],
             "every other key restates the value a run would have used; the token policy keys are only read when a budget is set");
         starter.Format.Should().Be(withoutProfile.Format);

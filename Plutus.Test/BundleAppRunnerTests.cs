@@ -2,7 +2,6 @@ using FluentAssertions;
 using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
-using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Tokens;
@@ -124,13 +123,8 @@ public class BundleAppRunnerTests
     };
 
     /// <summary>Captures the arguments of the bundling call the runner makes, without starting a real scan.</summary>
-    private sealed class RecordingBundler : PlutusBundler
+    private sealed class RecordingBundler() : PlutusBundler(Substitute.For<IFileInfoDetailProvider>(), [])
     {
-        public RecordingBundler()
-            : base(Substitute.For<IFileInfoDetailProvider>(), [])
-        {
-        }
-
         public List<int> Invocations { get; } = [];
 
         public GitDiffContext? LastDiffContext { get; private set; }

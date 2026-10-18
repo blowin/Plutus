@@ -1,11 +1,12 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Plutus.Infrastructure.RemoteRepository;
+using Plutus.Test.RemoteRepository;
 
 namespace Plutus.Test;
 
 public class GitHubRemoteRepositoryTests
 {
-    private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client)
+    private class TestGitHubRepository(HttpClient client) : GitHubRemoteRepository(client, new NullSafeArchiveExtractor())
     {
         public string ExposeBuildZipUrl(string path) => BuildZipUrl(path, null, null);
     }
@@ -19,7 +20,7 @@ public class GitHubRemoteRepositoryTests
     {
         // Arrange
         using var client = new HttpClient();
-        using var repo = new GitHubRemoteRepository(client);
+        using var repo = new GitHubRemoteRepository(client, new NullSafeArchiveExtractor());
 
         // Act
         var result = repo.IsSupportedPath(path);

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
@@ -9,7 +10,6 @@ using Plutus.Domain.IgnoreMatcher;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Minifier.Languages;
 using Plutus.Domain.Structure;
-using Plutus.Domain.Tokens.Applier;
 using Plutus.Infrastructure.Diagnostics;
 using Plutus.Infrastructure.Git;
 using Plutus.Infrastructure.RemoteRepository;
@@ -102,6 +102,11 @@ public static class ServiceCollectionExt
         services.AddSingleton<SignatureExtractionReport>();
         services.AddSingleton<ISignatureExtractionObserver>(provider => provider.GetRequiredService<SignatureExtractionReport>());
         services.AddSingleton(provider => provider.GetRequiredService<GrammarInventoryLoader>().Discover());
+
+        // Archive extraction options are resolved from the run options and made available as a standalone service
+        // so the remote repository implementations can consume them from the container.
+        services.AddSingleton(_ => SafeExtractionOptions.From(options.ArchiveExtraction));
+        services.AddSingleton<ISafeArchiveExtractor, SafeArchiveExtractor>();
 
         // Discovery, not a dispatch table: each implementation declares the language it serves, and the container
         // registers it. Adding a structural provider or a maintained language processor is a matter of writing the

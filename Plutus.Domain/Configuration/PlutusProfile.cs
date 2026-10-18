@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Tokens;
 
@@ -94,4 +93,24 @@ public sealed record PlutusProfile
 
     /// <summary>Reduce files to signatures. Equivalent to <c>--signatures-only</c>.</summary>
     public bool? SignaturesOnly { get; init; }
+
+    // ---- archive extraction -------------------------------------------------------------------------------
+
+    /// <summary>Maximum download size for remote archives. Equivalent to <c>--max-download-size</c>.</summary>
+    public string? MaxDownloadSize { get; init; }
+
+    /// <summary>Maximum extracted size for remote archives. Equivalent to <c>--max-extracted-size</c>.</summary>
+    public string? MaxExtractedSize { get; init; }
+
+    /// <summary>Maximum file count in a remote archive. Equivalent to <c>--max-archive-file-count</c>.</summary>
+    public int? MaxArchiveFileCount { get; init; }
+
+    /// <summary>Maximum directory depth in a remote archive. Equivalent to <c>--max-archive-depth</c>.</summary>
+    public int? MaxArchiveDepth { get; init; }
+
+    /// <summary>Reject duplicate paths in remote archives. Equivalent to <c>--reject-duplicate-archive-paths</c>.</summary>
+    public bool? RejectDuplicateArchivePaths { get; init; }
+
+    /// <summary>Reject symlinks in remote archives. Equivalent to <c>--reject-symlinks-in-archives</c>.</summary>
+    public bool? RejectSymlinksInArchives { get; init; }
 }

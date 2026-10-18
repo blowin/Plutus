@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Plutus.Domain;
+using Plutus.Domain.ArchiveExtractor;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Minifier;
@@ -72,6 +73,7 @@ public class ServiceCollectionTests
             Branch = null,
             Commit = null,
             CommentStripPlan = plan,
+            ArchiveExtraction = ArchiveExtractionOptions.Default
         };
 
         var services = new ServiceCollection();

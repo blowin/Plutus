@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using Plutus.Domain;
 using Plutus.Domain.Comments;
 using Plutus.Domain.Tokens;
@@ -36,24 +37,7 @@ internal sealed class BundleOptions
     {
         Description = "Max file size to include (e.g., 512K, 1M, 2MB).",
         DefaultValueFactory = _ => FileSize.Parse("1M"),
-        CustomParser = result =>
-        {
-            if (result.Tokens.Count != 1)
-            {
-                result.AddError($"{result.Argument.Name} should have 1 file size");
-                return default;
-            }
-
-            try
-            {
-                return FileSize.Parse(result.Tokens.First().Value);
-            }
-            catch (Exception exception)
-            {
-                result.AddError(exception.Message);
-                return default;
-            }
-        }
+        CustomParser = FileSizeParser,
     };
 
     public Option<bool> NoGitignore { get; } = new("--no-gitignore")
@@ -69,17 +53,6 @@ internal sealed class BundleOptions
     public Option<string?> Commit { get; } = new("--commit")
     {
         Description = "Specific remote commit hash to download. Cannot be used together with --branch.",
-        Validators =
-        {
-            result =>
-            {
-                var commit = result.GetValueOrDefault<string?>() ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(commit) && !System.Text.RegularExpressions.Regex.IsMatch(commit, "^(?:[0-9a-fA-F]{7,40})$"))
-                {
-                    result.AddError("Error: --commit must be a hexadecimal Git commit hash (7–40 characters).");
-                }
-            }
-        }
     };
 
     public Option<List<string>> Exclude { get; } = new("--exclude")
@@ -159,17 +132,6 @@ internal sealed class BundleOptions
     {
         Description = "Limit maximum concurrent file processing I/O tasks bound by a semaphore.",
         DefaultValueFactory = _ => 8,
-        Validators =
-        {
-            result =>
-            {
-                var value = result.GetValueOrDefault<int>();
-                if (value < 1)
-                {
-                    result.AddError($"The {result.Option.Name} option must be at least 1.");
-                }
-            }
-        }
     };
 
     public Option<string> Format { get; } = new("--format")
@@ -181,16 +143,6 @@ internal sealed class BundleOptions
     public Option<int?> MaxTokens { get; } = new("--max-tokens")
     {
         Description = "Target source-token budget using an offline heuristic.",
-        Validators =
-        {
-            result =>
-            {
-                if (result.GetValueOrDefault<int?>() is <= 0)
-                {
-                    result.AddError("--max-tokens must be greater than zero.");
-                }
-            }
-        }
     };
 
     public Option<TokenOverflowPolicy> OverflowPolicy { get; } = new("--token-overflow-policy")
@@ -213,33 +165,11 @@ internal sealed class BundleOptions
     public Option<string?> DiffFrom { get; } = new("--diff-from")
     {
         Description = "Restrict the bundle to files changed relative to this branch, tag, or commit, using merge-base semantics, and keep their contents. Combine with --diff-to to compare two specific commits. Cannot be combined with --branch or --commit.",
-        Validators =
-        {
-            result =>
-            {
-                var target = result.GetValueOrDefault<string?>();
-                if (target is not null && string.IsNullOrWhiteSpace(target))
-                {
-                    result.AddError("Error: --diff-from requires a branch, tag, or commit name.");
-                }
-            }
-        }
     };
 
     public Option<string?> DiffTo { get; } = new("--diff-to")
     {
         Description = "Upper revision of an explicit diff range. Together with --diff-from it compares the two commits directly, so a specific commit or range can be bundled.",
-        Validators =
-        {
-            result =>
-            {
-                var target = result.GetValueOrDefault<string?>();
-                if (target is not null && string.IsNullOrWhiteSpace(target))
-                {
-                    result.AddError("Error: --diff-to requires a branch, tag, or commit name.");
-                }
-            }
-        }
     };
 
     public Option<bool> DiffIncludeUntracked { get; } = new("--diff-include-untracked")
@@ -247,14 +177,50 @@ internal sealed class BundleOptions
         Description = "With --diff-only or --diff-from, also cover files git does not track yet, excluding anything .gitignore covers. A real new-file diff is generated for them."
     };
 
+    public Option<FileSize> MaxDownloadSize { get; } = new("--max-download-size")
+    {
+        Description = "Maximum allowed download size for remote archives (e.g., 50M, 100MB).",
+        DefaultValueFactory = _ => FileSize.Parse("100M"),
+        CustomParser = FileSizeParser,
+    };
+
+    public Option<FileSize> MaxExtractedSize { get; } = new("--max-extracted-size")
+    {
+        Description = "Maximum allowed total extracted size for remote archives (e.g., 200M, 500MB). Protects against decompression bombs.",
+        DefaultValueFactory = _ => FileSize.Parse("500M"),
+        CustomParser = FileSizeParser,
+    };
+
+    public Option<int?> MaxArchiveFileCount { get; } = new("--max-archive-file-count")
+    {
+        Description = "Maximum number of files allowed in a remote archive.",
+        DefaultValueFactory = _ => 10_000,
+    };
+
+    public Option<int?> MaxArchiveDepth { get; } = new("--max-archive-depth")
+    {
+        Description = "Maximum nesting depth of directories in a remote archive.",
+        DefaultValueFactory = _ => 30,
+    };
+
+    public Option<bool> RejectDuplicateArchivePaths { get; } = new("--reject-duplicate-archive-paths")
+    {
+        Description = "Reject remote archives containing duplicate entry paths.",
+        DefaultValueFactory = _ => true
+    };
+
+    public Option<bool> RejectSymlinksInArchives { get; } = new("--reject-symlinks-in-archives")
+    {
+        Description = "Reject remote archives containing symlinks (stored as directory entries with non-zero length).",
+        DefaultValueFactory = _ => true
+    };
+
     /// <summary>Applies the aliases and accepted values that belong to the command-line surface rather than to a type.</summary>
     public BundleOptions WithAliases()
     {
         Output.Aliases.Add("-o");
-        NoGitignore.Aliases.Add("--no-gitignore");
         Exclude.Aliases.Add("-e");
         Minify.Aliases.Add("-m");
-        CommentStrategy.AcceptOnlyFromAmong("auto", "lexical", "antlr");
         return this;
     }
 
@@ -290,5 +256,30 @@ internal sealed class BundleOptions
         yield return DiffFrom;
         yield return DiffTo;
         yield return DiffIncludeUntracked;
+        yield return MaxDownloadSize;
+        yield return MaxExtractedSize;
+        yield return MaxArchiveFileCount;
+        yield return MaxArchiveDepth;
+        yield return RejectDuplicateArchivePaths;
+        yield return RejectSymlinksInArchives;
+    }
+
+    private static FileSize FileSizeParser(ArgumentResult result)
+    {
+        if (result.Tokens.Count != 1)
+        {
+            result.AddError($"{result.Argument.Name} should have 1 value");
+            return default;
+        }
+
+        try
+        {
+            return FileSize.Parse(result.Tokens.First().Value);
+        }
+        catch (Exception exception)
+        {
+            result.AddError(exception.Message);
+            return default;
+        }
     }
 }

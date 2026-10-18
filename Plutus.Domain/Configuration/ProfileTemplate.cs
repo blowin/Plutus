@@ -38,7 +38,14 @@ public sealed class ProfileTemplate
 
         // The trees that --use-default-excludes already skips, stated explicitly because excluding them is what a
         // profile is usually for. Listing them changes no file that would have been bundled.
-        ExcludeDirs = ["bin", "obj", "node_modules", "dist", ".vs"],
+        ExcludeDirs =
+        [
+            "bin",
+            "obj",
+            "node_modules",
+            "dist",
+            ".vs"
+        ],
         ExcludeFiles = [],
         UseGitignore = true,
         UseDefaultExcludes = true,
@@ -59,6 +66,12 @@ public sealed class ProfileTemplate
         PreserveDocComments = false,
         CommentStrategy = CommentStrategyRequest.Auto,
         SignaturesOnly = false,
+        MaxDownloadSize = "100M",
+        MaxExtractedSize = "500M",
+        MaxArchiveFileCount = 10_000,
+        MaxArchiveDepth = 16,
+        RejectDuplicateArchivePaths = true,
+        RejectSymlinksInArchives = true,
     };
 
     public string Render() => JsonSerializer.Serialize(Starter, SerializerOptions) + Environment.NewLine;

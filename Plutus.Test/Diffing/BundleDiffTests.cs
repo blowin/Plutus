@@ -6,7 +6,6 @@ using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
-using Plutus.Domain.Tokens.Applier;
 
 namespace Plutus.Test.Diffing;
 
@@ -349,7 +348,7 @@ public class MarkdownBundleWriterDiffTests
         file.Name.Returns(name);
         file.Exists.Returns(true);
         file.Length.Returns(12);
-        file.CreateReadStream().Returns(_ => new MemoryStream(Encoding.UTF8.GetBytes("sample content")));
+        file.CreateReadStream().Returns(_ => new MemoryStream("sample content"u8.ToArray()));
 
         return (new NullFileProvider(), "Root", "Root", new ProjectNode
         {
