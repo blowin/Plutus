@@ -206,6 +206,7 @@ The repository's GitHub Actions workflow runs restore, formatting verification, 
 - [Architecture and pipeline](docs/ARCHITECTURE.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+- [Adding a parameter for bundle command](docs/ADDING_A_PARAMETER.md)
 
 ## License
 

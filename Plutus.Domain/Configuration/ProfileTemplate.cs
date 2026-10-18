@@ -26,7 +26,11 @@ public sealed class ProfileTemplate
         // Absent and unset are different things in a profile: a key that is present with null states "not set", and
         // a user who wants to fill it in should see it.
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower) },
+        Converters =
+        {
+            new JsonStringEnumConverter(JsonNamingPolicy.KebabCaseLower),
+            new TimeSpanConverter(),
+        },
     };
 
     /// <summary>The values a run uses when nothing is stated.</summary>
