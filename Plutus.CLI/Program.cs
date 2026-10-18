@@ -22,7 +22,7 @@ public static class Program
 
         // Services report through this one target, so no layer below decides how a run reads and the report of what
         // happened is printed in exactly one place.
-        IRunOutput output = new ConsoleRunOutput();
+        using var output = new ConsoleRunOutput();
 
         var rootCommand = new RootCommand("Plutus — Project Bundler. Collects source files into a single document.");
         rootCommand.Subcommands.Add(BundleCommand.Create(output));

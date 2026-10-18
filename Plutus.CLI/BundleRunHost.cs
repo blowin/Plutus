@@ -7,8 +7,9 @@ using Plutus.Infrastructure.Diagnostics;
 namespace Plutus.CLI;
 
 /// <summary>
-/// Runs one bundle: builds the container for the resolved options, runs it, and prints the report. The command object
-/// decides what a run means; this decides how it is hosted, so both stay small and neither knows the other's details.
+/// Runs one bundle: builds the container for the resolved options, runs it, and prints the report.
+/// The command object decides what a run means; this decides how it is hosted, so both stay small
+/// and neither knows the other's details.
 /// </summary>
 internal static class BundleRunHost
 {
@@ -19,14 +20,36 @@ internal static class BundleRunHost
 
         using var cts = new CancellationTokenSource();
 
+        // Use a volatile flag to safely coordinate across threads without heavy locks
+        bool cancellationRequested = false;
+
         // Wire Ctrl+C to cancellation
-        ConsoleCancelEventHandler? consoleOnCancelKeyPress = (s, e) =>
+        ConsoleCancelEventHandler consoleOnCancelKeyPress = (s, e) =>
         {
-            e.Cancel = true; // Prevent immediate process termination
+            // If Ctrl+C was already pressed, let the OS terminate the app on the second press
+            if (Volatile.Read(ref cancellationRequested))
+            {
+                output.Warning("Forcing termination...");
+                e.Cancel = false; // This tells the OS to kill the process immediately
+                return;
+            }
+
+            Volatile.Write(ref cancellationRequested, true);
+            e.Cancel = true; // Prevent immediate process termination for graceful cleanup
             output.Warning("Cancellation requested (Ctrl+C). Cleaning up...");
-            // ReSharper disable once AccessToDisposedClosure
-            cts.Cancel();
+
+            try
+            {
+                // Safely trigger cancellation only if the source hasn't been disposed yet
+                // ReSharper disable once AccessToDisposedClosure
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Safe guard against race conditions during host shutdown
+            }
         };
+
         Console.CancelKeyPress += consoleOnCancelKeyPress;
 
         try
@@ -48,6 +71,7 @@ internal static class BundleRunHost
         }
         finally
         {
+            // Unsubscribe cleanly to prevent memory leaks from the static Console event
             Console.CancelKeyPress -= consoleOnCancelKeyPress;
         }
     }
