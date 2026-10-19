@@ -1,7 +1,5 @@
 using System.Net;
-using System.Net.Http;
 using FluentAssertions;
-using Plutus.Domain.Retry;
 using Plutus.Infrastructure.Retry;
 
 namespace Plutus.Test;

@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Text;
-using Plutus.Domain.Diagnostics;
 using Plutus.Infrastructure.Diagnostics;
 
 namespace Plutus.CLI;

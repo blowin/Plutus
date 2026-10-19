@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Minifier;
 
 namespace Plutus.Test;
@@ -25,7 +26,7 @@ public class BundleWriterBinaryTests
 
         var mockDetail = Substitute.For<IFileInfoDetailProvider>();
 
-        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(mockDetail, new MarkdownLanguageProvider(), new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null), new CacheReadProvider(Encoding.UTF8));
 
         var fileInfoOutput = new TestFileInfo
         {

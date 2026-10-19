@@ -1,6 +1,6 @@
 using System.Text;
-using System.Threading;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
@@ -12,7 +12,8 @@ public abstract class BaseBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    BundleLimits bundleLimits) : IBundleWriter
+    BundleLimits bundleLimits,
+    ICacheReadProvider cacheReadProvider) : IBundleWriter
 {
     public abstract string FormatExtension { get; }
     public int MaxConcurrentFileReads { get; set; } = 8;
@@ -169,13 +170,13 @@ public abstract class BaseBundleWriter(
                 return ProcessedFileContext.CreateSkipped(entry, language, bundleLimits.SizeExclusionReason(entry.File.Length));
             }
 
-            var (content, reason) = await ReadTextSafeAsync(entry.File, cancellationToken).ConfigureAwait(false);
-            if (content is null)
+            var cacheEntry = await cacheReadProvider.GetCachedContentAsync(entry.File, cancellationToken);
+            if (cacheEntry.IsEmpty)
             {
-                return ProcessedFileContext.CreateSkipped(entry, language, reason ?? "unknown error");
+                return ProcessedFileContext.CreateSkipped(entry, language, cacheEntry.EmptyReason ?? "unknown error");
             }
 
-            var minifiedContent = CodeMinifier.Minify(content, language);
+            var minifiedContent = CodeMinifier.Minify(cacheEntry.Content, language);
             return ProcessedFileContext.CreateSuccess(entry, language, minifiedContent, bundleLimits.EstimatesTokens ? TokenEstimator.Estimate(minifiedContent) : null);
         }
         finally
@@ -183,45 +184,4 @@ public abstract class BaseBundleWriter(
             semaphore.Release();
         }
     }
-
-    private async Task<(string? Content, string? Reason)> ReadTextSafeAsync(IFileInfo file, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using (var fs = file.CreateReadStream())
-            {
-                var buffer = new byte[8192];
-                var bytesRead = await fs.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                for (var i = 0; i < bytesRead; i++)
-                {
-                    if (buffer[i] == 0)
-                    {
-                        return (null, "binary file");
-                    }
-                }
-            }
-
-            byte[] bytes;
-            await using (var ms = new MemoryStream())
-            {
-                await using (var fs = file.CreateReadStream())
-                {
-                    await fs.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-                }
-                bytes = ms.ToArray();
-            }
-
-            if (bytes.Length == 0)
-            {
-                return (string.Empty, null);
-            }
-
-            return (Encoding.GetString(bytes), null);
-        }
-        catch (Exception ex)
-        {
-            return (null, $"unreadable: {ex.Message}");
-        }
-    }
-
 }

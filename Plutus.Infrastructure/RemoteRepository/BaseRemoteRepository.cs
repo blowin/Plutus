@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http;
 using Plutus.Domain;
 using Plutus.Domain.ArchiveExtractor;
 using Plutus.Infrastructure.Retry;

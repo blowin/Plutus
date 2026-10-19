@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 
@@ -320,7 +321,7 @@ public class MarkdownBundleWriterDiffTests
     }
 
     private MarkdownBundleWriter CreateWriter() =>
-        new(_detail, _languageProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        new(_detail, _languageProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null), new CacheReadProvider(Encoding.UTF8));
 
     private string ReadOutput() => Encoding.UTF8.GetString(_output.GetResetStream().ToArray());
 

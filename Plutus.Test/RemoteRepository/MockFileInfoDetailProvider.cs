@@ -13,6 +13,8 @@ public sealed class MockFileInfoDetailProvider : IFileInfoDetailProvider
     private readonly HashSet<string> _directories = new(StringComparer.Ordinal);
     private readonly HashSet<string> _files = new(StringComparer.Ordinal);
 
+    public Func<IFileInfo, Stream> StreamFactory { get; set; } = _ => new MemoryStream();
+
     public IReadOnlyList<string> Operations => _operations;
     public IReadOnlyCollection<string> Directories => _directories;
     public IReadOnlyCollection<string> Files => _files;
@@ -61,7 +63,7 @@ public sealed class MockFileInfoDetailProvider : IFileInfoDetailProvider
     {
         var physicalPath = fileInfo.PhysicalPath ?? throw new InvalidOperationException("PhysicalPath is null");
         _operations.Add($"WRITE_FILE:{physicalPath}");
-        return new StreamWriter(new MemoryStream(), encoding ?? Encoding.UTF8);
+        return new StreamWriter(StreamFactory(fileInfo), leaveOpen: true, encoding: encoding ?? Encoding.UTF8);
     }
 
     public IFileProvider CreateFileProvider(IFileInfo fileInfo) => throw new NotImplementedException();

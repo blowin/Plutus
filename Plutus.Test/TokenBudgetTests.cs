@@ -4,6 +4,7 @@ using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
 
@@ -33,7 +34,8 @@ public class TokenBudgetTests
 
         var writer = new MarkdownBundleWriter(
             detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
-            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Select, TokenSelectionStrategy.PathOrder)),
+            new CacheReadProvider(Encoding.UTF8));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -69,7 +71,7 @@ public class TokenBudgetTests
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
             detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
-            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Warn, TokenSelectionStrategy.PathOrder)), new CacheReadProvider(Encoding.UTF8));
         var a = CreateFile("a.txt", "AAAA");
         var b = CreateFile("b.txt", "BBBB");
         var root = new ProjectNode
@@ -104,7 +106,7 @@ public class TokenBudgetTests
         languages.GetLanguage(Arg.Any<string>()).Returns("text");
         var writer = new MarkdownBundleWriter(
             detail, languages, new IdentityCodeMinifier(), Encoding.UTF8,
-            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)));
+            new BundleLimits(FileSize.FromBytes(4096), new TokenBudgetOptions(1, TokenOverflowPolicy.Fail, TokenSelectionStrategy.PathOrder)), new CacheReadProvider(Encoding.UTF8));
         var file = CreateFile("a.txt", "AAAAA");
         var root = new ProjectNode
         {

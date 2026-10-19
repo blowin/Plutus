@@ -1,5 +1,3 @@
-using System;
-
 namespace Plutus.Domain.Retry;
 
 /// <summary>

@@ -1,5 +1,4 @@
 using Plutus.Domain.Retry;
-using Xunit;
 
 namespace Plutus.Test.Retry;
 

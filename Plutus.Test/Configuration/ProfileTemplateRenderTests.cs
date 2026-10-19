@@ -1,6 +1,5 @@
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Retry;
-using Xunit;
 
 namespace Plutus.Test.Configuration;
 

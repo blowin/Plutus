@@ -1,5 +1,3 @@
-using System.Threading;
-
 namespace Plutus.Domain;
 
 public interface IRemoteRepository

@@ -2,10 +2,11 @@ using System.Collections.Concurrent;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 
 namespace Plutus.Infrastructure.Dependencies.Csharp;
 
-public sealed class RoslynTreeCache
+public sealed class RoslynTreeCache(ICacheReadProvider cacheReadProvider)
 {
     private readonly ConcurrentDictionary<string, Task<CacheEntry>> _cache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -18,24 +19,21 @@ public sealed class RoslynTreeCache
                 return CacheEntry.Empty;
             }
 
-            await using var stream = fileInfo.CreateReadStream();
-            using var reader = new StreamReader(stream);
-            var content = await reader.ReadToEndAsync(ct);
-
-            if (string.IsNullOrWhiteSpace(content))
+            var content = await cacheReadProvider.GetCachedContentAsync(virtualPath, fileProvider, ct);
+            if (content.IsEmpty)
             {
                 return CacheEntry.Empty;
             }
 
             var tree = CSharpSyntaxTree.ParseText(
-                content,
+                content.Content,
                 new CSharpParseOptions(LanguageVersion.Latest),
                 path: path,
                 cancellationToken: ct);
 
             var root = await tree.GetRootAsync(ct);
 
-            return new CacheEntry(content, tree, root);
+            return new CacheEntry(content.Content, tree, root);
         }, ct));
 
     public readonly record struct CacheEntry(string Content, SyntaxTree Tree, SyntaxNode Root)

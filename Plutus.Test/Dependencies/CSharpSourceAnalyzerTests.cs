@@ -1,4 +1,6 @@
+using System.Text;
 using FluentAssertions;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Infrastructure.Dependencies.Csharp;
 using Plutus.Test.Fakes;
 
@@ -24,7 +26,7 @@ public class CSharpSourceAnalyzerTests
                                        public class Program {}
                                        """);
 
-        var roslynTreeCache = new RoslynTreeCache();
+        var roslynTreeCache = new RoslynTreeCache(new CacheReadProvider(Encoding.UTF8));
         var index = new CSharpNamespaceIndex(roslynTreeCache);
         var analyzer = new CSharpSourceAnalyzer(index, roslynTreeCache);
 

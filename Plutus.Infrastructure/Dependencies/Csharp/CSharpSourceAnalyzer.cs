@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.Dependencies;

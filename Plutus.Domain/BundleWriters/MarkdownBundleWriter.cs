@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.FileProviders;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.Minifier;
 using Plutus.Domain.Tokens;
@@ -12,7 +13,8 @@ public class MarkdownBundleWriter(
     IMarkdownLanguageProvider markdownLanguageProvider,
     ICodeMinifier codeMinifier,
     Encoding encoding,
-    BundleLimits bundleLimits) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits)
+    BundleLimits bundleLimits,
+    ICacheReadProvider cacheReadProvider) : BaseBundleWriter(fileInfoDetailProvider, markdownLanguageProvider, codeMinifier, encoding, bundleLimits, cacheReadProvider)
 {
     public override string FormatExtension => "md";
 

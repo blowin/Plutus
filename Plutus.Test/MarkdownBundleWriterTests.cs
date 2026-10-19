@@ -4,20 +4,24 @@ using Microsoft.Extensions.FileProviders;
 using NSubstitute;
 using Plutus.Domain;
 using Plutus.Domain.BundleWriters;
+using Plutus.Domain.BundleWriters.CacheReadProviders;
 using Plutus.Domain.Minifier;
+using Plutus.Test.RemoteRepository;
 
 namespace Plutus.Test;
 
 public class MarkdownBundleWriterTests
 {
-    private readonly IFileInfoDetailProvider _mockDetail = Substitute.For<IFileInfoDetailProvider>();
+    private readonly IFileInfoDetailProvider _mockDetail;
     private readonly IMarkdownLanguageProvider _mockLangProvider = Substitute.For<IMarkdownLanguageProvider>();
     private readonly TestFileInfo _outputFile = new() { PhysicalPath = "out.md", Name = "out.md" };
 
     public MarkdownBundleWriterTests()
     {
-        _mockDetail.CreateWriterForFile(_outputFile, Arg.Any<Encoding?>())
-            .Returns(_ => new StreamWriter(_outputFile.Stream, leaveOpen: true));
+        _mockDetail = new MockFileInfoDetailProvider
+        {
+            StreamFactory = _ => _outputFile.Stream
+        };
         _mockLangProvider.GetLanguage(Arg.Any<string>()).Returns("text");
     }
 
@@ -27,6 +31,7 @@ public class MarkdownBundleWriterTests
         // Arrange
         var mockFile = Substitute.For<IFileInfo>();
         mockFile.Name.Returns("Note.md");
+        mockFile.Exists.Returns(true);
 
         // Внутри контента уже есть стандартные 3 кавычки
         var innerContent = "Notes:\n```csharp\nConsole.WriteLine();\n```";
@@ -40,7 +45,7 @@ public class MarkdownBundleWriterTests
             .Returns(_ => new StreamWriter(fileInfoOutput.Stream, leaveOpen: true));
 
         // Важно: BundleWriter сам определит язык "markdown" для расширения .md
-        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null), new CacheReadProvider(Encoding.UTF8));
         var roots = CreateSingleFileRoot("Note.md", mockFile);
 
         // Act
@@ -59,24 +64,25 @@ public class MarkdownBundleWriterTests
         // Arrange
         var mockFile = Substitute.For<IFileInfo>();
         mockFile.Name.Returns("Russian.txt");
+        mockFile.Exists.Returns(true);
 
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         var win1251 = Encoding.GetEncoding(1251);
         var cyrillicText = "Привет, Мир!";
-        var stream = new MemoryStream(win1251.GetBytes(cyrillicText));
+        var byteContent = win1251.GetBytes(cyrillicText);
 
-        mockFile.CreateReadStream().Returns(e => new MemoryStream(stream.ToArray()));
-        mockFile.Length.Returns(stream.Length);
+        mockFile.CreateReadStream().Returns(e => new MemoryStream(byteContent));
+        mockFile.Length.Returns(byteContent.Length);
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.GetEncoding(1251), new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), win1251, new BundleLimits(FileSize.FromBytes(4096), null), new CacheReadProvider(win1251));
         var roots = CreateSingleFileRoot("Russian.txt", mockFile);
 
         // Act
         await writer.WriteAsync(roots, _outputFile);
 
         // Assert
-        var resultText = Encoding.UTF8.GetString(_outputFile.GetResetStream().ToArray());
-        resultText.Should().Contain("Привет, Мир!");
+        var resultText = win1251.GetString(_outputFile.GetResetStream().ToArray());
+        resultText.Should().Contain(cyrillicText);
     }
 
     [Fact]
@@ -87,7 +93,7 @@ public class MarkdownBundleWriterTests
         mockFile.Name.Returns("big_file.txt");
         mockFile.Length.Returns(5000); // Размер 5000 байт
 
-        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null));
+        var writer = new MarkdownBundleWriter(_mockDetail, _mockLangProvider, new IdentityCodeMinifier(), Encoding.UTF8, new BundleLimits(FileSize.FromBytes(4096), null), new CacheReadProvider(Encoding.UTF8));
         var roots = CreateSingleFileRoot("big_file.txt", mockFile);
 
         // Act

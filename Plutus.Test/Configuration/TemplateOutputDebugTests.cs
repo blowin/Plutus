@@ -1,6 +1,4 @@
-using System.Linq;
 using Plutus.Domain.Configuration;
-using Xunit;
 
 namespace Plutus.Test.Configuration;
 

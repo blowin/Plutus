@@ -1,4 +1,3 @@
-using System.Threading;
 using Plutus.Domain.Diffing;
 using Plutus.Domain.IgnoreMatcher;
 

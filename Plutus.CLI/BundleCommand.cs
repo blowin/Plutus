@@ -5,7 +5,6 @@ using Plutus.Domain.Comments;
 using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Retry;
-using Plutus.Domain.Structure;
 using Plutus.Infrastructure;
 
 namespace Plutus.CLI;
