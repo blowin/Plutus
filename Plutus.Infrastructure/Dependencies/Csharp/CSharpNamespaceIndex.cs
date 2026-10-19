@@ -6,7 +6,7 @@ using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Infrastructure.Dependencies.Csharp;
 
-public sealed class CSharpNamespaceIndex : ICSharpNamespaceIndex
+public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache) : ICSharpNamespaceIndex
 {
     private readonly Dictionary<string, List<string>> _map = new(StringComparer.OrdinalIgnoreCase);
     private IFileProvider? _cachedProvider;
@@ -65,26 +65,13 @@ public sealed class CSharpNamespaceIndex : ICSharpNamespaceIndex
 
     private async Task IndexFileAsync(IFileProvider provider, string path, CancellationToken ct)
     {
-        var fileInfo = provider.GetFileInfo(path);
-        if (!fileInfo.Exists)
+        var cacheEntry = await treeCache.GetOrParseAsync(path, provider, ct);
+        if (cacheEntry.IsEmpty)
         {
             return;
         }
 
-        using var stream = fileInfo.CreateReadStream();
-        using var reader = new StreamReader(stream);
-        var content = await reader.ReadToEndAsync(ct);
-
-        var tree = CSharpSyntaxTree.ParseText(
-            content,
-            new CSharpParseOptions(LanguageVersion.Latest),
-            path: path,
-            cancellationToken: ct);
-
-        var root = await tree.GetRootAsync(ct);
-
-        // BaseNamespaceDeclarationSyntax covers both block and file-scoped namespaces
-        var namespaces = root.DescendantNodes()
+        var namespaces = cacheEntry.Root.DescendantNodes()
             .OfType<BaseNamespaceDeclarationSyntax>()
             .Select(n => n.Name.ToString())
             .DefaultIfEmpty("<global>")

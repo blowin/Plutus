@@ -9,7 +9,7 @@ namespace Plutus.Infrastructure.Dependencies.Csharp;
 /// Analyzes C# source files to discover dependencies via 'using' directives and shared namespaces.
 /// Uses Roslyn for accurate parsing and a cached namespace index for efficient resolution.
 /// </summary>
-public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex) : IDependencyAnalyzer
+public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, RoslynTreeCache treeCache) : IDependencyAnalyzer
 {
     public bool CanAnalyze(string virtualPath) =>
         virtualPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
@@ -19,17 +19,14 @@ public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex) :
         IFileProvider fileProvider,
         CancellationToken ct)
     {
-        var content = await ReadAllTextAsync(fileProvider, virtualPath, ct);
-        if (string.IsNullOrWhiteSpace(content))
+        var cacheEntry = await treeCache.GetOrParseAsync(virtualPath, fileProvider, ct);
+        if (cacheEntry.IsEmpty)
         {
             return new DependencyAnalysisResult([], []);
         }
 
-        var tree = CSharpSyntaxTree.ParseText(content, path: virtualPath, cancellationToken: ct);
-        var root = await tree.GetRootAsync(ct);
-
         // 1. Extract explicit using directives
-        var usings = root.DescendantNodes()
+        var usings = cacheEntry.Root.DescendantNodes()
             .OfType<UsingDirectiveSyntax>()
             .Select(u => u.Name?.ToString())
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -37,7 +34,7 @@ public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex) :
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // 2. Extract the file's own namespaces (defaults to "<global>" if none)
-        var ownNamespaces = root.DescendantNodes()
+        var ownNamespaces = cacheEntry.Root.DescendantNodes()
             .OfType<BaseNamespaceDeclarationSyntax>()
             .Select(n => n.Name.ToString())
             .DefaultIfEmpty("<global>")

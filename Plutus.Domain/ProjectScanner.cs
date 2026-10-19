@@ -105,7 +105,8 @@ public enum NodeStatus
     IgnoredFile,
     OversizedFile,
     SkippedFile,
-    TokenBudgetOmitted
+    TokenBudgetOmitted,
+    OmittedByDependency,
 }
 
 public class ProjectNode

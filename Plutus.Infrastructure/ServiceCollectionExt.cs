@@ -76,7 +76,7 @@ public static class ServiceCollectionExt
                 .WithScopedLifetime();
         });
 
-
+        services.AddSingleton<RoslynTreeCache>();
         services.AddScoped<ICSharpNamespaceIndex, CSharpNamespaceIndex>();
         services.AddScoped<IDependencyResolver, DependencyResolver>();
         services.AddScoped<IReadOnlyCollection<IRemoteRepository>>(sp => sp.GetRequiredService<IEnumerable<IRemoteRepository>>().ToList());

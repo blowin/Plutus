@@ -24,8 +24,9 @@ public class CSharpSourceAnalyzerTests
                                        public class Program {}
                                        """);
 
-        var index = new CSharpNamespaceIndex();
-        var analyzer = new CSharpSourceAnalyzer(index);
+        var roslynTreeCache = new RoslynTreeCache();
+        var index = new CSharpNamespaceIndex(roslynTreeCache);
+        var analyzer = new CSharpSourceAnalyzer(index, roslynTreeCache);
 
         var result = await analyzer.AnalyzeAsync("src/Program.cs", provider, CancellationToken.None);
 

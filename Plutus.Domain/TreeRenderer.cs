@@ -55,6 +55,7 @@ public class TreeRenderer
         NodeStatus.OversizedFile => $" [LARGE {node.FileInfo!.Length.HumanSize()}]",
         NodeStatus.SkippedFile => " [SKIPPED]",
         NodeStatus.TokenBudgetOmitted => " [OMITTED BY BUDGET]",
+        NodeStatus.OmittedByDependency => " [OMITTED BY DEPENDENCY]",
         _ => node.IsDirectory ? "/" : $" [{node.FileInfo!.Length.HumanSize()}]"
     };
 }

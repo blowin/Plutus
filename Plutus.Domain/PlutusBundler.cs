@@ -123,16 +123,19 @@ public class PlutusBundler(
                 MarkUnresolvedAsIgnored(child, allowedPaths);
             }
 
-            if (node.Children.Count > 0 && node.Children.All(c => c.Status is NodeStatus.IgnoredFile or NodeStatus.IgnoredDirectory))
+            if (node.Status == NodeStatus.Included && node.Children.Count > 0 &&
+                node.Children.All(c => c.Status is NodeStatus.OmittedByDependency
+                    or NodeStatus.IgnoredFile
+                    or NodeStatus.IgnoredDirectory))
             {
                 node.Status = NodeStatus.IgnoredDirectory;
             }
         }
         else
         {
-            if (!allowedPaths.Contains(node.RelativePath))
+            if (node.Status == NodeStatus.Included && !allowedPaths.Contains(node.RelativePath))
             {
-                node.Status = NodeStatus.IgnoredFile;
+                node.Status = NodeStatus.OmittedByDependency;
             }
         }
     }
