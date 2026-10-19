@@ -8,7 +8,11 @@ namespace Plutus.Infrastructure.Dependencies.Csharp;
 /// </summary>
 public interface ICSharpNamespaceIndex
 {
-    Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMapAsync(
+    Task<IReadOnlyDictionary<string, IReadOnlySet<string>>> GetMapAsync(
+        IFileProvider provider,
+        CancellationToken ct);
+
+    public Task<IReadOnlySet<string>> GetGlobalUsingsAsync(
         IFileProvider provider,
         CancellationToken ct);
 }

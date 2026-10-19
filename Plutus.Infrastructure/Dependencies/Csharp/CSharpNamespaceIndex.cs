@@ -1,34 +1,51 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.FileProviders;
 using Plutus.Domain.IgnoreMatcher;
 
 namespace Plutus.Infrastructure.Dependencies.Csharp;
 
-public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache) : ICSharpNamespaceIndex
+public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache, UsingNormalizer normalizer) : ICSharpNamespaceIndex
 {
-    private readonly Dictionary<string, List<string>> _map = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> _map = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _globalUsings = new(StringComparer.OrdinalIgnoreCase);
     private IFileProvider? _cachedProvider;
     private bool _isBuilt;
+
     private readonly IIgnoreMatcher _ignoreMatcher = new IgnoreMatcherBuilder()
         .IgnoreJunk()
         .Build();
 
-    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMapAsync(
+    public async Task<IReadOnlyDictionary<string, IReadOnlySet<string>>> GetMapAsync(
         IFileProvider provider,
         CancellationToken ct)
     {
+        await EnsureBuiltAsync(provider, ct);
+        return _map.ToDictionary(e => e.Key, e => (IReadOnlySet<string>)e.Value.AsReadOnly());
+    }
+
+    public async Task<IReadOnlySet<string>> GetGlobalUsingsAsync(
+        IFileProvider provider,
+        CancellationToken ct)
+    {
+        await EnsureBuiltAsync(provider, ct);
+        return _globalUsings.AsReadOnly();
+    }
+
+    private async Task EnsureBuiltAsync(IFileProvider provider, CancellationToken ct)
+    {
         if (_isBuilt && ReferenceEquals(_cachedProvider, provider))
         {
-            return _map.ToDictionary(e => e.Key, e => (IReadOnlyList<string>)e.Value.AsReadOnly());
+            return;
         }
 
         _map.Clear();
+        _globalUsings.Clear();
         _cachedProvider = provider;
 
         await ScanDirectoryAsync(provider, string.Empty, ct);
-
         _isBuilt = true;
-        return _map.ToDictionary(e => e.Key, e => (IReadOnlyList<string>)e.Value.AsReadOnly());
     }
 
     private async Task ScanDirectoryAsync(IFileProvider provider, string subPath, CancellationToken ct)
@@ -46,7 +63,6 @@ public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache) : ICSharpNam
 
             if (entry.IsDirectory)
             {
-                // Skip common junk directories to speed up the scan
                 if (_ignoreMatcher.IsIgnoredDirectory(entry.Name))
                 {
                     continue;
@@ -69,7 +85,9 @@ public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache) : ICSharpNam
             return;
         }
 
-        var namespaces = cacheEntry.Root.DescendantNodes()
+        var root = cacheEntry.Root;
+
+        var namespaces = root.DescendantNodes()
             .OfType<BaseNamespaceDeclarationSyntax>()
             .Select(n => n.Name.ToString())
             .DefaultIfEmpty("<global>")
@@ -79,10 +97,24 @@ public sealed class CSharpNamespaceIndex(RoslynTreeCache treeCache) : ICSharpNam
         {
             if (!_map.TryGetValue(ns, out var list))
             {
-                list = [];
+                list = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 _map[ns] = list;
             }
+
             list.Add(path);
+        }
+
+        var globalUsingDirectives = root.DescendantNodes()
+            .OfType<UsingDirectiveSyntax>()
+            .Where(u => !u.GlobalKeyword.IsKind(SyntaxKind.None));
+
+        foreach (var u in globalUsingDirectives)
+        {
+            var normalizedNamespace = normalizer.Normalize(u);
+            if (!string.IsNullOrWhiteSpace(normalizedNamespace))
+            {
+                _globalUsings.Add(normalizedNamespace);
+            }
         }
     }
 }

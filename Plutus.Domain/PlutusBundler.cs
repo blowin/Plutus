@@ -62,9 +62,10 @@ public class PlutusBundler(
             var projectNode = projectScanner.Scan(provider, root.Name, physicalPath, options.MaxFileSize, CreateDiffPaths(gitDiff, root));
             if (options.IncludeDependencies && dependencyResolver is not null)
             {
-                var initialFiles = options.ExplicitInitialFiles is { Count: > 0 }
+                var existingPaths = projectNode.ExtractBundleEntries().Select(e => e.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                IReadOnlyCollection<string> initialFiles = options.ExplicitInitialFiles is { Count: > 0 }
                     ? options.ExplicitInitialFiles
-                    : projectNode.ExtractBundleEntries().Select(e => e.RelativePath).ToList();
+                    : existingPaths;
 
                 var resolved = await dependencyResolver.ResolveAsync(initialFiles, provider, cancellationToken);
                 if (resolved is null)
@@ -80,6 +81,27 @@ public class PlutusBundler(
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                 MarkUnresolvedAsIgnored(projectNode, allowedPaths);
+
+                foreach (var resolvedDep in resolved)
+                {
+                    if (existingPaths.Contains(resolvedDep.VirtualPath))
+                    {
+                        continue;
+                    }
+
+                    var depFileInfo = provider.GetFileInfo(resolvedDep.VirtualPath);
+                    if (depFileInfo.Exists)
+                    {
+                        projectNode.Children.Add(new ProjectNode
+                        {
+                            Name = Path.GetFileName(resolvedDep.VirtualPath),
+                            RelativePath = resolvedDep.VirtualPath,
+                            IsDirectory = false,
+                            Status = NodeStatus.OmittedByDependency,
+                            FileInfo = depFileInfo
+                        });
+                    }
+                }
 
                 _output.Info($"Dependency resolution: included {resolved.Count(f => f.IsDirect)} direct files and {resolved.Count(f => !f.IsDirect)} dependencies.");
             }

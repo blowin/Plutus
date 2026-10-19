@@ -76,6 +76,7 @@ public static class ServiceCollectionExt
                 .WithScopedLifetime();
         });
 
+        services.AddSingleton<UsingNormalizer>();
         services.AddSingleton<RoslynTreeCache>();
         services.AddScoped<ICSharpNamespaceIndex, CSharpNamespaceIndex>();
         services.AddScoped<IDependencyResolver, DependencyResolver>();

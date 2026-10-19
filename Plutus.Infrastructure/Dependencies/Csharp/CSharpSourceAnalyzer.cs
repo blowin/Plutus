@@ -8,7 +8,7 @@ namespace Plutus.Infrastructure.Dependencies.Csharp;
 /// Analyzes C# source files to discover dependencies via 'using' directives and shared namespaces.
 /// Uses Roslyn for accurate parsing and a cached namespace index for efficient resolution.
 /// </summary>
-public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, RoslynTreeCache treeCache) : IDependencyAnalyzer
+public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, RoslynTreeCache treeCache, UsingNormalizer normalizer) : IDependencyAnalyzer
 {
     public bool CanAnalyze(string virtualPath) =>
         virtualPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
@@ -27,7 +27,7 @@ public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, R
         // 1. Extract explicit using directives
         var usings = cacheEntry.Root.DescendantNodes()
             .OfType<UsingDirectiveSyntax>()
-            .Select(u => u.Name?.ToString())
+            .Select(normalizer.Normalize)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(e => e!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -39,11 +39,15 @@ public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, R
             .DefaultIfEmpty("<global>")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var globalUsings = await namespaceIndex.GetGlobalUsingsAsync(fileProvider, ct);
         var namespaceMap = await namespaceIndex.GetMapAsync(fileProvider, ct);
         var dependencies = new List<DiscoveredDependency>();
 
         // Combine all unique target namespaces to check
-        var targetNamespaces = usings.Union(ownNamespaces).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var targetNamespaces = usings
+            .Union(ownNamespaces)
+            .Union(globalUsings)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var ns in targetNamespaces.OrderBy(n => n, StringComparer.Ordinal))
         {
@@ -61,9 +65,20 @@ public sealed class CSharpSourceAnalyzer(ICSharpNamespaceIndex namespaceIndex, R
                 }
 
                 var isSharedNamespace = ownNamespaces.Contains(ns);
-                var reason = isSharedNamespace
-                    ? $"C# shared namespace '{ns}'"
-                    : $"C# using directive '{ns}'";
+                var isGlobalUsing = globalUsings.Contains(ns) && !usings.Contains(ns);
+                string reason;
+                if (isSharedNamespace)
+                {
+                    reason = $"C# shared namespace '{ns}'";
+                }
+                else if (isGlobalUsing)
+                {
+                    reason = $"C# implicit global using '{ns}'";
+                }
+                else
+                {
+                    reason = $"C# using directive '{ns}'";
+                };
 
                 dependencies.Add(new DiscoveredDependency(ns, file, reason));
             }
