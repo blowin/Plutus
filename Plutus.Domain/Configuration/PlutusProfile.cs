@@ -124,5 +124,5 @@ public sealed record PlutusProfile
 
     /// <summary>HTTP timeouts and retry configuration for remote repository downloads.</summary>
     public TimeoutOptions? Timeout { get; init; }
-    public bool IncludeDependencies { get; init; }
+    public bool? IncludeDependencies { get; init; }
 }
