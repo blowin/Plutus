@@ -68,6 +68,13 @@ public class PlutusBundler(
                     : projectNode.ExtractBundleEntries().Select(e => e.RelativePath).ToList();
 
                 var resolved = await dependencyResolver.ResolveAsync(initialFiles, provider, cancellationToken);
+                if (resolved is null)
+                {
+                    _output.Warning("Dependency resolution returned a null result. Skipping dependency isolation for this root.");
+                    bundleWriterEntries.Add((provider, root.Name, root.PhysicalPath ?? root.Name, projectNode));
+                    continue;
+                }
+
                 var allowedPaths = resolved
                     .Where(e => !string.IsNullOrWhiteSpace(e.VirtualPath))
                     .Select(r => r.VirtualPath)
