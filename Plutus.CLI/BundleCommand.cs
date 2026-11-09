@@ -6,6 +6,7 @@ using Plutus.Domain.Configuration;
 using Plutus.Domain.Diagnostics;
 using Plutus.Domain.Retry;
 using Plutus.Infrastructure;
+using Plutus.Infrastructure.Configuration;
 
 namespace Plutus.CLI;
 
@@ -36,9 +37,8 @@ internal static class BundleCommand
         // inventory and the container all see the same filesystem, and none of them opens a file directly.
         var fileProviderDetail = new PhysicianPlutusFileInfo();
         var files = new FileProviderAccessFactory(fileProviderDetail).CreateForWorkingDirectory();
-        var profileLoader = new PlutusProfileLoader(files);
 
-        var profileResult = ReadProfile(reader, options, profileLoader, fileProviderDetail, output);
+        var profileResult = ReadProfile(reader, options, files, fileProviderDetail, output);
         if (!profileResult.Succeeded)
         {
             output.Error(profileResult.Error!);
@@ -86,7 +86,7 @@ internal static class BundleCommand
 
         try
         {
-            return await BundleRunHost.RunAsync(resolved, output, files);
+            return await BundleRunHost.RunAsync(resolved, output, files, profileResult.Configuration);
         }
         catch (Exception exception)
         {
@@ -96,24 +96,51 @@ internal static class BundleCommand
     }
 
     /// <summary>
-    /// Finds the profile before anything runs: a profile that cannot be trusted is a failure, not a reason to fall
-    /// back to the defaults without saying so.
+    /// Finds and merges the profiles before anything runs: a profile that cannot be trusted is a failure, not a
+    /// reason to fall back to the defaults without saying so. The command line flags are resolved separately and
+    /// override the profile later.
     /// </summary>
-    private static ProfileLoadResult ReadProfile(
+    private static ProfileConfigurationResult ReadProfile(
         CommandLineReader reader,
         BundleOptions options,
-        PlutusProfileLoader loader,
+        FileProviderAccess files,
         IFileInfoDetailProvider detailProvider,
         IRunOutput output)
     {
+        var rawEnv = Environment.GetEnvironmentVariable(PlutusProfileLoader.PathVariable);
+        var fromEnv = string.IsNullOrWhiteSpace(rawEnv) ? [] : rawEnv
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        var fromCli = reader.Value(options.Profile) ?? [];
+
+        var named = fromCli.Count > 0 ? fromCli : fromEnv;
         var noProfile = reader.Value(options.NoProfile);
-        var named = reader.Value(options.Profile) ?? Environment.GetEnvironmentVariable(PlutusProfileLoader.PathVariable);
-        if (noProfile && !string.IsNullOrWhiteSpace(named))
+        if (noProfile && named.Count > 0)
         {
             output.Warning("--no-profile ignores --profile and the PLUTUS_PROFILE environment variable.");
+            named = [];
+        }
+        else if (fromCli.Count > 0 && fromEnv.Count > 0)
+        {
+            output.Warning("The --profile parameter is specified, but the PLUTUS_PROFILE environment variable is being ignored.");
         }
 
-        return loader.Resolve(detailProvider.GetCurrentDirectory(), named, noProfile);
+        var result = new PlutusConfigurationBuilder(files).Build(detailProvider.GetCurrentDirectory(), named, !noProfile);
+        if (!result.Succeeded)
+        {
+            return new ProfileConfigurationResult { Error = result.Error };
+        }
+
+        var profile = new ConfigurationOptionsBinder().Bind(result.Configuration, result.Layers);
+
+        var profilePath = named.Count > 0 ? Path.Combine(detailProvider.GetCurrentDirectory(), $"{named[^1]}.plutusrc") : null;
+
+        return new ProfileConfigurationResult
+        {
+            Configuration = result.Configuration,
+            Profile = profile,
+            Path = profilePath,
+        };
     }
 
     /// <summary>
